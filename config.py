@@ -22,32 +22,17 @@ DEFAULT_SAFETY_SETTINGS = [
 # Helper function to get base model name from any variant
 def get_base_model_name(model_name):
     """Convert variant model name to base model name."""
-    # Handle image generation model mapping
-    if model_name == "gemini-2.5-flash-image-preview":
-        return "gemini-2.5-flash"
-    elif model_name == "gemini-2.5-flash-image-preview":
-        return "gemini-2.5-flash"
-
     # Remove all possible suffixes in order
     suffixes = ["-maxthinking", "-nothinking", "-search"]
     for suffix in suffixes:
         if model_name.endswith(suffix):
             return model_name[:-len(suffix)]
-
-    # Add models/ prefix if not present (for non-path models)
-    if not model_name.startswith("models/"):
-        return f"models/{model_name}"
     return model_name
 
 # Helper function to check if model uses search grounding
 def is_search_model(model_name):
     """Check if model name indicates search grounding should be enabled."""
     return "-search" in model_name
-
-# Helper function to check if model is for image generation
-def is_image_generation_model(model_name):
-    """Check if model name indicates image generation should be used."""
-    return "image-preview" in model_name or "image-generation" in model_name
 
 # Helper function to check if model uses no thinking
 def is_nothinking_model(model_name):
@@ -187,7 +172,6 @@ BASE_MODELS = [
     "gemini-2.5-pro", 
     "gemini-2.5-pro-preview-05-06",
     "gemini-2.5-flash",
-    "gemini-2.5-flash-image-preview"
 ]
 
 def get_available_models(router_type="openai"):
