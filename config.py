@@ -24,9 +24,9 @@ def get_base_model_name(model_name):
     """Convert variant model name to base model name."""
     # Handle image generation model mapping
     if model_name == "gemini-2.5-flash-image-preview":
-        return "models/gemini-2.5-flash"
-    elif model_name == "models/gemini-2.5-flash-image-preview":
-        return "models/gemini-2.5-flash"
+        return "gemini-2.5-flash"
+    elif model_name == "gemini-2.5-flash-image-preview":
+        return "gemini-2.5-flash"
 
     # Remove all possible suffixes in order
     suffixes = ["-maxthinking", "-nothinking", "-search"]
@@ -187,8 +187,7 @@ BASE_MODELS = [
     "gemini-2.5-pro", 
     "gemini-2.5-pro-preview-05-06",
     "gemini-2.5-flash",
-    "gemini-2.5-flash-image-preview",
-    "models/gemini-2.5-flash-image-preview"
+    "gemini-2.5-flash-image-preview"
 ]
 
 def get_available_models(router_type="openai"):
