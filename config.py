@@ -172,6 +172,7 @@ BASE_MODELS = [
     "gemini-2.5-pro", 
     "gemini-2.5-pro-preview-05-06",
     "gemini-2.5-flash",
+    "gemini-2.5-flash-image-preview"
 ]
 
 def get_available_models(router_type="openai"):
