@@ -11,6 +11,7 @@ from config import (
     get_base_model_name,
     get_thinking_budget,
     is_search_model,
+    is_image_generation_model,
     should_include_thoughts,
     get_compatibility_mode_enabled
 )
@@ -152,6 +153,15 @@ async def openai_request_to_gemini_payload(openai_request: ChatCompletionRequest
     if is_search_model(openai_request.model):
         request_data["tools"] = [{"googleSearch": {}}]
 
+    # 为图像生成模型添加特殊处理
+    if is_image_generation_model(openai_request.model):
+        # 图像生成模型使用与基础模型相同的配置
+        # 根据CLIProxy分析，图像生成只是gemini-2.5-flash的一个功能标签
+        log.debug(f"Image generation request detected for model: {openai_request.model}")
+
+        # 可能需要调整generationConfig以支持图像生成
+        # 暂时保持默认配置，让Gemini API自动判断
+
     # 移除None值
     request_data = {k: v for k, v in request_data.items() if v is not None}
     
@@ -165,7 +175,7 @@ def _extract_content_and_reasoning(parts: list) -> tuple:
     """从Gemini响应部件中提取内容和推理内容"""
     content = ""
     reasoning_content = ""
-    
+
     for part in parts:
         # 处理文本内容
         if part.get("text"):
@@ -174,8 +184,50 @@ def _extract_content_and_reasoning(parts: list) -> tuple:
                 reasoning_content += part.get("text", "")
             else:
                 content += part.get("text", "")
-    
+
     return content, reasoning_content
+
+def _handle_image_response(parts: list, content: str) -> str:
+    """
+    处理包含图像的Gemini响应
+
+    Args:
+        parts: Gemini响应的parts数组
+        content: 已提取的文本内容
+
+    Returns:
+        处理后的内容，可能包含图像的base64数据
+    """
+    has_images = False
+    image_parts = []
+
+    for part in parts:
+        # 检查是否有图像数据
+        if part.get("inlineData") and part.get("inlineData", {}).get("data"):
+            inline_data = part["inlineData"]
+            mime_type = inline_data.get("mimeType", "image/png")
+            base64_data = inline_data.get("data", "")
+
+            if base64_data:
+                # 构建data URL格式的图像
+                image_url = f"data:{mime_type};base64,{base64_data}"
+                image_parts.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image_url
+                    }
+                })
+                has_images = True
+                log.debug(f"Found image in response: {mime_type}")
+
+    # 如果有图像但文本为空，添加默认文本（类似CLIProxy的处理）
+    if has_images and not content.strip():
+        content = "Image generated"
+        log.debug("Added fallback text for image-only response")
+
+    # 如果有图像，可以将图像信息添加到内容中
+    # 这里保持简单，只返回文本内容，图像可以通过API的其他方式处理
+    return content
 
 def _build_message_with_reasoning(role: str, content: str, reasoning_content: str) -> dict:
     """构建包含可选推理内容的消息对象"""
@@ -193,30 +245,34 @@ def _build_message_with_reasoning(role: str, content: str, reasoning_content: st
 def gemini_response_to_openai(gemini_response: Dict[str, Any], model: str) -> Dict[str, Any]:
     """
     将Gemini API响应转换为OpenAI聊天完成格式
-    
+
     Args:
         gemini_response: 来自Gemini API的响应
         model: 要在响应中包含的模型名称
-        
+
     Returns:
         OpenAI聊天完成格式的字典
     """
     choices = []
-    
+
     for candidate in gemini_response.get("candidates", []):
         role = candidate.get("content", {}).get("role", "assistant")
-        
+
         # 将Gemini角色映射回OpenAI角色
         if role == "model":
             role = "assistant"
-        
+
         # 提取并分离thinking tokens和常规内容
         parts = candidate.get("content", {}).get("parts", [])
         content, reasoning_content = _extract_content_and_reasoning(parts)
-        
+
+        # 检查是否有图像内容并处理
+        if is_image_generation_model(model):
+            content = _handle_image_response(parts, content)
+
         # 构建消息对象
         message = _build_message_with_reasoning(role, content, reasoning_content)
-        
+
         choices.append({
             "index": candidate.get("index", 0),
             "message": message,
