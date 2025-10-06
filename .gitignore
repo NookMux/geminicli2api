@@ -1,6 +1,4 @@
 # Credential files - should never be committed
-*.json
-*.toml
 creds/
 
 # Environment configuration
@@ -83,4 +81,3 @@ Thumbs.db
 # Logs
 *.log
 log.txt
-*.txt
