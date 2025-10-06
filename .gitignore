@@ -1,6 +1,6 @@
 # Credential files - should never be committed
 creds/
-CLIProxyAPI-main
+CLIProxyAPI-参考项目
 
 # Environment configuration
 .env
