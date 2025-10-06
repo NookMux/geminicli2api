@@ -44,10 +44,20 @@ def is_maxthinking_model(model_name):
     """Check if model name indicates maximum thinking budget should be used."""
     return "-maxthinking" in model_name
 
+# Helper function to check if model supports thinking
+def is_image_model(model_name):
+    """Check if model is an image generation model that doesn't support thinking."""
+    base_model = get_base_model_name(model_name)
+    return "image" in base_model.lower()
+
 # Helper function to get thinking budget for a model
 def get_thinking_budget(model_name):
     """Get the appropriate thinking budget for a model based on its name and variant."""
-    
+
+    # 绘图模型不支持thinking配置
+    if is_image_model(model_name):
+        return None
+
     if is_nothinking_model(model_name):
         return 128  # Limited thinking for pro
     elif is_maxthinking_model(model_name):

@@ -17,10 +17,13 @@
 - `gemini-2.5-pro`
 - `gemini-2.5-pro-preview-06-05`
 - `gemini-2.5-pro-preview-05-06`
+- `gemini-2.5-flash`
+- `gemini-2.5-flash-image-preview` 🎨 **绘图模型**
 
 ### 特色功能
 - **思维模型**：`gemini-2.5-pro-maxthinking`、`gemini-2.5-pro-nothinking`
 - **搜索增强**：`gemini-2.5-pro-search`
+- **绘图模型**：`gemini-2.5-flash-image-preview` - 图像生成和编辑
 - **特殊模式**：支持假流式模式和流式抗截断功能
 
 ## 🚀 快速开始
