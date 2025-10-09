@@ -181,6 +181,7 @@ BASE_MODELS = [
     "gemini-2.5-pro-preview-06-05",
     "gemini-2.5-pro",
     "gemini-2.5-pro-preview-05-06",
+    "gemini-2.5-pro-preview-03-25",
     "gemini-2.5-flash",
     "gemini-2.5-flash-image-preview",
 ]
@@ -201,22 +202,10 @@ def get_available_models(router_type="openai"):
         # 基础模型
         models.append(base_model)
         
-        # 假流式模型 (前缀格式)
-        models.append(f"假流式/{base_model}")
-        
-        # 流式抗截断模型 (仅在流式传输时有效，前缀格式)
-        models.append(f"流式抗截断/{base_model}")
-        
         # 支持thinking模式后缀与功能前缀组合
         for thinking_suffix in ["-maxthinking", "-nothinking", "-search"]:
             # 基础模型 + thinking后缀
             models.append(f"{base_model}{thinking_suffix}")
-            
-            # 假流式 + thinking后缀
-            models.append(f"假流式/{base_model}{thinking_suffix}")
-            
-            # 流式抗截断 + thinking后缀
-            models.append(f"流式抗截断/{base_model}{thinking_suffix}")
     
     return models
 
