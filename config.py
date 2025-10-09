@@ -183,6 +183,7 @@ BASE_MODELS = [
     "gemini-2.5-pro-preview-05-06",
     "gemini-2.5-pro-preview-03-25",
     "gemini-2.5-flash",
+    "gemini-2.5-flash-image",
     "gemini-2.5-flash-image-preview",
 ]
 
@@ -203,7 +204,7 @@ def get_available_models(router_type="openai"):
         models.append(base_model)
         
         # 支持thinking模式后缀与功能前缀组合
-        for thinking_suffix in ["-maxthinking", "-nothinking", "-search"]:
+        for thinking_suffix in ["-maxthinking"]:
             # 基础模型 + thinking后缀
             models.append(f"{base_model}{thinking_suffix}")
     
