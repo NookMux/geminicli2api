@@ -58,10 +58,13 @@ def get_thinking_budget(model_name):
     if is_image_model(model_name):
         return None
 
-    if is_nothinking_model(model_name):
-        return 128  # Limited thinking for pro
-    elif is_maxthinking_model(model_name):
-        return 32768
+    if is_maxthinking_model(model_name):
+        base_model = get_base_model_name(model_name)
+        # pro模型使用32768，flash模型使用24576
+        if "pro" in base_model.lower():
+            return 32768
+        else:
+            return 24576
     else:
         # Default thinking budget for regular models
         return -1  # Default for all models
@@ -415,45 +418,13 @@ async def get_service_usage_api_url() -> str:
     return str(await get_config_value("service_usage_api_url", "https://serviceusage.googleapis.com", "SERVICE_USAGE_API_URL"))
 
 
-# MongoDB Configuration
+# 数据库，无需看这段代码，实际生产不会启用
 async def get_mongodb_uri() -> str:
-    """
-    Get MongoDB connection URI setting.
-    
-    MongoDB连接URI，用于分布式部署时的数据存储。
-    设置此项后将不再使用本地/creds和TOML文件。
-    
-    Environment variable: MONGODB_URI
-    TOML config key: mongodb_uri
-    Default: None (使用本地文件存储)
-    
-    示例格式:
-    - mongodb://username:password@localhost:27017/database
-    - mongodb+srv://username:password@cluster.mongodb.net/database
-    """
     return str(await get_config_value("mongodb_uri", "", "MONGODB_URI"))
 
 async def get_mongodb_database() -> str:
-    """
-    Get MongoDB database name setting.
-    
-    MongoDB数据库名称。
-    
-    Environment variable: MONGODB_DATABASE
-    TOML config key: mongodb_database
-    Default: gcli2api
-    """
     return str(await get_config_value("mongodb_database", "gcli2api", "MONGODB_DATABASE"))
 
 async def is_mongodb_mode() -> bool:
-    """
-    Check if MongoDB mode is enabled.
-    
-    检查是否启用了MongoDB模式。
-    如果配置了MongoDB URI，则启用MongoDB模式，不再使用本地文件。
-    
-    Returns:
-        bool: True if MongoDB mode is enabled, False otherwise
-    """
     mongodb_uri = await get_mongodb_uri()
     return bool(mongodb_uri and mongodb_uri.strip())
