@@ -6,52 +6,105 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GCLI2API 控制面板</title>
     <style>
-        /* ===========================
-   淡蓝色主题 - 控制面板
-   ========================== */
+        /* ==================================
+   日夜双生主题 - By 箱宝 ✨
+   晴日苏打 (Light) & 星夜紫 (Dark)
+   ================================== */
 
-        /* 全局样式 */
+        /* --- 颜色变量定义 --- */
+        :root {
+            /* ☀️ 晴日苏打 (Light Theme) */
+            --bg-color: #f8f9fa;
+            --surface-color: #ffffff;
+            --panel-color: #ffffff;
+            --primary-color: #5cadff;
+            --secondary-color: #4ac29a;
+            --accent-color: #343a40;
+            --text-color: #495057;
+            --highlight-color: #ff7f50;
+            --success-color: #28a745;
+            --error-color: #dc3545;
+            --warning-color: #ffc107;
+            --border-color: #e9ecef;
+            --shadow-color: rgba(0, 0, 0, 0.05);
+
+            /* 通用样式 */
+            --border-radius-sm: 8px;
+            --border-radius-md: 12px;
+            --border-radius-lg: 16px;
+            --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Roboto', Arial, sans-serif;
+            --font-mono: 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                /* 🌙 星夜紫 (Dark Theme) */
+                --bg-color: #1a1b26;
+                --surface-color: #24283b;
+                --panel-color: #1f2335;
+                --primary-color: #bb9af7;
+                --secondary-color: #7aa2f7;
+                --accent-color: #c0caf5;
+                --text-color: #a9b1d6;
+                --highlight-color: #ff9e64;
+                --success-color: #9ece6a;
+                --error-color: #f7768e;
+                --warning-color: #e0af68;
+                --border-color: #414868;
+                --shadow-color: rgba(0, 0, 0, 0.2);
+            }
+        }
+
+        /* --- 全局样式 --- */
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Roboto', Arial, sans-serif;
+            font-family: var(--font-family);
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
-            background: linear-gradient(135deg, #E3F2FD 0%, #FAFAFA 100%);
+            background-color: var(--bg-color);
+            color: var(--text-color);
             min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
 
-        /* 主容器 */
+        /* --- 主容器 --- */
         .container {
-            background: white;
+            background-color: var(--panel-color);
             padding: 40px;
-            border-radius: 20px;
-            box-shadow: 0 4px 16px rgba(66, 165, 245, 0.15);
-            border: 2px solid #E3F2FD;
+            border-radius: var(--border-radius-lg);
+            box-shadow: 0 8px 32px var(--shadow-color);
+            border: 1px solid var(--border-color);
+            transition: background-color 0.3s ease, border-color 0.3s ease;
         }
 
-        /* 标题 */
+        /* --- 标题 --- */
         h1 {
-            color: #1976D2;
+            color: var(--primary-color);
             text-align: center;
             margin-bottom: 30px;
             font-size: 28px;
-            font-weight: 600;
+            font-weight: 700;
         }
 
         h3 {
-            color: #1976D2;
+            color: var(--secondary-color);
             font-size: 20px;
             font-weight: 600;
             margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
         }
 
         h4 {
             margin-top: 0;
-            color: #1976D2;
+            color: var(--primary-color);
             font-size: 16px;
+            font-weight: 600;
         }
 
-        /* 表单组 */
+        /* --- 表单 --- */
         .form-group {
             margin-bottom: 25px;
         }
@@ -60,11 +113,10 @@
             display: block;
             margin-bottom: 8px;
             font-weight: 600;
-            color: #1976D2;
+            color: var(--accent-color);
             font-size: 14px;
         }
 
-        /* 输入框 */
         input[type="text"],
         input[type="password"],
         input[type="url"],
@@ -74,12 +126,13 @@
         .filter-select {
             width: 100%;
             padding: 12px 16px;
-            border: 2px solid #BBDEFB;
-            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-md);
             font-size: 16px;
             box-sizing: border-box;
             transition: all 0.3s ease;
-            background-color: #FAFAFA;
+            background-color: var(--bg-color);
+            color: var(--text-color);
         }
 
         input[type="text"]:focus,
@@ -89,71 +142,72 @@
         select:focus,
         .config-input:focus,
         .filter-select:focus {
-            border-color: #42A5F5;
+            border-color: var(--primary-color);
             outline: none;
-            box-shadow: 0 0 0 3px rgba(66, 165, 245, 0.15);
-            background-color: white;
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 20%, transparent);
+            background-color: var(--surface-color);
         }
 
         input::placeholder {
-            color: #90CAF9;
+            color: color-mix(in srgb, var(--text-color) 50%, transparent);
         }
 
         input:disabled,
         .config-input:disabled {
-            background-color: #f5f5f5;
-            color: #666;
+            background-color: color-mix(in srgb, var(--bg-color) 50%, var(--surface-color));
+            color: color-mix(in srgb, var(--text-color) 60%, transparent);
             cursor: not-allowed;
         }
 
-        /* 按钮 */
+        /* --- 按钮 --- */
         .btn {
-            background: linear-gradient(135deg, #42A5F5 0%, #1E88E5 100%);
-            color: white;
+            background: var(--primary-color);
+            color: var(--bg-color);
             padding: 14px 30px;
             border: none;
-            border-radius: 16px;
+            border-radius: var(--border-radius-md);
             font-size: 16px;
             cursor: pointer;
             width: 100%;
             margin-bottom: 15px;
-            font-weight: 600;
+            font-weight: 700;
             transition: all 0.3s ease;
-            box-shadow: 0 4px 12px rgba(66, 165, 245, 0.3);
+            box-shadow: 0 4px 12px color-mix(in srgb, var(--primary-color) 25%, transparent);
         }
 
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(66, 165, 245, 0.4);
+        .btn:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 18px color-mix(in srgb, var(--primary-color) 40%, transparent);
         }
 
-        .btn:active {
-            transform: translateY(0);
+        .btn:active:not(:disabled) {
+            transform: translateY(-1px);
         }
 
         .btn:disabled {
-            background: #BBDEFB;
+            background: color-mix(in srgb, var(--text-color) 20%, transparent);
+            color: color-mix(in srgb, var(--text-color) 50%, transparent);
             cursor: not-allowed;
             transform: none;
             box-shadow: none;
         }
 
         .btn.secondary {
-            background: linear-gradient(135deg, #1E88E5 0%, #1976D2 100%);
+            background: var(--secondary-color);
+            box-shadow: 0 4px 12px color-mix(in srgb, var(--secondary-color) 25%, transparent);
         }
 
-        /* 隐藏类 */
+        /* --- 隐藏与加载 --- */
         .hidden {
             display: none;
         }
 
-        /* 加载状态 */
         .loading {
             text-align: center;
-            color: #1976D2;
+            color: var(--primary-color);
         }
 
-        /* 登录表单 */
+        /* --- 登录表单 --- */
         .login-form {
             text-align: center;
             padding: 50px 0;
@@ -162,20 +216,15 @@
         .login-form input[type="password"] {
             width: 400px;
             max-width: 90%;
-            padding: 12px;
-            border: 2px solid #BBDEFB;
-            border-radius: 16px;
-            font-size: 16px;
-            margin-bottom: 20px;
-            box-sizing: border-box;
+            text-align: center;
         }
 
-        /* 标签页 */
+        /* --- 标签页 --- */
         .tabs {
             display: flex;
-            border-bottom: 2px solid #E3F2FD;
-            margin-bottom: 20px;
-            gap: 5px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 30px;
+            gap: 10px;
             flex-wrap: wrap;
         }
 
@@ -183,23 +232,23 @@
             padding: 12px 24px;
             cursor: pointer;
             border: none;
-            background: linear-gradient(135deg, #E3F2FD 0%, #FAFAFA 100%);
+            background: transparent;
             border-bottom: 3px solid transparent;
-            border-radius: 16px 16px 0 0;
             font-weight: 500;
-            color: #1976D2;
+            color: var(--text-color);
             transition: all 0.3s ease;
+            border-radius: var(--border-radius-sm) var(--border-radius-sm) 0 0;
         }
 
         .tab:hover {
-            background: linear-gradient(135deg, #BBDEFB 0%, #E3F2FD 100%);
+            background-color: var(--surface-color);
+            color: var(--primary-color);
         }
 
         .tab.active {
-            background: linear-gradient(135deg, #42A5F5 0%, #1E88E5 100%);
-            border-bottom-color: #1E88E5;
-            color: white;
-            font-weight: 600;
+            border-bottom-color: var(--primary-color);
+            color: var(--primary-color);
+            font-weight: 700;
         }
 
         .tab-content {
@@ -208,111 +257,120 @@
 
         .tab-content.active {
             display: block;
+            animation: fadeIn 0.5s ease-in-out;
         }
 
-        /* 认证链接区域 */
-        .auth-url {
-            background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
-            border: 2px solid #90CAF9;
-            border-radius: 16px;
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* --- 信息框通用样式 --- */
+        .auth-url,
+        .credentials,
+        .status,
+        .steps,
+        .callback-url-section .info-box,
+        .callback-url-section .steps-box {
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-md);
             padding: 20px;
             margin: 25px 0;
-            word-break: break-all;
-            border-left: 4px solid #42A5F5;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .auth-url::before,
+        .credentials::before,
+        .status::before,
+        .steps::before,
+        .callback-url-section .info-box::before,
+        .callback-url-section .steps-box::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: 4px;
         }
 
         .auth-url a {
-            color: #1976D2;
+            color: var(--primary-color);
             text-decoration: none;
             font-weight: 600;
+            word-break: break-all;
         }
 
         .auth-url a:hover {
             text-decoration: underline;
-            color: #1565C0;
         }
 
-        /* 凭证显示区域 */
-        .credentials {
-            background: linear-gradient(135deg, #E3F2FD 0%, #F5F5F5 100%);
-            border: 2px solid #90CAF9;
-            border-radius: 16px;
-            padding: 20px;
-            margin: 25px 0;
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-            font-size: 12px;
+        .credentials,
+        .cred-content,
+        #logContainer {
+            font-family: var(--font-mono);
+            font-size: 13px;
             white-space: pre-wrap;
             word-break: break-all;
             max-height: 400px;
             overflow-y: auto;
-            border-left: 4px solid #1E88E5;
+            background-color: var(--bg-color);
         }
 
-        /* 状态消息 */
-        .status {
-            padding: 15px 20px;
-            border-radius: 16px;
-            margin: 20px 0;
-            font-weight: 500;
+        .status.success::before {
+            background-color: var(--success-color);
         }
 
         .status.success {
-            background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
-            border: 2px solid #A5D6A7;
-            color: #2E7D32;
-            border-left: 4px solid #4CAF50;
+            color: var(--success-color);
+        }
+
+        .status.error::before {
+            background-color: var(--error-color);
         }
 
         .status.error {
-            background: linear-gradient(135deg, #FFEBEE 0%, #FFCDD2 100%);
-            border: 2px solid #EF9A9A;
-            color: #C62828;
-            border-left: 4px solid #F44336;
+            color: var(--error-color);
+        }
+
+        .status.info::before {
+            background-color: var(--secondary-color);
         }
 
         .status.info {
-            background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
-            border: 2px solid #90CAF9;
-            color: #1565C0;
-            border-left: 4px solid #2196F3;
+            color: var(--secondary-color);
+        }
+
+        .status.warning::before {
+            background-color: var(--warning-color);
         }
 
         .status.warning {
-            background: linear-gradient(135deg, #FFF9C4 0%, #FFF59D 100%);
-            border: 2px solid #FFF176;
-            color: #F57F17;
-            border-left: 4px solid #FFC107;
+            color: var(--warning-color);
         }
 
-        /* 步骤说明 */
-        .steps {
-            background: linear-gradient(135deg, #E3F2FD 0%, #F5F5F5 100%);
-            border-radius: 16px;
-            padding: 20px;
-            margin: 25px 0;
-            border-left: 4px solid #42A5F5;
-            border: 2px solid #BBDEFB;
-        }
-
-        .steps ol {
-            margin: 15px 0;
+        .steps ol,
+        .callback-url-section ol {
             padding-left: 20px;
+            color: var(--text-color);
         }
 
-        .steps li {
-            margin-bottom: 8px;
-            color: #424242;
-            line-height: 1.5;
-        }
-
-        /* 折叠区域样式 */
+        /* --- 折叠区域 --- */
         .collapsible-header {
             cursor: pointer;
             user-select: none;
-            padding: 12px;
-            border: 2px solid #BBDEFB;
-            border-radius: 16px;
-            background: linear-gradient(135deg, #E3F2FD 0%, #FAFAFA 100%);
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-md);
+            background-color: var(--surface-color);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -320,117 +378,91 @@
         }
 
         .collapsible-header:hover {
-            background: linear-gradient(135deg, #BBDEFB 0%, #E3F2FD 100%);
+            background-color: color-mix(in srgb, var(--surface-color) 80%, var(--bg-color));
+            border-color: var(--primary-color);
         }
 
         .collapsible-header span {
             font-weight: 600;
-            color: #1976D2;
+            color: var(--accent-color);
         }
 
         .collapsible-icon {
             font-size: 14px;
-            color: #42A5F5;
+            color: var(--primary-color);
             transition: transform 0.3s ease;
         }
 
         .collapsible-content {
             margin-top: 15px;
-            padding: 15px;
-            border: 2px solid #BBDEFB;
-            border-top: none;
-            border-radius: 0 0 16px 16px;
-            background-color: white;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-md);
+            background-color: var(--panel-color);
         }
 
-        /* 快捷回调URL区域 */
+        /* --- 快捷回调URL --- */
         .callback-url-section {
-            margin: 20px 0;
-            padding: 15px;
-            border: 2px solid #BBDEFB;
-            border-radius: 16px;
-            background: linear-gradient(135deg, #E3F2FD 0%, #FFFFFF 100%);
+            background-color: transparent;
+            border: none;
+            padding: 0;
         }
 
-        .callback-url-section .info-box {
-            background: linear-gradient(135deg, #FFF9C4 0%, #FFF59D 100%);
-            border: 1px solid #FFF176;
-            border-radius: 12px;
-            padding: 12px;
-            margin-bottom: 12px;
+        .callback-url-section .info-box::before {
+            background-color: var(--warning-color);
         }
 
         .callback-url-section .info-box-title {
-            color: #F57F17;
-            font-size: 14px;
-            font-weight: bold;
-            margin-bottom: 6px;
+            color: var(--warning-color);
         }
 
-        .callback-url-section ul {
-            color: #F57F17;
-            font-size: 13px;
-            margin: 0;
-            padding-left: 18px;
-            line-height: 1.5;
-        }
-
-        .callback-url-section .steps-box {
-            background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
-            border: 1px solid #90CAF9;
-            border-radius: 12px;
-            padding: 10px;
-            margin-bottom: 12px;
+        .callback-url-section .steps-box::before {
+            background-color: var(--secondary-color);
         }
 
         .callback-url-section .steps-title {
-            color: #1565C0;
-            font-size: 13px;
-            font-weight: bold;
-            margin-bottom: 4px;
-        }
-
-        .callback-url-section ol {
-            color: #1565C0;
-            font-size: 12px;
-            margin: 0;
-            padding-left: 18px;
-            line-height: 1.4;
+            color: var(--secondary-color);
         }
 
         .callback-url-section code {
-            background: #F5F5F5;
-            padding: 2px 6px;
-            border-radius: 4px;
+            background: var(--bg-color);
+            padding: 4px 8px;
+            border-radius: var(--border-radius-sm);
             font-size: 12px;
             word-break: break-all;
             display: block;
             margin-top: 4px;
-            border: 1px solid #E0E0E0;
+            border: 1px solid var(--border-color);
+            color: var(--highlight-color);
         }
 
-        /* 文件管理样式 */
+        /* --- 文件管理卡片 --- */
         .cred-card {
-            background: linear-gradient(135deg, #E3F2FD 0%, #FAFAFA 100%);
-            border: 2px solid #BBDEFB;
-            border-radius: 16px;
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-md);
             padding: 20px;
             margin: 15px 0;
             position: relative;
-            border-left: 4px solid #42A5F5;
+            border-left: 4px solid var(--secondary-color);
             transition: all 0.3s ease;
         }
 
         .cred-card:hover {
-            box-shadow: 0 6px 20px rgba(66, 165, 245, 0.2);
-            transform: translateY(-2px);
+            box-shadow: 0 6px 20px var(--shadow-color);
+            transform: translateY(-3px);
+            border-color: var(--primary-color);
         }
 
         .cred-card.disabled {
-            background: linear-gradient(135deg, #F5F5F5 0%, #E0E0E0 100%);
-            border-color: #ccc;
+            border-left-color: #6c757d;
             opacity: 0.7;
-            border-left-color: #999;
+        }
+
+        .cred-card.disabled:hover {
+            transform: none;
+            box-shadow: none;
+            border-color: var(--border-color);
         }
 
         .cred-header {
@@ -443,49 +475,48 @@
         }
 
         .cred-filename {
-            font-family: 'Consolas', 'Monaco', monospace;
+            font-family: var(--font-mono);
             font-weight: bold;
-            color: #1976D2;
+            color: var(--accent-color);
             font-size: 14px;
             word-break: break-all;
         }
 
         .cred-email {
             font-size: 12px;
-            color: #666;
+            color: var(--text-color);
             margin-top: 5px;
             font-style: italic;
         }
 
         .cred-status {
             display: flex;
-            gap: 5px;
+            gap: 8px;
             flex-wrap: wrap;
+            align-items: center;
         }
 
         .status-badge {
             padding: 4px 12px;
-            border-radius: 16px;
+            border-radius: 99px;
             font-size: 12px;
-            color: white;
-            font-weight: 500;
-        }
-
-        .status-badge.enabled {
-            background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
+            font-weight: 700;
+            background-color: var(--success-color);
+            color: var(--panel-color);
         }
 
         .status-badge.disabled {
-            background: linear-gradient(135deg, #9E9E9E 0%, #616161 100%);
+            background-color: #6c757d;
+            color: var(--panel-color);
         }
 
         .error-codes {
-            background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);
-            color: white;
+            background-color: var(--error-color);
+            color: var(--panel-color);
             padding: 4px 12px;
-            border-radius: 16px;
+            border-radius: 99px;
             font-size: 12px;
-            font-weight: 500;
+            font-weight: 700;
         }
 
         .cred-actions {
@@ -496,49 +527,41 @@
         }
 
         .cred-btn {
-            padding: 8px 16px;
+            padding: 6px 14px;
             border: none;
-            border-radius: 16px;
+            border-radius: var(--border-radius-md);
             font-size: 12px;
             cursor: pointer;
             transition: all 0.3s ease;
-            font-weight: 500;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            font-weight: 600;
+            box-shadow: 0 2px 8px var(--shadow-color);
+            color: var(--panel-color);
         }
 
         .cred-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 4px 12px var(--shadow-color);
         }
 
         .cred-btn.enable {
-            background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
-            color: white;
+            background-color: var(--success-color);
         }
 
         .cred-btn.disable {
-            background: linear-gradient(135deg, #9E9E9E 0%, #616161 100%);
-            color: white;
+            background-color: var(--warning-color);
         }
 
         .cred-btn.delete {
-            background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);
-            color: white;
+            background-color: var(--error-color);
         }
 
         .cred-btn.download {
-            background: linear-gradient(135deg, #42A5F5 0%, #1E88E5 100%);
-            color: white;
+            background-color: var(--secondary-color);
         }
 
-        .cred-btn.view {
-            background: linear-gradient(135deg, #1E88E5 0%, #1565C0 100%);
-            color: white;
-        }
-
+        .cred-btn.view,
         .cred-btn.email {
-            background: linear-gradient(135deg, #1E88E5 0%, #1565C0 100%);
-            color: white;
+            background-color: var(--primary-color);
         }
 
         .cred-details {
@@ -548,19 +571,132 @@
 
         .cred-details.show {
             display: block;
+            animation: fadeIn 0.3s;
         }
 
-        .cred-content {
-            background: linear-gradient(135deg, #E3F2FD 0%, #F5F5F5 100%);
-            border: 2px solid #90CAF9;
-            border-radius: 16px;
+        /* --- 统计与筛选 --- */
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-item {
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-md);
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 8px var(--shadow-color);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 6px;
+        }
+
+        .stat-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 16px var(--shadow-color);
+        }
+
+        .stat-number {
+            font-size: 32px;
+            font-weight: bold;
+            display: block;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            text-transform: uppercase;
+            margin-top: 8px;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .stat-item.total::before {
+            background-color: var(--secondary-color);
+        }
+
+        .stat-item.total .stat-number {
+            color: var(--secondary-color);
+        }
+
+        .stat-item.normal::before {
+            background-color: var(--success-color);
+        }
+
+        .stat-item.normal .stat-number {
+            color: var(--success-color);
+        }
+
+        .stat-item.disabled::before {
+            background-color: #6c757d;
+        }
+
+        .stat-item.disabled .stat-number {
+            color: #6c757d;
+        }
+
+        .filter-container,
+        .pagination-container {
+            display: flex;
+            gap: 15px;
+            margin: 20px 0;
+            align-items: center;
+            flex-wrap: wrap;
+            background-color: var(--surface-color);
             padding: 15px;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 11px;
-            white-space: pre-wrap;
-            word-break: break-all;
-            max-height: 250px;
-            overflow-y: auto;
+            border-radius: var(--border-radius-md);
+        }
+
+        .pagination-container {
+            justify-content: center;
+        }
+
+        .pagination-info {
+            color: var(--text-color);
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .pagination-btn {
+            padding: 10px 16px;
+            border: 1px solid var(--border-color);
+            background-color: var(--surface-color);
+            cursor: pointer;
+            border-radius: var(--border-radius-md);
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-color);
+            transition: all 0.3s ease;
+        }
+
+        .pagination-btn:hover:not(:disabled) {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+            color: var(--panel-color);
+            transform: translateY(-2px);
+        }
+
+        .pagination-btn:disabled {
+            background-color: color-mix(in srgb, var(--bg-color) 50%, var(--surface-color));
+            color: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .pagination-btn.active {
+            background-color: var(--primary-color);
+            color: var(--panel-color);
+            border-color: var(--primary-color);
         }
 
         .manage-actions {
@@ -570,176 +706,40 @@
             flex-wrap: wrap;
         }
 
-        /* 统计容器 */
-        .stats-container {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-
-        .stat-item {
-            background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
-            border: 2px solid #90CAF9;
-            border-radius: 16px;
-            padding: 20px 30px;
-            text-align: center;
-            min-width: 140px;
-            box-shadow: 0 4px 12px rgba(66, 165, 245, 0.15);
-            transition: all 0.3s ease;
-        }
-
-        .stat-item:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(66, 165, 245, 0.25);
-        }
-
-        .stat-number {
-            font-size: 32px;
-            font-weight: bold;
-            color: #1976D2;
-            display: block;
-        }
-
-        .stat-label {
-            font-size: 13px;
-            color: #1565C0;
-            text-transform: uppercase;
-            margin-top: 8px;
-            font-weight: 600;
-        }
-
-        .stat-item.total {
-            border-left: 6px solid #42A5F5;
-        }
-
-        .stat-item.normal {
-            border-left: 6px solid #4CAF50;
-        }
-
-        .stat-item.disabled {
-            border-left: 6px solid #9E9E9E;
-        }
-
-        /* 筛选容器 */
-        .filter-container {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-
-        .filter-select,
-        .page-size-select {
-            padding: 8px 12px;
-            border: 2px solid #BBDEFB;
-            border-radius: 16px;
-            font-size: 14px;
-            background-color: white;
-        }
-
-        .filter-select:focus,
-        .page-size-select:focus {
-            border-color: #42A5F5;
-            outline: none;
-        }
-
-        /* 分页容器 */
-        .pagination-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 10px;
-            margin: 20px 0;
-            flex-wrap: wrap;
-        }
-
-        .pagination-info {
-            color: #1565C0;
-            font-size: 14px;
-            font-weight: 500;
-        }
-
-        .pagination-btn {
-            padding: 10px 16px;
-            border: 2px solid #BBDEFB;
-            background: linear-gradient(135deg, #E3F2FD 0%, #FAFAFA 100%);
+        .refresh-btn,
+        .download-all-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: var(--border-radius-md);
             cursor: pointer;
-            border-radius: 16px;
-            font-size: 14px;
-            font-weight: 500;
-            color: #1976D2;
+            font-weight: 600;
             transition: all 0.3s ease;
-        }
-
-        .pagination-btn:hover:not(:disabled) {
-            background: linear-gradient(135deg, #42A5F5 0%, #1E88E5 100%);
-            border-color: #1E88E5;
-            color: white;
-            transform: translateY(-2px);
-        }
-
-        .pagination-btn:disabled {
-            background: #F5F5F5;
-            color: #ccc;
-            cursor: not-allowed;
-            border-color: #E0E0E0;
-        }
-
-        .pagination-btn.active {
-            background: linear-gradient(135deg, #42A5F5 0%, #1E88E5 100%);
-            color: white;
-            border-color: #1E88E5;
+            box-shadow: 0 2px 8px var(--shadow-color);
+            color: var(--panel-color);
         }
 
         .refresh-btn {
-            background: linear-gradient(135deg, #1E88E5 0%, #1565C0 100%);
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 16px;
-            cursor: pointer;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 8px rgba(30, 136, 229, 0.3);
-        }
-
-        .refresh-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(30, 136, 229, 0.4);
+            background-color: var(--secondary-color);
         }
 
         .download-all-btn {
-            background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 16px;
-            cursor: pointer;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+            background-color: var(--success-color);
         }
 
+        .refresh-btn:hover,
         .download-all-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+            box-shadow: 0 4px 12px var(--shadow-color);
         }
 
-        /* 批量操作样式 */
-        .batch-controls {
-            background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
-            border: 2px solid #90CAF9;
-            border-radius: 16px;
+        /* --- 批量操作与配置 --- */
+        .batch-controls,
+        .config-group {
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-md);
             padding: 20px;
             margin-bottom: 20px;
-        }
-
-        .checkbox-container {
-            display: flex;
-            align-items: center;
-            margin-right: 15px;
         }
 
         .batch-actions {
@@ -752,51 +752,37 @@
 
         .batch-btn {
             padding: 8px 16px;
-            border: none;
-            border-radius: 16px;
+            border-radius: var(--border-radius-md);
             font-size: 12px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-weight: 500;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .batch-btn:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            font-weight: 600;
+            color: var(--panel-color);
         }
 
         .batch-btn.batch-enable {
-            background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
-            color: white;
+            background-color: var(--success-color);
         }
 
         .batch-btn.batch-disable {
-            background: linear-gradient(135deg, #9E9E9E 0%, #616161 100%);
-            color: white;
+            background-color: var(--warning-color);
         }
 
         .batch-btn.batch-delete {
-            background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);
-            color: white;
+            background-color: var(--error-color);
         }
 
         .batch-btn.batch-email {
-            background: linear-gradient(135deg, #1E88E5 0%, #1565C0 100%);
-            color: white;
+            background-color: var(--secondary-color);
         }
 
         .batch-btn:disabled {
-            background: #e9ecef;
-            color: #6c757d;
-            cursor: not-allowed;
-            box-shadow: none;
+            background-color: color-mix(in srgb, var(--text-color) 20%, transparent);
+            color: color-mix(in srgb, var(--text-color) 50%, transparent);
         }
 
         .selected-count {
             font-weight: bold;
-            color: #1976D2;
-            margin-right: 10px;
+            color: var(--primary-color);
+            margin: 0 10px;
         }
 
         .select-all-checkbox,
@@ -804,9 +790,9 @@
             margin-right: 8px;
             transform: scale(1.2);
             cursor: pointer;
+            accent-color: var(--primary-color);
         }
 
-        /* 错误码筛选 */
         .error-filter-container {
             display: flex;
             gap: 10px;
@@ -816,313 +802,235 @@
 
         .error-code-badge {
             display: inline-block;
-            background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);
-            color: white;
+            background-color: var(--error-color);
+            color: var(--panel-color);
             padding: 4px 10px;
-            border-radius: 16px;
+            border-radius: 99px;
             font-size: 11px;
             margin: 2px;
             cursor: pointer;
             transition: all 0.3s ease;
-            font-weight: 500;
+            font-weight: 700;
         }
 
         .error-code-badge:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(244, 67, 54, 0.4);
+            transform: scale(1.1);
+            box-shadow: 0 0 10px color-mix(in srgb, var(--error-color) 50%, transparent);
         }
 
         .error-code-badge.selected {
-            background: linear-gradient(135deg, #42A5F5 0%, #1E88E5 100%);
-        }
-
-        /* 配置管理样式 */
-        .config-group {
-            background: linear-gradient(135deg, #E3F2FD 0%, #FAFAFA 100%);
-            border: 2px solid #BBDEFB;
-            border-radius: 16px;
-            padding: 25px;
-            margin: 20px 0;
-            border-left: 4px solid #42A5F5;
+            background-color: var(--secondary-color);
         }
 
         .config-group h4 {
-            margin-top: 0;
-            margin-bottom: 20px;
-            color: #1976D2;
-            border-bottom: 2px solid #E3F2FD;
-            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
         }
 
         .config-checkbox {
             margin-right: 8px;
             transform: scale(1.2);
+            accent-color: var(--primary-color);
         }
 
         .config-note {
             display: block;
-            color: #666;
+            color: color-mix(in srgb, var(--text-color) 80%, transparent);
             font-size: 12px;
-            margin-bottom: 10px;
+            margin-top: 5px;
             font-style: italic;
         }
 
         .config-info {
-            background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
-            border: 2px solid #90CAF9;
-            border-radius: 16px;
-            padding: 15px;
-            margin-top: 10px;
-            font-size: 13px;
-            color: #1565C0;
-        }
-
-        .config-info ul {
-            margin: 8px 0 4px 0;
-            color: #424242;
-        }
-
-        .config-info li {
-            margin: 3px 0;
-        }
-
-        .env-locked {
-            position: relative;
+            border-left-width: 4px;
+            border-left-style: solid;
+            border-left-color: var(--secondary-color);
         }
 
         .env-locked::after {
             content: "🔒 环境变量锁定";
             position: absolute;
-            right: 10px;
+            right: 12px;
             top: 50%;
             transform: translateY(-50%);
-            background: linear-gradient(135deg, #FFC107 0%, #FFA000 100%);
-            color: white;
+            background-color: var(--warning-color);
+            color: var(--panel-color);
             padding: 4px 10px;
-            border-radius: 16px;
+            border-radius: 99px;
             font-size: 11px;
             pointer-events: none;
-            font-weight: 500;
+            font-weight: 700;
         }
 
-        /* 使用统计样式 */
+        /* --- 使用统计 --- */
         .usage-card {
-            background: linear-gradient(135deg, #E3F2FD 0%, #FAFAFA 100%);
-            border: 2px solid #BBDEFB;
-            border-radius: 16px;
-            padding: 20px;
-            margin: 15px 0;
-            position: relative;
-            border-left: 4px solid #42A5F5;
-        }
-
-        .usage-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
+            border-left: 4px solid var(--primary-color);
         }
 
         .usage-filename {
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-weight: bold;
-            color: #1976D2;
-            font-size: 14px;
+            color: var(--primary-color);
         }
 
         .usage-progress {
-            margin: 15px 0;
+            margin: 20px 0;
         }
 
         .usage-progress-label {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-            font-size: 12px;
-            color: #1565C0;
-            font-weight: 500;
+            font-size: 13px;
+            color: var(--accent-color);
         }
 
         .usage-progress-bar {
             width: 100%;
-            height: 24px;
-            background-color: #E3F2FD;
-            border-radius: 16px;
+            height: 12px;
+            background-color: var(--bg-color);
+            border-radius: 99px;
             overflow: hidden;
-            position: relative;
-            border: 2px solid #BBDEFB;
         }
 
         .usage-progress-fill {
             height: 100%;
-            transition: width 0.3s ease;
-            border-radius: 14px;
+            transition: width 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+            border-radius: 99px;
         }
 
         .usage-progress-fill.gemini {
-            background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+            background: linear-gradient(90deg, var(--warning-color), var(--highlight-color));
         }
 
         .usage-progress-fill.total {
-            background: linear-gradient(135deg, #42A5F5 0%, #1E88E5 100%);
+            background: linear-gradient(90deg, var(--secondary-color), var(--primary-color));
         }
 
         .usage-progress-fill.warning {
-            background: linear-gradient(135deg, #FFC107 0%, #FFA000 100%);
+            background: linear-gradient(90deg, var(--warning-color), var(--error-color));
         }
 
         .usage-progress-fill.danger {
-            background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);
+            background: linear-gradient(90deg, var(--error-color), #db4b4b);
         }
 
         .usage-actions {
-            display: flex;
-            gap: 8px;
-            margin-top: 15px;
+            gap: 10px;
+            margin-top: 20px;
         }
 
         .usage-btn {
             padding: 8px 16px;
-            border: none;
-            border-radius: 16px;
-            font-size: 11px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-weight: 500;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .usage-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            border-radius: var(--border-radius-md);
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--panel-color);
         }
 
         .usage-btn.reset {
-            background: linear-gradient(135deg, #9E9E9E 0%, #616161 100%);
-            color: white;
+            background-color: #6c757d;
         }
 
         .usage-btn.limits {
-            background: linear-gradient(135deg, #1E88E5 0%, #1565C0 100%);
-            color: white;
+            background-color: var(--primary-color);
         }
 
         .usage-info {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 10px;
             margin-top: 15px;
             font-size: 12px;
         }
 
         .usage-info-item {
-            background: white;
+            background: var(--bg-color);
             padding: 10px;
-            border-radius: 16px;
-            border: 2px solid #E3F2FD;
+            border-radius: var(--border-radius-md);
+            border: 1px solid var(--border-color);
         }
 
         .usage-info-label {
-            font-weight: bold;
-            color: #1976D2;
-            display: block;
-            margin-bottom: 4px;
+            color: var(--secondary-color);
         }
 
         .usage-info-value {
-            color: #424242;
+            color: var(--accent-color);
         }
 
-        /* 弹窗样式 */
+        /* --- 弹窗样式 (修正版) --- */
         .modal {
             display: none;
+            /* 默认隐藏, JS会把它变成 block */
             position: fixed;
+            /* 固定在屏幕上，不会随滚动条滚动 */
             z-index: 1000;
+            /* 确保在最顶层 */
             left: 0;
             top: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
+            background-color: rgba(26, 27, 38, 0.7);
+            backdrop-filter: blur(5px);
+            animation: fadeIn 0.3s;
+            /* 新增一个内层div来帮助垂直居中 */
+            padding-top: 15vh;
+            overflow-y: auto;
+            /* 如果内容超长可以滚动 */
+        }
+
+        @media (prefers-color-scheme: light) {
+            .modal {
+                background-color: rgba(248, 249, 250, 0.7);
+            }
         }
 
         .modal-content {
-            background: white;
-            margin: 10% auto;
+            background-color: var(--panel-color);
+            margin: 0 auto;
+            /* 水平居中 */
             padding: 30px;
-            border-radius: 20px;
+            border-radius: var(--border-radius-lg);
             width: 500px;
             max-width: 90%;
-            box-shadow: 0 8px 32px rgba(66, 165, 245, 0.3);
-            border: 2px solid #E3F2FD;
+            box-shadow: 0 8px 32px var(--shadow-color);
+            border: 1px solid var(--border-color);
         }
 
+
         .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid #E3F2FD;
+            border-bottom: 1px solid var(--border-color);
         }
 
         .modal-title {
-            margin: 0;
-            font-size: 18px;
-            color: #1976D2;
-            font-weight: 600;
+            color: var(--primary-color);
         }
 
         .modal-close {
-            background: none;
-            border: none;
-            font-size: 24px;
-            cursor: pointer;
-            color: #999;
-            transition: color 0.3s ease;
+            color: color-mix(in srgb, var(--text-color) 70%, transparent);
+            font-size: 28px;
         }
 
         .modal-close:hover {
-            color: #1976D2;
+            color: var(--primary-color);
         }
 
-        .modal-body {
-            margin-bottom: 20px;
-        }
-
-        .modal-footer {
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-        }
-
-        /* 日志容器 */
         #logContainer {
-            background-color: #1e1e1e;
-            color: #ffffff;
-            font-family: 'Consolas', 'Courier New', monospace;
-            font-size: 12px;
-            height: 600px;
-            overflow-y: auto;
-            border: 2px solid #90CAF9;
-            border-radius: 16px;
+            background-color: var(--bg-color);
+            color: var(--accent-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-md);
             padding: 20px;
-            white-space: pre-wrap;
-            word-break: break-all;
+            height: 600px;
         }
 
-        /* 页脚 */
+        /* --- 页脚 --- */
         .footer {
             text-align: center;
             margin-top: 40px;
             padding-top: 20px;
-            border-top: 2px solid #E3F2FD;
-            color: #1565C0;
+            border-top: 1px solid var(--border-color);
+            color: color-mix(in srgb, var(--text-color) 70%, transparent);
             font-size: 14px;
         }
 
         .footer a {
-            color: #1976D2;
+            color: var(--secondary-color);
             text-decoration: none;
             font-weight: 500;
         }
@@ -1131,24 +1039,25 @@
             text-decoration: underline;
         }
 
-        /* 项目信息框 */
         .project-info {
-            background: linear-gradient(135deg, #E3F2FD 0%, #FAFAFA 100%);
-            border: 2px solid #90CAF9;
-            border-radius: 16px;
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-md);
             padding: 15px;
             margin-top: 30px;
             text-align: center;
-            border-left: 4px solid #42A5F5;
+            border-left: 4px solid var(--primary-color);
         }
 
         .project-info p {
-            margin: 6px 0;
-            font-size: 15px;
-            color: #424242;
+            color: var(--text-color);
         }
 
-        /* 响应式设计 */
+        .project-info a {
+            color: var(--secondary-color);
+        }
+
+        /* --- 响应式 --- */
         @media (max-width: 768px) {
             body {
                 padding: 10px;
@@ -1162,75 +1071,45 @@
                 font-size: 24px;
             }
 
-            .btn {
-                padding: 12px 20px;
-                font-size: 15px;
-            }
-
             .tabs {
                 flex-direction: column;
+                gap: 5px;
             }
 
             .tab {
                 width: 100%;
-                border-radius: 16px;
-                margin-bottom: 5px;
+                border-radius: var(--border-radius-md);
+                border-bottom: none;
             }
 
-            .stats-container {
-                flex-direction: column;
-            }
-
-            .stat-item {
-                width: 100%;
-            }
-
-            .usage-info {
-                grid-template-columns: 1fr;
+            .tab.active {
+                background-color: var(--surface-color);
             }
         }
 
-        /* 滚动条美化 */
-        .credentials::-webkit-scrollbar,
-        .cred-content::-webkit-scrollbar,
-        #logContainer::-webkit-scrollbar {
-            width: 8px;
+        /* --- 滚动条 --- */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
         }
 
-        .credentials::-webkit-scrollbar-track,
-        .cred-content::-webkit-scrollbar-track {
-            background: #E3F2FD;
-            border-radius: 8px;
+        ::-webkit-scrollbar-track {
+            background: var(--bg-color);
+            border-radius: 10px;
         }
 
-        .credentials::-webkit-scrollbar-thumb,
-        .cred-content::-webkit-scrollbar-thumb {
-            background: linear-gradient(135deg, #42A5F5 0%, #1E88E5 100%);
-            border-radius: 8px;
+        ::-webkit-scrollbar-thumb {
+            background: color-mix(in srgb, var(--text-color) 30%, transparent);
+            border-radius: 10px;
+            border: 2px solid var(--bg-color);
         }
 
-        .credentials::-webkit-scrollbar-thumb:hover,
-        .cred-content::-webkit-scrollbar-thumb:hover {
-            background: linear-gradient(135deg, #1E88E5 0%, #1976D2 100%);
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--primary-color);
         }
 
-        #logContainer::-webkit-scrollbar-track {
-            background: #2e2e2e;
-            border-radius: 8px;
-        }
-
-        #logContainer::-webkit-scrollbar-thumb {
-            background: linear-gradient(135deg, #42A5F5 0%, #1E88E5 100%);
-            border-radius: 8px;
-        }
-
-        #logContainer::-webkit-scrollbar-thumb:hover {
-            background: linear-gradient(135deg, #1E88E5 0%, #1976D2 100%);
-        }
-
-        /* 小号文本 */
         small {
-            color: #757575;
+            color: color-mix(in srgb, var(--text-color) 80%, transparent);
             font-size: 12px;
         }
     </style>
@@ -1263,45 +1142,42 @@
 
             <!-- OAuth认证标签页 -->
             <div id="oauthTab" class="tab-content active">
-                <!-- API 自动启用说明 -->
-                <div class="status success" style="margin-bottom: 20px;">
+                <div class="status success">
                     <strong>✨ 自动化优化：</strong> 系统会在认证成功后自动为您的项目启用必需的API服务
-                    <ul style="margin: 10px 0; padding-left: 20px;">
+                    <ul>
                         <li><strong>Gemini Cloud Assist API</strong></li>
                         <li><strong>Gemini for Google Cloud API</strong></li>
                     </ul>
-                    <p style="margin: 10px 0;"><strong>说明：</strong>无需手动启用API，系统会自动处理这些配置步骤</p>
+                    <p><strong>说明：</strong>无需手动启用API，系统会自动处理这些配置步骤</p>
                 </div>
 
-                <!-- 折叠式 Project ID 输入框 -->
                 <div class="form-group">
                     <div class="collapsible-header" onclick="toggleProjectIdSection()">
-                        <span>📁 高级选项：Google Cloud Project ID (不用管，直接点击获取链接即可)</span>
+                        <span>📁 高级选项：Google Cloud Project ID (可选)</span>
                         <span id="projectIdToggleIcon" class="collapsible-icon">▶</span>
                     </div>
                     <div id="projectIdSection" class="collapsible-content" style="display: none;">
-                        <label for="projectId">Google Cloud Project ID (可选):</label>
+                        <label for="projectId">Google Cloud Project ID:</label>
                         <input type="text" id="projectId" placeholder="留空将尝试自动检测，或手动输入项目ID" />
                         <small>💡 提示：如果你不懂这是什么，可以留空此字段让系统自动检测项目ID</small>
                     </div>
                 </div>
 
-                <!-- 为所有项目获取凭证选项 -->
                 <div class="form-group">
                     <div
-                        style="padding: 15px; border: 2px solid #4CAF50; border-radius: 16px; background: linear-gradient(135deg, #E8F5E9 0%, #F1F8E9 100%);">
+                        style="padding: 15px; border: 1px solid var(--border-color); border-radius: var(--border-radius-md); background-color: var(--surface-color);">
                         <div style="display: flex; align-items: center; gap: 12px;">
-                            <input type="checkbox" id="getAllProjectsCreds" style="transform: scale(1.3);">
+                            <input type="checkbox" id="getAllProjectsCreds" class="select-all-checkbox"
+                                onchange="handleGetAllProjectsChange()">
                             <label for="getAllProjectsCreds"
-                                style="font-weight: bold; color: #388E3C; margin: 0; cursor: pointer;">
+                                style="font-weight: bold; color: var(--accent-color); margin: 0; cursor: pointer;">
                                 🌐 为当前账号所有项目获取凭证
                             </label>
                         </div>
-                        <div style="margin-top: 10px; color: #2E7D32; font-size: 14px; line-height: 1.5;">
+                        <div style="margin-top: 10px; font-size: 14px; line-height: 1.5;">
                             <strong>说明：</strong>勾选此选项后，系统会自动检测当前Google账号下的所有项目，<strong>并发处理</strong>为每个项目生成独立的认证文件。
                         </div>
-                        <div id="allProjectsNote"
-                            style="margin-top: 8px; padding: 8px; background: #C8E6C9; border-radius: 16px; font-size: 13px; color: #2E7D32; display: none;">
+                        <div id="allProjectsNote" class="status info" style="margin-top: 10px; display: none;">
                             ✨ <strong>批量并发认证模式已启用</strong> - 认证完成后将并发为所有可访问的项目生成凭证文件
                         </div>
                     </div>
@@ -1316,7 +1192,7 @@
                     </div>
                     <div class="status info">
                         <strong>重要说明：</strong>
-                        <ol style="margin: 10px 0; padding-left: 20px;">
+                        <ol>
                             <li>点击上方认证链接，会在新窗口中打开Google OAuth页面</li>
                             <li>完成Google账号登录和授权</li>
                             <li>授权成功后会跳转到localhost:8080显示成功页面</li>
@@ -1325,14 +1201,13 @@
                         </ol>
                     </div>
 
-                    <!-- 快捷回调URL输入选项 -->
                     <div class="callback-url-section">
                         <div class="collapsible-header" onclick="toggleCallbackUrlSection()"
                             style="margin-bottom: 10px;">
                             <span style="font-weight: bold;">🚀 无法回源？试试快捷方式</span>
                             <span id="callbackUrlToggleIcon" class="collapsible-icon">▼</span>
                         </div>
-                        <div id="callbackUrlSection" style="display: none;">
+                        <div id="callbackUrlSection" class="collapsible-content" style="display: none;">
                             <div class="info-box">
                                 <div class="info-box-title">📚 适用场景：</div>
                                 <ul>
@@ -1342,8 +1217,9 @@
                                     <li>Docker容器内运行，端口映射问题</li>
                                 </ul>
                             </div>
-                            <div style="color: #666; font-size: 13px; margin-bottom: 12px; line-height: 1.6;">
-                                <strong style="color: #1976D2;">🔍 什么是回调URL？</strong><br>
+                            <div
+                                style="color: var(--text-color); font-size: 13px; margin-bottom: 12px; line-height: 1.6;">
+                                <strong style="color: var(--primary-color);">🔍 什么是回调URL？</strong><br>
                                 完成Google OAuth授权后，浏览器地址栏显示的完整URL，通常看起来像这样：<br>
                                 <code>http://localhost:8080/?state=abc123...&code=4/0AVMBsJ...&scope=email%20profile...</code>
                             </div>
@@ -1355,12 +1231,11 @@
                                     <li>粘贴到下方输入框，点击获取凭证即可</li>
                                 </ol>
                             </div>
-                            <div style="margin-bottom: 12px;">
+                            <div class="form-group" style="margin-bottom: 12px;">
                                 <input type="url" id="callbackUrlInput"
                                     placeholder="粘贴完整的回调URL，例如：http://localhost:8080/?state=xxx&code=xxx&scope=xxx..." />
                             </div>
-                            <button class="btn" style="background: linear-gradient(135deg, #1E88E5 0%, #1565C0 100%);"
-                                onclick="processCallbackUrl()">
+                            <button class="btn secondary" onclick="processCallbackUrl()">
                                 从回调URL获取凭证
                             </button>
                         </div>
@@ -1380,7 +1255,6 @@
                 <h3>凭证文件管理</h3>
                 <p>管理所有认证文件，查看状态和执行操作</p>
 
-                <!-- 状态统计 -->
                 <div class="stats-container" id="statsContainer">
                     <div class="stat-item total">
                         <span class="stat-number" id="statTotal">0</span>
@@ -1401,11 +1275,10 @@
                     <button class="download-all-btn" onclick="downloadAllCreds()">打包下载所有文件</button>
                 </div>
 
-                <!-- 批量操作控件 -->
                 <div class="batch-controls">
-                    <h4 style="margin-top: 0; margin-bottom: 10px;">批量操作</h4>
+                    <h4>批量操作</h4>
                     <div class="batch-actions">
-                        <div class="checkbox-container">
+                        <div style="display: flex; align-items: center;">
                             <input type="checkbox" id="selectAllCheckbox" class="select-all-checkbox"
                                 onchange="toggleSelectAll()">
                             <label for="selectAllCheckbox">全选</label>
@@ -1421,7 +1294,6 @@
                     </div>
                 </div>
 
-                <!-- 筛选和分页控件 -->
                 <div class="filter-container">
                     <label for="statusFilter">状态筛选：</label>
                     <select id="statusFilter" class="filter-select" onchange="applyFilters()">
@@ -1444,12 +1316,13 @@
                     </select>
 
                     <label for="pageSizeSelect">每页显示：</label>
-                    <select id="pageSizeSelect" class="page-size-select" onchange="changePageSize()">
+                    <select id="pageSizeSelect" class="filter-select" onchange="changePageSize()">
                         <option value="20">20</option>
                         <option value="50">50</option>
                         <option value="100">100</option>
                     </select>
-
+                </div>
+                <div class="filter-container" style="margin-top: -10px;">
                     <div class="error-filter-container" id="errorFilterContainer">
                         <span>快速筛选错误码：</span>
                         <div id="errorCodeBadges"></div>
@@ -1460,7 +1333,6 @@
                     <div class="loading" id="credsLoading">正在加载凭证文件...</div>
                     <div id="credsList"></div>
 
-                    <!-- 分页控件 -->
                     <div class="pagination-container" id="paginationContainer" style="display: none;">
                         <button class="pagination-btn" id="prevPageBtn" onclick="changePage(-1)">上一页</button>
                         <div class="pagination-info" id="paginationInfo">第 1 页，共 1 页</div>
@@ -1474,35 +1346,32 @@
                 <h3>使用统计</h3>
                 <p>查看每个凭证文件的API调用统计和配额使用情况</p>
 
-                <!-- 统计概览 -->
                 <div class="stats-container" id="usageStatsContainer">
-                    <div class="stat-item total">
-                        <span class="stat-number" id="totalApiCalls">0</span>
+                    <div class="stat-item total" style="--stat-color: var(--highlight-color);">
+                        <span class="stat-number" id="totalApiCalls" style="color: var(--stat-color);">0</span>
                         <span class="stat-label">总调用数</span>
                     </div>
-                    <div class="stat-item normal" style="border-left: 6px solid #FF6B35;">
-                        <span class="stat-number" id="geminiProCalls">0</span>
-                        <span class="stat-label">Gemini 2.5 Pro</span>
+                    <div class="stat-item normal" style="--stat-color: var(--primary-color);">
+                        <span class="stat-number" id="geminiProCalls" style="color: var(--stat-color);">0</span>
+                        <span class="stat-label">Gemini Pro</span>
                     </div>
-                    <div class="stat-item disabled">
-                        <span class="stat-number" id="totalFiles">0</span>
+                    <div class="stat-item disabled" style="--stat-color: var(--secondary-color);">
+                        <span class="stat-number" id="totalFiles" style="color: var(--stat-color);">0</span>
                         <span class="stat-label">活跃文件数</span>
                     </div>
                 </div>
 
                 <div class="manage-actions">
                     <button class="refresh-btn" onclick="refreshUsageStats()">刷新统计</button>
-                    <button class="btn" style="background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);"
+                    <button class="btn" style="background: var(--error-color);"
                         onclick="resetAllUsageStats()">重置所有统计</button>
                 </div>
 
-                <!-- 文件使用统计列表 -->
                 <div id="usageListSection">
                     <div class="loading" id="usageLoading">正在加载使用统计...</div>
                     <div id="usageList"></div>
                 </div>
 
-                <!-- 使用说明 -->
                 <div class="config-group">
                     <h4>使用说明</h4>
                     <div class="config-info">
@@ -1513,7 +1382,6 @@
                             <li><strong>每日配额：</strong>默认每日配额 Gemini 2.5 Pro: 100次，所有模型: 1000次</li>
                             <li><strong>配额重置：</strong>每天 UTC 07:00 自动重置调用计数</li>
                         </ul>
-
                         <strong>注意：</strong>
                         <ul>
                             <li>只统计返回正常响应的API调用，报错的调用不计入统计</li>
@@ -1539,33 +1407,28 @@
                     <div id="configForm" class="hidden">
                         <div class="config-group">
                             <h4>服务器配置</h4>
-
                             <div class="form-group">
                                 <label for="host">服务器主机地址:</label>
                                 <input type="text" id="host" class="config-input"
                                     placeholder="例如: 0.0.0.0, 127.0.0.1" />
                                 <small class="config-note">服务器监听的主机地址，0.0.0.0表示监听所有接口</small>
                             </div>
-
                             <div class="form-group">
                                 <label for="port">服务器端口:</label>
                                 <input type="number" id="port" class="config-input" min="1" max="65535"
                                     placeholder="7861" />
                                 <small class="config-note">服务器监听的端口号，修改后需要重启服务器</small>
                             </div>
-
                             <div class="form-group">
                                 <label for="configApiPassword">API访问密码:</label>
                                 <input type="text" id="configApiPassword" class="config-input" placeholder="pwd" />
                                 <small class="config-note">聊天API访问密码，用于OpenAI和Gemini API端点的认证</small>
                             </div>
-
                             <div class="form-group">
                                 <label for="configPanelPassword">控制面板密码:</label>
                                 <input type="text" id="configPanelPassword" class="config-input" placeholder="pwd" />
                                 <small class="config-note">控制面板访问密码，用于web界面登录认证</small>
                             </div>
-
                             <div class="form-group">
                                 <label for="configPassword">通用密码:</label>
                                 <input type="text" id="configPassword" class="config-input" placeholder="pwd" />
@@ -1575,13 +1438,11 @@
 
                         <div class="config-group">
                             <h4>基础配置</h4>
-
                             <div class="form-group">
                                 <label for="credentialsDir">凭证目录路径:</label>
                                 <input type="text" id="credentialsDir" class="config-input" />
                                 <small class="config-note">存储认证文件的目录路径</small>
                             </div>
-
                             <div class="form-group">
                                 <label for="proxy">代理设置:</label>
                                 <input type="text" id="proxy" class="config-input"
@@ -1592,22 +1453,19 @@
 
                         <div class="config-group">
                             <h4>端点配置</h4>
-
-                            <!-- 快速配置按钮 -->
                             <div class="form-group">
                                 <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
-                                    <button type="button" class="btn" onclick="useMirrorUrls()"
-                                        style="background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%); font-size: 14px;">
+                                    <button type="button" class="btn secondary" onclick="useMirrorUrls()"
+                                        style="font-size: 14px;">
                                         🚀 一键使用镜像网址
                                     </button>
                                     <button type="button" class="btn" onclick="restoreOfficialUrls()"
-                                        style="background: linear-gradient(135deg, #1E88E5 0%, #1565C0 100%); font-size: 14px;">
+                                        style="font-size: 14px;">
                                         🔄 还原官方端点
                                     </button>
                                 </div>
                                 <small class="config-note">镜像网址主要解决墙内无法访问官方端点的问题，部分地区可能无法使用</small>
                             </div>
-
                             <div class="form-group">
                                 <label for="codeAssistEndpoint">Code Assist Endpoint:</label>
                                 <input type="text" id="codeAssistEndpoint" class="config-input" />
@@ -1639,9 +1497,9 @@
                             </div>
                         </div>
 
+                        <!-- 其他配置组保持原样 -->
                         <div class="config-group">
                             <h4>自动封禁配置</h4>
-
                             <div class="form-group">
                                 <label>
                                     <input type="checkbox" id="autoBanEnabled" class="config-checkbox" />
@@ -1649,7 +1507,6 @@
                                 </label>
                                 <small class="config-note">遇到指定错误码时自动禁用凭证</small>
                             </div>
-
                             <div class="form-group">
                                 <label for="autoBanErrorCodes">自动封禁错误码:</label>
                                 <input type="text" id="autoBanErrorCodes" class="config-input"
@@ -1660,7 +1517,6 @@
 
                         <div class="config-group">
                             <h4>性能配置</h4>
-
                             <div class="form-group">
                                 <label for="callsPerRotation">凭证轮换调用次数:</label>
                                 <input type="number" id="callsPerRotation" class="config-input" min="1" max="100" />
@@ -1670,7 +1526,6 @@
 
                         <div class="config-group">
                             <h4>429重试配置</h4>
-
                             <div class="form-group">
                                 <label>
                                     <input type="checkbox" id="retry429Enabled" class="config-checkbox" />
@@ -1678,13 +1533,11 @@
                                 </label>
                                 <small class="config-note">遇到429错误时自动重试</small>
                             </div>
-
                             <div class="form-group">
                                 <label for="retry429MaxRetries">429重试次数:</label>
                                 <input type="number" id="retry429MaxRetries" class="config-input" min="1" max="50" />
                                 <small class="config-note">遇到429错误时的最大重试次数</small>
                             </div>
-
                             <div class="form-group">
                                 <label for="retry429Interval">429重试间隔(秒):</label>
                                 <input type="number" id="retry429Interval" class="config-input" min="0.01" max="10"
@@ -1695,16 +1548,14 @@
 
                         <div class="config-group">
                             <h4>兼容性配置</h4>
-
                             <div class="form-group">
                                 <label>
                                     <input type="checkbox" id="compatibilityModeEnabled" class="config-checkbox" />
                                     启用兼容性模式
                                 </label>
                                 <small class="config-note">启用后所有system消息全部转换成user，停用system_instructions <span
-                                        style="color: #4CAF50;">✓ 支持热更新</span></small>
-                                <div class="config-info"
-                                    style="background: linear-gradient(135deg, #FFF9C4 0%, #FFF59D 100%); border: 2px solid #FFF176; color: #F57F17;">
+                                        style="color: var(--success-color);">✓ 支持热更新</span></small>
+                                <div class="config-info" style="border-left-color: var(--warning-color);">
                                     <strong>⚠️ 注意：</strong>该选项可能会降低模型理解能力，但是能避免流式空回的情况。
                                     <br><strong>适用场景：</strong>当遇到流式传输时模型不返回内容或返回空响应时启用此选项。
                                 </div>
@@ -1713,18 +1564,16 @@
 
                         <div class="config-group">
                             <h4>抗截断配置</h4>
-
                             <div class="form-group">
                                 <label for="antiTruncationMaxAttempts">抗截断最大重试次数:</label>
                                 <input type="number" id="antiTruncationMaxAttempts" class="config-input" min="1"
                                     max="10" />
                                 <small class="config-note">当检测到输出截断时的最大续传尝试次数</small>
                             </div>
-
                             <div class="form-group">
                                 <div class="config-info">
                                     <strong>注意：</strong>抗截断功能现在通过模型名控制：
-                                    <ul style="margin: 5px 0; padding-left: 20px;">
+                                    <ul>
                                         <li>选择带有 "-流式抗截断" 后缀的模型即可启用</li>
                                         <li>该功能仅在流式传输时生效</li>
                                         <li>例如: "gemini-2.5-pro-流式抗截断"</li>
@@ -1735,12 +1584,10 @@
 
                         <div class="config-group">
                             <h4>配置热更新说明</h4>
-
                             <div class="form-group">
-                                <div class="config-info"
-                                    style="background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%); border: 2px solid #A5D6A7; color: #2E7D32;">
+                                <div class="config-info" style="border-left-color: var(--success-color);">
                                     <strong>🔥 热更新配置（立即生效）：</strong>
-                                    <ul style="margin: 8px 0; padding-left: 20px; color: #212529;">
+                                    <ul>
                                         <li><strong>网络配置：</strong>代理设置、端点配置、HTTP超时时间、最大连接数</li>
                                         <li><strong>API配置：</strong>凭证轮换次数、429重试设置、自动封禁配置</li>
                                         <li><strong>密码配置：</strong>API密码、控制面板密码、通用密码</li>
@@ -1748,12 +1595,10 @@
                                     </ul>
                                 </div>
                             </div>
-
                             <div class="form-group">
-                                <div class="config-info"
-                                    style="background: linear-gradient(135deg, #FFF9C4 0%, #FFF59D 100%); border: 2px solid #FFF176; color: #F57F17;">
+                                <div class="config-info" style="border-left-color: var(--warning-color);">
                                     <strong>🔄 需要重启的配置：</strong>
-                                    <ul style="margin: 8px 0; padding-left: 20px; color: #212529;">
+                                    <ul>
                                         <li><strong>服务器配置：</strong>主机地址、端口号</li>
                                         <li><strong>目录配置：</strong>凭证目录路径、Code Assist端点</li>
                                     </ul>
@@ -1771,12 +1616,10 @@
 
                 <div class="manage-actions">
                     <button class="refresh-btn" onclick="connectWebSocket()">连接日志流</button>
-                    <button class="btn" style="background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);"
+                    <button class="btn" style="background: var(--error-color);"
                         onclick="disconnectWebSocket()">断开连接</button>
-                    <button class="btn" style="background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);"
-                        onclick="downloadLogs()">下载日志</button>
-                    <button class="btn" style="background: linear-gradient(135deg, #9E9E9E 0%, #616161 100%);"
-                        onclick="clearLogs()">清空日志</button>
+                    <button class="btn" style="background: var(--success-color);" onclick="downloadLogs()">下载日志</button>
+                    <button class="btn" style="background: #6c757d;" onclick="clearLogs()">清空日志</button>
                 </div>
 
                 <div class="filter-container">
@@ -1789,8 +1632,8 @@
                         <option value="DEBUG">调试</option>
                     </select>
 
-                    <label>
-                        <input type="checkbox" id="autoScroll" checked> 自动滚动到底部
+                    <label style="display: flex; align-items: center;">
+                        <input type="checkbox" id="autoScroll" class="select-all-checkbox" checked> 自动滚动到底部
                     </label>
                 </div>
 
@@ -1805,12 +1648,10 @@
 
             <div id="statusSection"></div>
 
-            <!-- 项目信息 -->
             <div class="project-info">
-                <p style="margin: 5px 0; font-size: 14px;">GitHub: <a href="https://github.com/su-kaka/gcli2api"
+                <p>GitHub: <a href="https://github.com/su-kaka/gcli2api"
                         target="_blank">https://github.com/su-kaka/gcli2api</a></p>
-                <p style="margin: 5px 0; font-size: 14px; color: #D32F2F; font-weight: 500;">⚠️ 禁止商业用途和倒卖 - 仅供学习使用 ⚠️
-                </p>
+                <p style="color: var(--error-color); font-weight: 500;">⚠️ 禁止商业用途和倒卖 - 仅供学习使用 ⚠️</p>
             </div>
         </div>
     </div>
@@ -1828,9 +1669,9 @@
                     <input type="text" id="modalFilename" class="config-input" readonly />
                 </div>
                 <div class="form-group">
-                    <label for="modalGeminiLimit">Gemini 2.5 Pro 每日限制:</label>
+                    <label for="modalGeminiLimit">Gemini Pro 每日限制:</label>
                     <input type="number" id="modalGeminiLimit" class="config-input" min="1" max="10000" />
-                    <small class="config-note">每日Gemini 2.5 Pro模型调用次数限制</small>
+                    <small class="config-note">每日Gemini Pro模型调用次数限制</small>
                 </div>
                 <div class="form-group">
                     <label for="modalTotalLimit">所有模型每日限制:</label>
@@ -1839,8 +1680,7 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn" onclick="closeLimitsModal()"
-                    style="background: linear-gradient(135deg, #9E9E9E 0%, #616161 100%);">取消</button>
+                <button class="btn" onclick="closeLimitsModal()" style="background: #6c757d;">取消</button>
                 <button class="btn" onclick="saveLimits()">保存</button>
             </div>
         </div>
