@@ -111,6 +111,7 @@ app.include_router(
 
 # 静态文件路由 - 服务docs目录下的文件（如捐赠图片）
 app.mount("/docs", StaticFiles(directory="docs"), name="docs")
+app.mount("/static", StaticFiles(directory="front/static"), name="static")
 
 # 保活接口（仅响应 HEAD）
 @app.head("/keepalive")
