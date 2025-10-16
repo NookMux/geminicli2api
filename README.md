@@ -19,6 +19,7 @@
 - `gemini-2.5-pro-preview-05-06`
 - `gemini-2.5-flash`
 - `gemini-2.5-flash-image-preview` 🎨 **绘图模型**
+- `gemini-2.5-flash-image` 🎨 **绘图模型**
 
 ### 特色功能
 - **思维模型**：`gemini-2.5-pro-maxthinking`、`gemini-2.5-pro-nothinking`
