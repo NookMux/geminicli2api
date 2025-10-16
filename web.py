@@ -28,13 +28,10 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     global global_credential_manager
     
-    log.info("启动 GCLI2API 主服务")
-    
     # 初始化全局凭证管理器
     try:
         global_credential_manager = CredentialManager()
         await global_credential_manager.initialize()
-        log.info("凭证管理器初始化成功")
     except Exception as e:
         log.error(f"凭证管理器初始化失败: {e}")
         global_credential_manager = None
@@ -60,13 +57,10 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    # 清理资源
-    log.info("开始关闭 GCLI2API 主服务")
     
     # 首先关闭所有异步任务
     try:
         await shutdown_all_tasks(timeout=10.0)
-        log.info("所有异步任务已关闭")
     except Exception as e:
         log.error(f"关闭异步任务时出错: {e}")
     
@@ -74,12 +68,8 @@ async def lifespan(app: FastAPI):
     if global_credential_manager:
         try:
             await global_credential_manager.close()
-            log.info("凭证管理器已关闭")
         except Exception as e:
             log.error(f"关闭凭证管理器时出错: {e}")
-    
-    log.info("GCLI2API 主服务已停止")
-
 # 创建FastAPI应用
 app = FastAPI(
     title="GCLI2API",
@@ -145,14 +135,7 @@ async def main():
     port = await get_server_port()
     host = await get_server_host()
     
-    log.info("=" * 60)
-    log.info("启动 GCLI2API")
-    log.info("=" * 60)
     log.info(f"控制面板: http://127.0.0.1:{port}")
-    log.info("=" * 60)
-    log.info("API端点:")
-    log.info(f"   OpenAI兼容: http://127.0.0.1:{port}/v1")
-    log.info(f"   Gemini原生: http://127.0.0.1:{port}")
 
     # 配置hypercorn
     config = Config()
