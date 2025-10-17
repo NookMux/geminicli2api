@@ -9,9 +9,7 @@ import json
 import os
 import time
 import zipfile
-from collections import deque
 from typing import List, Optional, Dict, Any
-from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Depends, File, UploadFile, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
@@ -19,7 +17,6 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from starlette.websockets import WebSocketState
 import toml
-import zipfile
 import httpx
 
 import config
@@ -46,7 +43,7 @@ credential_manager = CredentialManager()
 class ConnectionManager:
     def __init__(self, max_connections: int = 3):  # 进一步降低最大连接数
         # 使用双端队列严格限制内存使用
-        self.active_connections: deque = deque(maxlen=max_connections)
+        self.active_connections: deque[WebSocket] = deque(maxlen=max_connections)
         self.max_connections = max_connections
         self._last_cleanup = 0
         self._cleanup_interval = 120  # 120秒清理一次死连接
@@ -163,7 +160,7 @@ class CredFileBatchActionRequest(BaseModel):
     filenames: List[str]  # 批量操作的文件名列表
 
 class ConfigSaveRequest(BaseModel):
-    config: dict
+    config: Dict[str, Any]
 
 
 
@@ -173,55 +170,21 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
         raise HTTPException(status_code=401, detail="无效的认证令牌")
     return credentials.credentials
 
-def is_mobile_user_agent(user_agent: str) -> bool:
-    """检测是否为移动设备用户代理"""
-    if not user_agent:
-        return False
-    
-    user_agent_lower = user_agent.lower()
-    mobile_keywords = [
-        'mobile', 'android', 'iphone', 'ipad', 'ipod', 
-        'blackberry', 'windows phone', 'samsung', 'htc',
-        'motorola', 'nokia', 'palm', 'webos', 'opera mini',
-        'opera mobi', 'fennec', 'minimo', 'symbian', 'psp',
-        'nintendo', 'tablet'
-    ]
-    
-    return any(keyword in user_agent_lower for keyword in mobile_keywords)
-
 @router.get("/", response_class=HTMLResponse)
 @router.get("/v1", response_class=HTMLResponse)
 @router.get("/auth", response_class=HTMLResponse)
 async def serve_control_panel(request: Request):
-    """提供统一控制面板（包含认证、文件管理、配置等功能）"""
+    """提供统一的响应式控制面板"""
+    html_file_path = "front/control_panel.html"
     try:
-        # 获取用户代理并判断是否为移动设备
-        user_agent = request.headers.get("user-agent", "")
-        is_mobile = is_mobile_user_agent(user_agent)
-        
-        # 根据设备类型选择相应的HTML文件
-        if is_mobile:
-            html_file_path = "front/control_panel_mobile.html"
-            log.info(f"Serving mobile control panel to user-agent: {user_agent}")
-        else:
-            html_file_path = "front/control_panel.html"
-            log.info(f"Serving desktop control panel to user-agent: {user_agent}")
+        log.info(f"Serving responsive control panel to user-agent: {request.headers.get('user-agent', '')}")
         
         with open(html_file_path, "r", encoding="utf-8") as f:
             html_content = f.read()
         return HTMLResponse(content=html_content)
     except FileNotFoundError:
         log.error(f"控制面板页面文件不存在: {html_file_path}")
-        # 如果移动端文件不存在，回退到桌面版
-        if is_mobile:
-            try:
-                with open("front/control_panel.html", "r", encoding="utf-8") as f:
-                    html_content = f.read()
-                return HTMLResponse(content=html_content)
-            except FileNotFoundError:
-                raise HTTPException(status_code=404, detail="控制面板页面不存在")
-        else:
-            raise HTTPException(status_code=404, detail="控制面板页面不存在")
+        raise HTTPException(status_code=404, detail="控制面板页面不存在")
     except Exception as e:
         log.error(f"加载控制面板页面失败: {e}")
         raise HTTPException(status_code=500, detail="服务器内部错误")
@@ -258,8 +221,8 @@ async def start_auth(request: AuthStartRequest, token: str = Depends(verify_toke
                 log.info("用户未提供项目ID，后续将使用自动检测...")
         
         # 使用认证令牌作为用户会话标识
-        user_session = token if token else None
-        result = await create_auth_url(project_id, user_session, get_all_projects=request.get_all_projects)
+        user_session = token
+        result = await create_auth_url(project_id, user_session, get_all_projects=request.get_all_projects or False)
         
         if result['success']:
             return JSONResponse(content={
@@ -288,9 +251,9 @@ async def auth_callback(request: AuthCallbackRequest, token: str = Depends(verif
         get_all_projects = request.get_all_projects
         
         # 使用认证令牌作为用户会话标识
-        user_session = token if token else None
+        user_session = token
         # 异步等待OAuth回调完成
-        result = await asyncio_complete_auth_flow(project_id, user_session, get_all_projects=get_all_projects)
+        result = await asyncio_complete_auth_flow(project_id, user_session, get_all_projects=get_all_projects or False)
         
         if result['success']:
             if get_all_projects and result.get('multiple_credentials'):
@@ -348,9 +311,9 @@ async def auth_callback_url(request: AuthCallbackUrlRequest, token: str = Depend
         
         # 从回调URL完成认证
         result = await complete_auth_flow_from_callback_url(
-            request.callback_url, 
-            request.project_id, 
-            get_all_projects=request.get_all_projects
+            request.callback_url,
+            request.project_id,
+            get_all_projects=request.get_all_projects or False
         )
         
         if result['success']:
@@ -412,7 +375,7 @@ async def check_auth_status(project_id: str, token: str = Depends(verify_token))
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def extract_json_files_from_zip(zip_file: UploadFile) -> List[dict]:
+async def extract_json_files_from_zip(zip_file: UploadFile) -> List[Dict[str, Any]]:
     """从ZIP文件中提取JSON文件"""
     try:
         # 读取ZIP文件内容

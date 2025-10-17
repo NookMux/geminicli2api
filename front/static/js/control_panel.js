@@ -6,6 +6,7 @@
         let authInProgress = false;
         let authToken = '';
         let credsData = {};
+        let uploadSelectedFiles = []; // 上传页面用的文件列表
 
         // 分页和筛选相关变量
         let filteredCredsData = {};
@@ -104,6 +105,12 @@
             event.target.classList.add('active');
             document.getElementById(tabName + 'Tab').classList.add('active');
 
+            if (tabName === 'upload') {
+                // The upload tab is mostly static, maybe setup drag-drop here if not done globally
+            }
+            if (tabName === 'envload') {
+                checkEnvCredsStatus();
+            }
             if (tabName === 'manage') {
                 refreshCredsStatus();
             }
@@ -979,6 +986,290 @@
         }
 
         // ===========================
+        // 批量上传
+        // ===========================
+
+        function handleFileSelect(event) {
+            const files = Array.from(event.target.files);
+            addFiles(files);
+        }
+
+        function addFiles(files) {
+            files.forEach(file => {
+                if (file.type === 'application/json' || file.name.endsWith('.json') ||
+                    file.type === 'application/zip' || file.name.endsWith('.zip')) {
+                    if (!uploadSelectedFiles.find(f => f.name === file.name && f.size === file.size)) {
+                        uploadSelectedFiles.push(file);
+                    }
+                } else {
+                    showStatus(`文件 ${file.name} 格式不支持，只支持JSON和ZIP文件`, 'error');
+                }
+            });
+            updateFileList();
+        }
+
+        function updateFileList() {
+            const fileList = document.getElementById('fileList');
+            const fileListSection = document.getElementById('fileListSection');
+
+            if (uploadSelectedFiles.length === 0) {
+                fileListSection.classList.add('hidden');
+                return;
+            }
+
+            fileListSection.classList.remove('hidden');
+            fileList.innerHTML = '';
+
+            uploadSelectedFiles.forEach((file, index) => {
+                const fileItem = document.createElement('div');
+                fileItem.style.cssText = 'background-color: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--border-radius-sm); padding: 10px; margin: 5px 0; display: flex; justify-content: space-between; align-items: center;';
+                const isZip = file.name.endsWith('.zip');
+                const fileIcon = isZip ? '📦' : '📄';
+                const fileType = isZip ? ' (ZIP压缩包)' : ' (JSON文件)';
+                fileItem.innerHTML = `
+                    <div>
+                        <span style="font-family: var(--font-mono); color: var(--text-color); font-size: 14px;">${fileIcon} ${file.name}</span>
+                        <span style="color: var(--text-color); font-size: 12px; margin-left: 10px;">(${formatFileSize(file.size)}${fileType})</span>
+                    </div>
+                    <button onclick="removeFile(${index})" style="background: var(--error-color); color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">删除</button>
+                `;
+                fileList.appendChild(fileItem);
+            });
+        }
+
+        function removeFile(index) {
+            uploadSelectedFiles.splice(index, 1);
+            updateFileList();
+        }
+
+        function clearFiles() {
+            uploadSelectedFiles = [];
+            updateFileList();
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        async function uploadFiles() {
+            if (uploadSelectedFiles.length === 0) {
+                showStatus('请选择要上传的文件', 'error');
+                return;
+            }
+
+            const totalSize = uploadSelectedFiles.reduce((sum, file) => sum + file.size, 0);
+            const maxSize = 200 * 1024 * 1024; // 200MB limit
+            if (totalSize > maxSize) {
+                showStatus(`文件总大小 ${(totalSize / 1024 / 1024).toFixed(1)}MB 超过限制 ${maxSize / 1024 / 1024}MB。请分批上传或删除部分文件。`, 'error');
+                return;
+            }
+
+            for (const file of uploadSelectedFiles) {
+                if (file.size > 5 * 1024 * 1024) {
+                    showStatus(`文件 "${file.name}" 大小 ${(file.size / 1024 / 1024).toFixed(1)}MB 超过单文件5MB限制`, 'error');
+                    return;
+                }
+            }
+
+            const progressSection = document.getElementById('uploadProgressSection');
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+
+            progressSection.classList.remove('hidden');
+
+            const formData = new FormData();
+            uploadSelectedFiles.forEach(file => {
+                formData.append('files', file);
+            });
+
+            const hasZipFiles = uploadSelectedFiles.some(file => file.name.endsWith('.zip'));
+            if (hasZipFiles) {
+                showStatus('正在上传并解压ZIP文件...', 'info');
+            }
+
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.timeout = 300000; // 5 minutes
+
+                xhr.upload.onprogress = function (event) {
+                    if (event.lengthComputable) {
+                        const percentComplete = (event.loaded / event.total) * 100;
+                        progressFill.style.width = percentComplete + '%';
+                        progressText.textContent = Math.round(percentComplete) + '%';
+                    }
+                };
+
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
+                        try {
+                            const data = JSON.parse(xhr.responseText);
+                            showStatus(`成功上传 ${data.uploaded_count} 个文件`, 'success');
+                            clearFiles();
+                            progressSection.classList.add('hidden');
+                        } catch (e) {
+                            showStatus('上传失败: 服务器响应格式错误', 'error');
+                        }
+                    } else {
+                        try {
+                            const error = JSON.parse(xhr.responseText);
+                            showStatus(`上传失败: ${error.detail || error.error || '未知错误'}`, 'error');
+                        } catch (e) {
+                            showStatus(`上传失败: HTTP ${xhr.status} - ${xhr.statusText || '未知错误'}`, 'error');
+                        }
+                    }
+                };
+
+                xhr.onerror = function () {
+                    showStatus(`上传失败：连接中断。建议分批上传。`, 'error');
+                    progressSection.classList.add('hidden');
+                };
+
+                xhr.ontimeout = function () {
+                    showStatus('上传失败：请求超时。请减少文件数量或检查网络连接', 'error');
+                    progressSection.classList.add('hidden');
+                };
+
+                xhr.open('POST', '/auth/upload');
+                xhr.setRequestHeader('Authorization', `Bearer ${authToken}`);
+                xhr.send(formData);
+
+            } catch (error) {
+                showStatus(`上传失败: ${error.message}`, 'error');
+            }
+        }
+
+        function setupDragAndDrop() {
+            const uploadArea = document.getElementById('uploadArea');
+            if (uploadArea) {
+                uploadArea.addEventListener('dragover', function (event) {
+                    event.preventDefault();
+                    uploadArea.style.borderColor = 'var(--primary-color)';
+                    uploadArea.style.backgroundColor = 'var(--surface-color)';
+                });
+
+                uploadArea.addEventListener('dragleave', function (event) {
+                    event.preventDefault();
+                    uploadArea.style.borderColor = 'var(--border-color)';
+                    uploadArea.style.backgroundColor = 'var(--surface-color)';
+                });
+
+                uploadArea.addEventListener('drop', function (event) {
+                    event.preventDefault();
+                    uploadArea.style.borderColor = 'var(--border-color)';
+                    uploadArea.style.backgroundColor = 'var(--surface-color)';
+                    const files = Array.from(event.dataTransfer.files);
+                    addFiles(files);
+                });
+            }
+        }
+
+        // ===========================
+        // 环境变量
+        // ===========================
+
+        async function checkEnvCredsStatus() {
+            const envStatusLoading = document.getElementById('envStatusLoading');
+            const envStatusContent = document.getElementById('envStatusContent');
+
+            try {
+                envStatusLoading.style.display = 'block';
+                envStatusContent.classList.add('hidden');
+
+                const response = await fetch('/auth/env-creds-status', {
+                    method: 'GET',
+                    headers: getAuthHeaders()
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    const envVarsList = document.getElementById('envVarsList');
+                    if (Object.keys(data.available_env_vars).length > 0) {
+                        envVarsList.textContent = Object.keys(data.available_env_vars).join(', ');
+                    } else {
+                        envVarsList.textContent = '未找到GCLI_CREDS_*环境变量';
+                    }
+
+                    const autoLoadStatus = document.getElementById('autoLoadStatus');
+                    autoLoadStatus.textContent = data.auto_load_enabled ? '✅ 已启用' : '❌ 未启用';
+                    autoLoadStatus.style.color = data.auto_load_enabled ? 'var(--success-color)' : 'var(--error-color)';
+
+                    document.getElementById('envFilesCount').textContent = `${data.existing_env_files_count} 个文件`;
+
+                    const envFilesList = document.getElementById('envFilesList');
+                    if (data.existing_env_files.length > 0) {
+                        envFilesList.textContent = data.existing_env_files.join(', ');
+                    } else {
+                        envFilesList.textContent = '无';
+                    }
+
+                    envStatusContent.classList.remove('hidden');
+                    showStatus('环境变量状态检查完成', 'success');
+                } else {
+                    showStatus(`获取环境变量状态失败: ${data.detail || data.error || '未知错误'}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`网络错误: ${error.message}`, 'error');
+            } finally {
+                envStatusLoading.style.display = 'none';
+            }
+        }
+
+        async function loadEnvCredentials() {
+            try {
+                showStatus('正在从环境变量导入凭证...', 'info');
+
+                const response = await fetch('/auth/load-env-creds', {
+                    method: 'POST',
+                    headers: getAuthHeaders()
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    if (data.loaded_count > 0) {
+                        showStatus(`✅ 成功导入 ${data.loaded_count}/${data.total_count} 个凭证文件`, 'success');
+                        setTimeout(() => checkEnvCredsStatus(), 1000);
+                    } else {
+                        showStatus(`⚠️ ${data.message}`, 'info');
+                    }
+                } else {
+                    showStatus(`导入失败: ${data.detail || data.error || '未知错误'}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`网络错误: ${error.message}`, 'error');
+            }
+        }
+
+        async function clearEnvCredentials() {
+            if (!confirm('确定要清除所有从环境变量导入的凭证文件吗？\n这将删除所有文件名以 "env-" 开头的认证文件。')) {
+                return;
+            }
+
+            try {
+                showStatus('正在清除环境变量凭证文件...', 'info');
+
+                const response = await fetch('/auth/env-creds', {
+                    method: 'DELETE',
+                    headers: getAuthHeaders()
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showStatus(`✅ 成功删除 ${data.deleted_count} 个环境变量凭证文件`, 'success');
+                    setTimeout(() => checkEnvCredsStatus(), 1000);
+                } else {
+                    showStatus(`清除失败: ${data.detail || data.error || '未知错误'}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`网络错误: ${error.message}`, 'error');
+            }
+        }
+
+        // ===========================
         // 使用统计
         // ===========================
 
@@ -1564,7 +1855,7 @@
             if (checkbox) {
                 checkbox.addEventListener('change', handleGetAllProjectsChange);
             }
-
+            setupDragAndDrop();
             showStatus('请输入密码登录', 'info');
         };
 

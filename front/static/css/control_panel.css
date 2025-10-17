@@ -1052,30 +1052,96 @@
         /* --- 响应式 --- */
         @media (max-width: 768px) {
             body {
-                padding: 10px;
+                padding: 5px;
             }
 
             .container {
-                padding: 20px;
+                padding: 15px;
             }
 
             h1 {
-                font-size: 24px;
+                font-size: 22px;
+            }
+            
+            h3 {
+                font-size: 18px;
             }
 
             .tabs {
-                flex-direction: column;
-                gap: 5px;
+                display: flex;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                border-bottom: 1px solid var(--border-color);
+                margin-bottom: 20px;
             }
 
             .tab {
-                width: 100%;
-                border-radius: var(--border-radius-md);
-                border-bottom: none;
+                padding: 10px 15px;
+                white-space: nowrap;
+                flex-shrink: 0;
+                font-size: 14px;
+                border-bottom: 3px solid transparent;
+                border-radius: 0;
+            }
+            
+            .tab.active {
+                 border-bottom-color: var(--primary-color);
+                 background-color: transparent;
             }
 
-            .tab.active {
-                background-color: var(--surface-color);
+            .login-form input[type="password"] {
+                width: 100%;
+            }
+
+            .cred-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .cred-actions {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+                gap: 8px;
+            }
+
+            .cred-btn {
+                padding: 8px 10px;
+            }
+
+            .stats-container {
+                grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            }
+
+            .stat-number {
+                font-size: 24px;
+            }
+
+            .stat-label {
+                font-size: 12px;
+            }
+
+            .filter-container, .batch-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .batch-actions {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+            }
+
+            .modal-content {
+                width: 95%;
+                padding: 20px;
+            }
+
+            #uploadArea {
+                padding: 20px;
+            }
+            #uploadArea p {
+                font-size: 16px;
             }
         }
 

@@ -31,6 +31,9 @@
                 <button class="tab" onclick="switchTab('usage')">使用统计</button>
                 <button class="tab" onclick="switchTab('config')">配置管理</button>
                 <button class="tab" onclick="switchTab('logs')">实时日志</button>
+                <button class="tab" onclick="switchTab('upload')">批量上传</button>
+                <button class="tab" onclick="switchTab('envload')">环境变量</button>
+                <button class="tab" onclick="switchTab('about')">项目信息</button>
             </div>
 
             <!-- OAuth认证标签页 -->
@@ -538,15 +541,184 @@
                     <div id="logContent">等待连接日志流...</div>
                 </div>
             </div>
+<div id="statusSection"></div>
 
-            <div id="statusSection"></div>
+<!-- 批量上传标签页 -->
+<div id="uploadTab" class="tab-content">
+    <h3>批量上传认证文件</h3>
+    <p>支持上传多个JSON格式的认证文件到服务器</p>
 
-            <div class="project-info">
-                <p>GitHub: <a href="https://github.com/su-kaka/gcli2api"
-                        target="_blank">https://github.com/su-kaka/gcli2api</a></p>
-                <p style="color: var(--error-color); font-weight: 500;">⚠️ 禁止商业用途和倒卖 - 仅供学习使用 ⚠️</p>
+    <div style="border: 2px dashed var(--border-color); border-radius: var(--border-radius-md); padding: 40px; text-align: center; background-color: var(--surface-color); margin: 20px 0; cursor: pointer; transition: border-color 0.3s;"
+        id="uploadArea" onclick="document.getElementById('fileInput').click()">
+        <p style="margin: 10px 0; font-size: 18px;">📁 点击选择文件或拖拽文件到此区域</p>
+        <p style="color: var(--text-color); font-size: 14px; margin: 5px 0;">支持 .json 和 .zip 格式文件</p>
+        <p style="color: var(--text-color); font-size: 12px; margin: 5px 0;">ZIP文件会自动解压提取其中的JSON凭证</p>
+    </div>
+
+    <input type="file" id="fileInput" multiple accept=".json,.zip" style="display: none;"
+        onchange="handleFileSelect(event)" />
+
+    <div id="fileListSection" class="hidden">
+        <h4>选择的文件：</h4>
+        <div id="fileList"></div>
+        <div style="display: flex; gap: 10px; margin-top: 15px;">
+            <button class="btn" onclick="uploadFiles()" style="flex: 1;">上传文件</button>
+            <button class="btn" style="background-color: #6c757d; flex: 1;"
+                onclick="clearFiles()">清空列表</button>
+        </div>
+    </div>
+
+    <div id="uploadProgressSection" class="hidden">
+        <div
+            style="background-color: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--border-radius-md); padding: 15px; margin: 20px 0;">
+            <h4>上传进度：</h4>
+            <div class="progress-bar" style="height: 20px; background-color: var(--bg-color);">
+                <div class="progress-fill" id="progressFill" style="width: 0%; background-color: var(--primary-color);"></div>
+            </div>
+            <p id="progressText" style="text-align: center; margin: 10px 0;">0%</p>
+        </div>
+    </div>
+</div>
+
+<!-- 环境变量导入标签页 -->
+<div id="envloadTab" class="tab-content">
+    <h3>环境变量凭证导入</h3>
+    <p>从环境变量批量导入认证文件，支持部署自动化场景</p>
+
+    <div id="envStatusSection">
+        <div class="loading" id="envStatusLoading">正在检查环境变量状态...</div>
+        <div id="envStatusContent" class="hidden">
+            <div class="config-group">
+                <h4
+                    style="margin-top: 0; margin-bottom: 15px; color: var(--primary-color); border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                    环境变量状态</h4>
+
+                <div class="form-group">
+                    <label>可用的环境变量:</label>
+                    <div id="envVarsList"
+                        style="background-color: var(--bg-color); border: 1px solid var(--border-color); border-radius: var(--border-radius-sm); padding: 10px; font-family: var(--font-mono); font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 150px; overflow-y: auto;">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>自动加载设置:</label>
+                    <span id="autoLoadStatus" style="font-weight: bold;"></span>
+                    <small
+                        style="display: block; color: var(--text-color); font-size: 12px; margin-top: 5px; font-style: italic;">
+                        要启用自动加载，请设置环境变量 AUTO_LOAD_ENV_CREDS=true
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label>已导入的环境变量文件:</label>
+                    <span id="envFilesCount" style="font-weight: bold;"></span>
+                    <div id="envFilesList" style="color: var(--text-color); font-size: 12px; margin-top: 5px;"></div>
+                </div>
             </div>
         </div>
+    </div>
+
+    <div class="manage-actions" style="margin-top: 20px;">
+        <button class="refresh-btn" onclick="checkEnvCredsStatus()">刷新状态</button>
+        <button class="btn" onclick="loadEnvCredentials()">从环境变量导入</button>
+        <button class="btn" style="background-color: var(--error-color);"
+            onclick="clearEnvCredentials()">清除环境变量文件</button>
+    </div>
+
+    <div class="config-group">
+        <h4 style="margin-top: 0; margin-bottom: 15px;">使用说明</h4>
+        <div class="config-info" style="border-left-color: var(--secondary-color);">
+            <strong>环境变量格式：</strong>
+            <ul style="margin: 8px 0 4px 0; color: var(--text-color);">
+                <li><code>GCLI_CREDS_1</code>, <code>GCLI_CREDS_2</code>, ... (编号格式)</li>
+                <li><code>GCLI_CREDS_项目名1</code>, <code>GCLI_CREDS_项目名2</code>, ... (项目名格式)</li>
+            </ul>
+
+            <strong>环境变量值：</strong> 完整的认证文件JSON内容
+
+            <br><br>
+            <strong>示例：</strong>
+            <pre
+                style="background: var(--bg-color); padding: 8px; border-radius: var(--border-radius-sm); font-size: 11px; overflow-x: auto; white-space: pre-wrap;">
+export GCLI_CREDS_1='{"client_id":"your-client-id","client_secret":"your-secret","refresh_token":"your-token","token_uri":"https://oauth2.googleapis.com/token","project_id":"your-project"}'
+export GCLI_CREDS_myproject='{"client_id":"...","project_id":"myproject",...}'
+export AUTO_LOAD_ENV_CREDS=true  # 启用程序启动时自动导入</pre>
+
+            <strong>Docker部署示例：</strong>
+            <pre
+                style="background: var(--bg-color); padding: 8px; border-radius: var(--border-radius-sm); font-size: 11px; overflow-x: auto;">
+docker run -e GCLI_CREDS_1='{"client_id":"..."}' \
+-e AUTO_LOAD_ENV_CREDS=true \
+your-image</pre>
+        </div>
+    </div>
+</div>
+
+<!-- 项目信息标签页 -->
+<div id="aboutTab" class="tab-content">
+    <h3>项目信息</h3>
+    <p>关于GCLI2API项目的详细信息</p>
+
+    <div class="config-group">
+        <h4 style="margin-top: 0; color: var(--primary-color);">📋 项目简介</h4>
+        <p style="margin: 10px 0; line-height: 1.6; color: var(--text-color); font-size: 14px;">
+            GCLI2API是一个将Google Gemini API转换为OpenAI 和GEMINI API格式的代理工具，支持多账户管理、自动轮换、实时日志监控等功能。
+        </p>
+        <div style="margin: 15px 0; font-size: 14px;">
+            <p style="margin: 5px 0;"><strong>🔗 项目地址：</strong> <a
+                    href="https://github.com/su-kaka/gcli2api" target="_blank"
+                    style="color: var(--secondary-color); text-decoration: none;">GitHub - su-kaka/gcli2api</a></p>
+            <p style="margin: 5px 0;"><strong>⚠️ 使用声明：</strong> <span
+                    style="color: var(--error-color); font-weight: 500;">禁止商业用途和倒卖 - 仅供学习使用</span></p>
+        </div>
+    </div>
+
+    <div class="config-group">
+        <h4 style="margin-top: 0; color: var(--secondary-color);">✨ 主要功能</h4>
+        <div style="font-size: 14px; line-height: 1.6;">
+            <p><strong>🔄 多账户管理：</strong> 支持批量上传和管理多个Google账户</p>
+            <p><strong>⚡ 自动轮换：</strong> 智能轮换账户，避免单账户限额</p>
+            <p><strong>📊 实时监控：</strong> 使用统计、错误监控、实时日志</p>
+            <p><strong>🛡️ 安全可靠：</strong> OAuth2认证、自动封禁异常账户</p>
+            <p><strong>🎛️ 配置灵活：</strong> 支持热更新配置、代理设置</p>
+            <p><strong>📱 界面友好：</strong> 响应式设计、移动端适配</p>
+        </div>
+    </div>
+
+    <div
+        style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 25px; border-radius: var(--border-radius-lg); margin: 20px 0; text-align: center; box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);">
+        <h4 style="margin: 0 0 15px 0; font-size: 20px; font-weight: 600;">💝 支持项目发展</h4>
+        <p style="margin: 0 0 20px 0; font-size: 14px; opacity: 0.9; line-height: 1.6;">
+            如果这个项目对您有帮助，欢迎通过币安扫码捐赠支持项目的持续发展！
+            您的每一份支持都是我们前进的动力 ❤️
+        </p>
+
+        <div
+            style="display: inline-block; background: white; padding: 15px; border-radius: var(--border-radius-lg); box-shadow: 0 2px 15px rgba(0,0,0,0.1);">
+            <img src="docs/币安.jpg" alt="币安捐赠二维码"
+                style="width: 180px; height: 180px; border-radius: var(--border-radius-md); display: block;">
+            <p style="color: #666; margin: 10px 0 0 0; font-size: 13px; font-weight: 600;">扫码币安捐赠</p>
+        </div>
+    </div>
+
+    <div class="config-group">
+        <h4 style="margin-top: 0; color: #0c5460;">📞 联系我们</h4>
+        <div style="color: #0c5460; line-height: 1.6; font-size: 14px;">
+            <p>• <strong>问题反馈：</strong> 通过GitHub Issues提交问题和建议</p>
+            <p>• <strong>功能请求：</strong> 在GitHub Discussions中讨论新功能</p>
+            <p>• <strong>代码贡献：</strong> 欢迎提交Pull Request改进项目</p>
+            <p>• <strong>文档完善：</strong> 帮助改进项目文档和使用指南</p>
+        </div>
+    </div>
+</div>
+
+<div class="project-info">
+    <p>GitHub: <a href="https://github.com/su-kaka/gcli2api"
+            target="_blank">https://github.com/su-kaka/gcli2api</a></p>
+    <p style="color: var(--error-color); font-weight: 500;">⚠️ 禁止商业用途和倒卖 - 仅供学习使用 ⚠️</p>
+</div>
+</div>
+</div>
     </div>
 
     <!-- 限制设置弹窗 -->
