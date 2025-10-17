@@ -238,43 +238,8 @@
                 </div>
             </div>
 
-<div class="project-info">
-    <p>GitHub: <a href="https://github.com/su-kaka/gcli2api"
-            target="_blank">https://github.com/su-kaka/gcli2api</a></p>
-    <p class="warning-text">⚠️ 禁止商业用途和倒卖 - 仅供学习使用 ⚠️</p>
 </div>
 </div>
-</div>
-    </div>
-
-    <!-- 限制设置弹窗 -->
-    <div id="limitsModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title">设置使用限制</h3>
-                <button class="modal-close" onclick="closeLimitsModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label for="modalFilename">文件名:</label>
-                    <input type="text" id="modalFilename" class="config-input" readonly />
-                </div>
-                <div class="form-group">
-                    <label for="modalGeminiLimit">Gemini Pro 每日限制:</label>
-                    <input type="number" id="modalGeminiLimit" class="config-input" min="1" max="10000" />
-                    <small class="config-note">每日Gemini Pro模型调用次数限制</small>
-                </div>
-                <div class="form-group">
-                    <label for="modalTotalLimit">所有模型每日限制:</label>
-                    <input type="number" id="modalTotalLimit" class="config-input" min="1" max="50000" />
-                    <small class="config-note">每日所有模型调用次数总限制</small>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn secondary" onclick="closeLimitsModal()">取消</button>
-                <button class="btn" onclick="saveLimits()">保存</button>
-            </div>
-        </div>
     </div>
 
     <script src="/static/js/control_panel.js"></script>

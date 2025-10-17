@@ -24,7 +24,6 @@
 
         // 使用统计相关变量
         let usageStatsData = {};
-        let currentEditingFile = '';
 
         // 配置管理相关变量
         let currentConfig = {};
@@ -838,7 +837,6 @@
         </div>
 
         <div class="usage-actions">
-            <button class="usage-btn limits" onclick="openLimitsModal('${filename}')">设置限制</button>
             <button class="usage-btn reset" onclick="resetSingleUsageStats('${filename}')">重置统计</button>
         </div>
     `;
@@ -846,63 +844,6 @@
             return div;
         }
 
-        function openLimitsModal(filename) {
-            const stats = usageStatsData[filename];
-            if (!stats) {
-                showStatus('找不到文件统计数据', 'error');
-                return;
-            }
-
-            currentEditingFile = filename;
-            document.getElementById('modalFilename').value = filename;
-            document.getElementById('modalGeminiLimit').value = stats.daily_limit_gemini_2_5_pro;
-            document.getElementById('modalTotalLimit').value = stats.daily_limit_total;
-            document.getElementById('limitsModal').style.display = 'block';
-        }
-
-        function closeLimitsModal() {
-            document.getElementById('limitsModal').style.display = 'none';
-            currentEditingFile = '';
-        }
-
-        async function saveLimits() {
-            const geminiLimit = parseInt(document.getElementById('modalGeminiLimit').value);
-            const totalLimit = parseInt(document.getElementById('modalTotalLimit').value);
-
-            if (isNaN(geminiLimit) || geminiLimit < 1) {
-                showStatus('Gemini 2.5 Pro 限制必须是大于0的数字', 'error');
-                return;
-            }
-
-            if (isNaN(totalLimit) || totalLimit < 1) {
-                showStatus('总调用限制必须是大于0的数字', 'error');
-                return;
-            }
-
-            try {
-                const response = await fetch('/usage/update-limits', {
-                    method: 'POST',
-                    headers: getAuthHeaders(),
-                    body: JSON.stringify({
-                        filename: currentEditingFile,
-                        gemini_2_5_pro_limit: geminiLimit,
-                        total_limit: totalLimit
-                    })
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    showStatus(data.message, 'success');
-                    closeLimitsModal();
-                    await refreshUsageStats();
-                } else {
-                    showStatus(`设置失败: ${data.detail || data.error || '未知错误'}`, 'error');
-                }
-            } catch (error) {
-                showStatus(`网络错误: ${error.message}`, 'error');
-            }
-        }
 
         async function resetSingleUsageStats(filename) {
             if (!confirm(`确定要重置 ${filename} 的使用统计吗？`)) {
@@ -1056,10 +997,3 @@
         window.onload = function () {
             showStatus('请输入密码登录', 'info');
         };
-
-        window.onclick = function (event) {
-            const modal = document.getElementById('limitsModal');
-            if (event.target == modal) {
-                closeLimitsModal();
-            }
-        }
