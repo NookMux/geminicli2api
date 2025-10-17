@@ -43,7 +43,7 @@ class UsageStats:
         self._cache_dirty = False  # 缓存脏标记，减少不必要的写入
         self._last_save_time = 0
         self._save_interval = 60  # 最多每分钟保存一次，减少I/O
-        self._max_cache_size = 100  # 严格限制缓存大小
+        self._max_cache_size = 80  # 严格限制缓存大小
     
     async def initialize(self):
         """Initialize the usage stats module."""
@@ -133,8 +133,8 @@ class UsageStats:
                             "gemini_2_5_pro_calls": stats_data.get("gemini_2_5_pro_calls", 0),
                             "total_calls": stats_data.get("total_calls", 0),
                             "next_reset_time": stats_data.get("next_reset_time"),
-                            "daily_limit_gemini_2_5_pro": stats_data.get("daily_limit_gemini_2_5_pro", 100),
-                            "daily_limit_total": stats_data.get("daily_limit_total", 1000)
+                            "daily_limit_gemini_2_5_pro": stats_data.get("daily_limit_gemini_2_5_pro", 80),
+                            "daily_limit_total": stats_data.get("daily_limit_total", 800)
                         }
                         
                         # 只加载有实际使用数据的统计，或者有reset时间的
@@ -180,8 +180,8 @@ class UsageStats:
                         "gemini_2_5_pro_calls": stats.get("gemini_2_5_pro_calls", 0),
                         "total_calls": stats.get("total_calls", 0),
                         "next_reset_time": stats.get("next_reset_time"),
-                        "daily_limit_gemini_2_5_pro": stats.get("daily_limit_gemini_2_5_pro", 100),
-                        "daily_limit_total": stats.get("daily_limit_total", 1000)
+                        "daily_limit_gemini_2_5_pro": stats.get("daily_limit_gemini_2_5_pro", 80),
+                        "daily_limit_total": stats.get("daily_limit_total", 800)
                     }
                     
                     success = await self._storage_adapter.update_usage_stats(filename, stats_data)
@@ -216,8 +216,8 @@ class UsageStats:
                 "gemini_2_5_pro_calls": 0,
                 "total_calls": 0,
                 "next_reset_time": next_reset.isoformat(),
-                "daily_limit_gemini_2_5_pro": 100,
-                "daily_limit_total": 1000
+                "daily_limit_gemini_2_5_pro": 80,
+                "daily_limit_total": 800
             }
             self._cache_dirty = True  # 标记缓存已修改
         
@@ -283,8 +283,8 @@ class UsageStats:
                 self._cache_dirty = True  # 标记缓存已修改
                 
                 log.debug(f"Usage recorded - File: {normalized_filename}, Model: {model_name}, "
-                         f"Gemini 2.5 Pro: {stats['gemini_2_5_pro_calls']}/{stats.get('daily_limit_gemini_2_5_pro', 100)}, "
-                         f"Total: {stats['total_calls']}/{stats.get('daily_limit_total', 1000)}")
+                         f"Gemini 2.5 Pro: {stats['gemini_2_5_pro_calls']}/{stats.get('daily_limit_gemini_2_5_pro', 80)}, "
+                         f"Total: {stats['total_calls']}/{stats.get('daily_limit_total', 800)}")
                 
                 if reset_performed:
                     log.info(f"Daily quota was reset for {normalized_filename}")
@@ -313,8 +313,8 @@ class UsageStats:
                     "filename": normalized_filename,
                     "gemini_2_5_pro_calls": stats.get("gemini_2_5_pro_calls", 0),
                     "total_calls": stats.get("total_calls", 0),
-                    "daily_limit_gemini_2_5_pro": stats.get("daily_limit_gemini_2_5_pro", 100),
-                    "daily_limit_total": stats.get("daily_limit_total", 1000),
+                    "daily_limit_gemini_2_5_pro": stats.get("daily_limit_gemini_2_5_pro", 80),
+                    "daily_limit_total": stats.get("daily_limit_total", 800),
                     "next_reset_time": stats.get("next_reset_time")
                 }
             else:
@@ -326,8 +326,8 @@ class UsageStats:
                     all_stats[filename] = {
                         "gemini_2_5_pro_calls": stats.get("gemini_2_5_pro_calls", 0),
                         "total_calls": stats.get("total_calls", 0),
-                        "daily_limit_gemini_2_5_pro": stats.get("daily_limit_gemini_2_5_pro", 100),
-                        "daily_limit_total": stats.get("daily_limit_total", 1000),
+                        "daily_limit_gemini_2_5_pro": stats.get("daily_limit_gemini_2_5_pro", 80),
+                        "daily_limit_total": stats.get("daily_limit_total", 800),
                         "next_reset_time": stats.get("next_reset_time")
                     }
                 
@@ -375,8 +375,8 @@ class UsageStats:
                     stats["daily_limit_total"] = total_limit
                 
                 log.info(f"Updated daily limits for {normalized_filename}: "
-                        f"Gemini 2.5 Pro = {stats.get('daily_limit_gemini_2_5_pro', 100)}, "
-                        f"Total = {stats.get('daily_limit_total', 1000)}")
+                        f"Gemini 2.5 Pro = {stats.get('daily_limit_gemini_2_5_pro', 80)}, "
+                        f"Total = {stats.get('daily_limit_total', 800)}")
                 
             except Exception as e:
                 log.error(f"Failed to update daily limits: {e}")
