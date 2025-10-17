@@ -466,28 +466,14 @@
             const status = credInfo.status;
             const filename = credInfo.filename;
 
-            let cardClass = 'cred-card';
-            if (status.disabled) cardClass += ' disabled';
-            div.className = cardClass;
+            div.className = 'cred-card';
 
-            let statusBadges = '';
+            let statusDotClass = 'status-dot';
             if (status.disabled) {
-                statusBadges += '<span class="status-badge disabled">已禁用</span>';
-            } else {
-                statusBadges += '<span class="status-badge enabled">已启用</span>';
+                statusDotClass += ' disabled';
+            } else if (status.error_codes && status.error_codes.length > 0) {
+                statusDotClass += ' error';
             }
-
-            if (status.error_codes && status.error_codes.length > 0) {
-                statusBadges += `<span class="error-codes">错误码: ${status.error_codes.join(', ')}</span>`;
-                const autoBanErrors = status.error_codes.filter(code => code === 400 || code === 403);
-                if (autoBanErrors.length > 0 && status.disabled) {
-                    statusBadges += `<span class="status-badge" style="background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);">AUTO_BAN</span>`;
-                }
-            } else {
-                statusBadges += `<span class="status-badge" style="background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);">无错误</span>`;
-            }
-
-            const pathId = btoa(encodeURIComponent(fullPath)).replace(/[+/=]/g, '_');
 
             let actionButtons = '';
             if (status.disabled) {
@@ -497,46 +483,33 @@
             }
 
             actionButtons += `
-        <button class="cred-btn view" onclick="toggleCredDetails('${pathId}')">查看内容</button>
-        <button class="cred-btn download" onclick="downloadCred('${filename}')">下载</button>
-        <button class="cred-btn email" onclick="fetchUserEmail('${filename}')">查看账号邮箱</button>
-        <button class="cred-btn delete" data-filename="${filename}" data-action="delete">删除</button>
-    `;
+                <button class="cred-btn email" onclick="fetchUserEmail('${filename}')">获取邮箱</button>
+                <button class="cred-btn delete" data-filename="${filename}" data-action="delete">删除</button>
+            `;
 
             let emailInfo = '';
             if (credInfo.user_email) {
                 emailInfo = `<div class="cred-email">${credInfo.user_email}</div>`;
             } else {
-                emailInfo = `<div class="cred-email" style="color: #999; font-style: italic;">未获取邮箱</div>`;
+                emailInfo = `<div class="cred-email">点击“获取邮箱”来刷新</div>`;
             }
 
             div.innerHTML = `
-        <div class="cred-header">
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <input type="checkbox" class="file-checkbox" data-filename="${filename}" onchange="toggleFileSelection('${filename}')">
-                <div>
-                    <div class="cred-filename">${filename}</div>
-                    ${emailInfo}
+                <div class="cred-header">
+                    <div class="cred-filename">
+                        <span class="${statusDotClass}"></span>
+                        <span>${filename}</span>
+                    </div>
+                    <input type="checkbox" class="file-checkbox" data-filename="${filename}" onchange="toggleFileSelection('${filename}')">
                 </div>
-            </div>
-            <div class="cred-status">${statusBadges}</div>
-        </div>
-        <div class="cred-actions">${actionButtons}</div>
-        <div class="cred-details" id="details-${pathId}">
-            <div class="cred-content"></div>
-        </div>
-    `;
-
-            const contentDiv = div.querySelector('.cred-content');
-            if (credInfo.content) {
-                contentDiv.textContent = JSON.stringify(credInfo.content, null, 2);
-            } else {
-                contentDiv.textContent = credInfo.error || '无法读取文件内容';
-            }
+                ${emailInfo}
+                <div class="cred-actions">${actionButtons}</div>
+            `;
 
             const actionButtonElements = div.querySelectorAll('[data-filename][data-action]');
             actionButtonElements.forEach(button => {
-                button.addEventListener('click', function () {
+                button.addEventListener('click', function (e) {
+                    e.stopPropagation(); // Prevent card click event
                     const filename = this.getAttribute('data-filename');
                     const action = this.getAttribute('data-action');
                     if (action === 'delete') {
@@ -545,6 +518,12 @@
                         credAction(filename, action);
                     }
                 });
+            });
+
+            // Add event listener for checkbox as well to stop propagation
+            const checkbox = div.querySelector('.file-checkbox');
+            checkbox.addEventListener('click', function(e) {
+                e.stopPropagation();
             });
 
             return div;
@@ -571,68 +550,6 @@
             }
         }
 
-        function toggleCredDetails(pathId) {
-            const details = document.getElementById('details-' + pathId);
-            if (details) {
-                details.classList.toggle('show');
-            }
-        }
-
-        async function downloadCred(filename) {
-            try {
-                const response = await fetch(`/creds/download/${filename}`, {
-                    method: 'GET',
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = url;
-                    a.download = filename;
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                    showStatus(`已下载文件: ${filename}`, 'success');
-                } else {
-                    const data = await response.json();
-                    showStatus(`下载失败: ${data.error}`, 'error');
-                }
-            } catch (error) {
-                showStatus(`下载失败: ${error.message}`, 'error');
-            }
-        }
-
-        async function downloadAllCreds() {
-            try {
-                const response = await fetch('/creds/download-all', {
-                    method: 'GET',
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = url;
-                    a.download = 'credentials.zip';
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                    showStatus('已下载所有凭证文件', 'success');
-                } else {
-                    const data = await response.json();
-                    showStatus(`打包下载失败: ${data.error}`, 'error');
-                }
-            } catch (error) {
-                showStatus(`打包下载失败: ${error.message}`, 'error');
-            }
-        }
 
         async function deleteCred(filename) {
             if (!confirm(`确定要删除凭证文件吗？\n${filename}`)) {
