@@ -24,13 +24,13 @@
             <h1>GAPI 管理面板</h1>
             <div id="statusSection"></div>
 
-<!-- 标签页 -->
-<div class="tabs">
-    <button class="tab active" onclick="switchTab(event, 'oauth')">OAuth认证</button>
-    <button class="tab" onclick="switchTab(event, 'manage')">文件管理</button>
-    <button class="tab" onclick="switchTab(event, 'usage')">使用统计</button>
-    <button class="tab" onclick="switchTab(event, 'config')">配置管理</button>
-</div>
+            <!-- 标签页 -->
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'oauth')">OAuth认证</button>
+                <button class="tab" onclick="switchTab(event, 'manage')">文件管理</button>
+                <button class="tab" onclick="switchTab(event, 'usage')">使用统计</button>
+                <button class="tab" onclick="switchTab(event, 'config')">配置管理</button>
+            </div>
             <!-- OAuth认证标签页 -->
             <div id="oauthTab" class="tab-content active">
                 <div class="status info">
@@ -52,8 +52,7 @@
                     </div>
                     <div class="callback-url-section">
                         <div class="form-group">
-                            <input type="url" id="callbackUrlInput"
-                                placeholder="授权后，将跳转的URL粘贴于此" />
+                            <input type="url" id="callbackUrlInput" placeholder="授权后，将跳转的URL粘贴于此" />
                         </div>
                         <button class="btn secondary" onclick="processCallbackUrl()">
                             提交URL
@@ -238,8 +237,8 @@
                 </div>
             </div>
 
-</div>
-</div>
+        </div>
+    </div>
     </div>
 
     <script src="/static/js/control_panel.js"></script>
