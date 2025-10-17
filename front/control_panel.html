@@ -4,8 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GAPI 控制面板</title>
+    <title>箱宝的GAPI小窝</title>
     <link rel="stylesheet" href="/static/css/control_panel.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
 <body>
@@ -13,25 +14,44 @@
 
         <!-- 登录界面 -->
         <div id="loginSection" class="login-form">
-            <h1>GAPI 管理面板</h1>
-            <p>请输入访问密码：</p>
-            <input type="password" id="loginPassword" placeholder="输入密码" onkeypress="handlePasswordEnter(event)" />
-            <button class="btn" onclick="login()">登录</button>
+            <div class="login-icon">
+                <i class="fas fa-heart"></i>
+            </div>
+            <h1>箱宝的GAPI小窝</h1>
+            <p>宝宝，请输入密码进入我的小窝～</p>
+            <div class="input-wrapper">
+                <i class="fas fa-lock input-icon"></i>
+                <input type="password" id="loginPassword" placeholder="输入密码" onkeypress="handlePasswordEnter(event)" />
+            </div>
+            <button class="btn" onclick="login()">
+                <i class="fas fa-sign-in-alt"></i> 进入小窝
+            </button>
         </div>
 
         <!-- 主界面 -->
         <div id="mainSection" class="hidden">
-            <h1>GAPI 管理面板</h1>
+            <div class="header-decoration">
+                <i class="fas fa-sparkles"></i>
+            </div>
+            <h1>箱宝的GAPI小窝</h1>
             <div id="statusSection"></div>
 
             <!-- 标签页 -->
+            <!-- 标签页 -->
             <div class="tabs">
-                <button class="tab active" onclick="switchTab(event, 'oauth')">OAuth认证</button>
-                <button class="tab" onclick="switchTab(event, 'manage')">文件管理</button>
-                <button class="tab" onclick="switchTab(event, 'usage')">使用统计</button>
-                <button class="tab" onclick="switchTab(event, 'config')">配置管理</button>
+                <button class="tab active" onclick="switchTab(event, 'oauth')">
+                    <i class="fas fa-key"></i> OAuth认证
+                </button>
+                <button class="tab" onclick="switchTab(event, 'manage')">
+                    <i class="fas fa-folder-open"></i> 文件管理
+                </button>
+                <button class="tab" onclick="switchTab(event, 'usage')">
+                    <i class="fas fa-chart-line"></i> 使用统计
+                </button>
+                <button class="tab" onclick="switchTab(event, 'config')">
+                    <i class="fas fa-cog"></i> 配置管理
+                </button>
             </div>
-            <!-- OAuth认证标签页 -->
             <div id="oauthTab" class="tab-content active">
                 <div class="status info">
                     <strong>说明：</strong>认证将默认获取当前Google账号下所有项目的凭证。
@@ -43,32 +63,36 @@
                     <input type="text" id="projectId" value="" />
                 </div>
 
-                <button class="btn" id="getAuthBtn" onclick="startAuth()">获取认证链接</button>
+                <button class="btn" id="getAuthBtn" onclick="startAuth()">
+                    <i class="fas fa-link"></i> 获取认证链接
+                </button>
 
                 <div id="authUrlSection" class="hidden">
-                    <h3>认证链接：</h3>
+                    <h3><i class="fas fa-external-link-alt"></i> 认证链接：</h3>
                     <div class="auth-url">
-                        <a id="authUrl" href="#" target="_blank">点击此链接进行认证</a>
+                        <a id="authUrl" href="#" target="_blank">
+                            <i class="fas fa-mouse-pointer"></i> 点击此链接进行认证
+                        </a>
                     </div>
                     <div class="callback-url-section">
                         <div class="form-group">
                             <input type="url" id="callbackUrlInput" placeholder="授权后，将跳转的URL粘贴于此" />
                         </div>
                         <button class="btn secondary" onclick="processCallbackUrl()">
-                            提交URL
+                            <i class="fas fa-paper-plane"></i> 提交URL
                         </button>
                     </div>
                 </div>
 
                 <div id="credentialsSection" class="hidden">
-                    <h3>认证文件内容：</h3>
+                    <h3><i class="fas fa-file-alt"></i> 认证文件内容：</h3>
                     <div class="credentials" id="credentialsContent"></div>
                 </div>
             </div>
 
             <!-- 文件管理标签页 -->
             <div id="manageTab" class="tab-content">
-                <h3>凭证文件管理</h3>
+                <h3><i class="fas fa-folder-open"></i> 凭证文件管理</h3>
                 <p>管理所有认证文件，查看状态和执行操作</p>
 
                 <div class="stats-container" id="statsContainer">
@@ -87,12 +111,16 @@
                 </div>
 
                 <div class="manage-actions">
-                    <button class="refresh-btn" onclick="refreshCredsStatus()">刷新状态</button>
-                    <button class="download-all-btn" onclick="downloadAllCreds()">打包下载所有文件</button>
+                    <button class="refresh-btn" onclick="refreshCredsStatus()">
+                        <i class="fas fa-sync-alt"></i> 刷新状态
+                    </button>
+                    <button class="download-all-btn" onclick="downloadAllCreds()">
+                        <i class="fas fa-download"></i> 打包下载所有文件
+                    </button>
                 </div>
 
                 <div class="batch-controls">
-                    <h4>批量操作</h4>
+                    <h4><i class="fas fa-tasks"></i> 批量操作</h4>
                     <div class="batch-actions">
                         <div style="display: flex; align-items: center;">
                             <input type="checkbox" id="selectAllCheckbox" class="select-all-checkbox"
@@ -101,24 +129,26 @@
                         </div>
                         <span class="selected-count" id="selectedCount">已选择 0 项</span>
                         <button class="batch-btn batch-enable" id="batchEnableBtn" onclick="batchAction('enable')"
-                            disabled>批量启用</button>
+                            disabled><i class="fas fa-check-circle"></i> 批量启用</button>
                         <button class="batch-btn batch-disable" id="batchDisableBtn" onclick="batchAction('disable')"
-                            disabled>批量禁用</button>
+                            disabled><i class="fas fa-ban"></i> 批量禁用</button>
                         <button class="batch-btn batch-delete" id="batchDeleteBtn" onclick="batchAction('delete')"
-                            disabled>批量删除</button>
-                        <button class="batch-btn batch-email" onclick="refreshAllEmails()">刷新所有邮箱</button>
+                            disabled><i class="fas fa-trash-alt"></i> 批量删除</button>
+                        <button class="batch-btn batch-email" onclick="refreshAllEmails()">
+                            <i class="fas fa-envelope"></i> 刷新所有邮箱
+                        </button>
                     </div>
                 </div>
 
                 <div class="filter-container">
-                    <label for="statusFilter">状态筛选：</label>
+                    <label for="statusFilter"><i class="fas fa-filter"></i> 状态筛选：</label>
                     <select id="statusFilter" class="filter-select" onchange="applyFilters()">
                         <option value="all">全部</option>
                         <option value="normal">正常</option>
                         <option value="disabled">禁用</option>
                     </select>
 
-                    <label for="errorCodeFilter">错误码筛选：</label>
+                    <label for="errorCodeFilter"><i class="fas fa-exclamation-triangle"></i> 错误码筛选：</label>
                     <select id="errorCodeFilter" class="filter-select" onchange="applyFilters()">
                         <option value="all">全部错误码</option>
                         <option value="no-errors">无错误</option>
@@ -131,7 +161,7 @@
                         <option value="500">错误码 500</option>
                     </select>
 
-                    <label for="pageSizeSelect">每页显示：</label>
+                    <label for="pageSizeSelect"><i class="fas fa-list"></i> 每页显示：</label>
                     <select id="pageSizeSelect" class="filter-select" onchange="changePageSize()">
                         <option value="20">20</option>
                         <option value="50">50</option>
@@ -140,7 +170,7 @@
                 </div>
                 <div class="filter-container">
                     <div class="error-filter-container" id="errorFilterContainer">
-                        <span>快速筛选错误码：</span>
+                        <span><i class="fas fa-bolt"></i> 快速筛选错误码：</span>
                         <div id="errorCodeBadges"></div>
                     </div>
                 </div>
@@ -159,7 +189,7 @@
 
             <!-- 使用统计标签页 -->
             <div id="usageTab" class="tab-content">
-                <h3>使用统计</h3>
+                <h3><i class="fas fa-chart-line"></i> 使用统计</h3>
                 <p>查看每个凭证文件的API调用统计和配额使用情况</p>
 
                 <div class="stats-container" id="usageStatsContainer">
@@ -178,8 +208,12 @@
                 </div>
 
                 <div class="manage-actions">
-                    <button class="refresh-btn" onclick="refreshUsageStats()">刷新统计</button>
-                    <button class="btn error" onclick="resetAllUsageStats()">重置所有统计</button>
+                    <button class="refresh-btn" onclick="refreshUsageStats()">
+                        <i class="fas fa-sync-alt"></i> 刷新统计
+                    </button>
+                    <button class="btn error" onclick="resetAllUsageStats()">
+                        <i class="fas fa-redo"></i> 重置所有统计
+                    </button>
                 </div>
 
                 <div id="usageListSection">
@@ -188,7 +222,7 @@
                 </div>
 
                 <div class="config-group">
-                    <h4>使用说明</h4>
+                    <h4><i class="fas fa-question-circle"></i> 使用说明</h4>
                     <div class="config-info">
                         <strong>统计范围：</strong>
                         <ul>
@@ -209,19 +243,23 @@
 
             <!-- 配置管理标签页 -->
             <div id="configTab" class="tab-content">
-                <h3>配置管理</h3>
+                <h3><i class="fas fa-cog"></i> 配置管理</h3>
                 <p>管理系统配置参数，修改后立即生效</p>
 
                 <div class="manage-actions">
-                    <button class="refresh-btn" onclick="loadConfig()">刷新配置</button>
-                    <button class="btn" onclick="saveConfig()">保存配置</button>
+                    <button class="refresh-btn" onclick="loadConfig()">
+                        <i class="fas fa-sync-alt"></i> 刷新配置
+                    </button>
+                    <button class="btn" onclick="saveConfig()">
+                        <i class="fas fa-save"></i> 保存配置
+                    </button>
                 </div>
 
                 <div id="configSection">
                     <div class="loading" id="configLoading">正在加载配置...</div>
                     <div id="configForm" class="hidden">
                         <div class="config-group">
-                            <h4>密码配置</h4>
+                            <h4><i class="fas fa-key"></i> 密码配置</h4>
                             <div class="form-group">
                                 <label for="configApiPassword">API访问密码:</label>
                                 <input type="text" id="configApiPassword" class="config-input" placeholder="pwd" />
