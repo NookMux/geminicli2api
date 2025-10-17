@@ -1,1172 +1,395 @@
-         /* ==================================
-    日夜双生主题 - By 箱宝 ✨
-    晴日苏打 (Light) & 星夜紫 (Dark)
-    ================================== */
-
-        /* --- 颜色变量定义 --- */
-        :root {
-            /* ☀️ 晴日苏打 (Light Theme) */
-            --bg-color: #f8f9fa;
-            --surface-color: #ffffff;
-            --panel-color: #ffffff;
-            --primary-color: #5cadff;
-            --secondary-color: #4ac29a;
-            --accent-color: #343a40;
-            --text-color: #495057;
-            --highlight-color: #ff7f50;
-            --success-color: #28a745;
-            --error-color: #dc3545;
-            --warning-color: #ffc107;
-            --border-color: #e9ecef;
-            --shadow-color: rgba(0, 0, 0, 0.05);
-
-            /* 通用样式 */
-            --border-radius-sm: 8px;
-            --border-radius-md: 12px;
-            --border-radius-lg: 16px;
-            --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Roboto', Arial, sans-serif;
-            --font-mono: 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
-        }
-
-        @media (prefers-color-scheme: dark) {
-            :root {
-                /* 🌙 星夜紫 (Dark Theme) */
-                --bg-color: #1a1b26;
-                --surface-color: #24283b;
-                --panel-color: #1f2335;
-                --primary-color: #bb9af7;
-                --secondary-color: #7aa2f7;
-                --accent-color: #c0caf5;
-                --text-color: #a9b1d6;
-                --highlight-color: #ff9e64;
-                --success-color: #9ece6a;
-                --error-color: #f7768e;
-                --warning-color: #e0af68;
-                --border-color: #414868;
-                --shadow-color: rgba(0, 0, 0, 0.2);
-            }
-        }
-
-        /* --- 全局样式 --- */
-        body {
-            font-family: var(--font-family);
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            min-height: 100vh;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-            transition: background-color 0.3s ease, color 0.3s ease;
-        }
-
-        /* --- 主容器 --- */
-        .container {
-            background-color: var(--panel-color);
-            padding: 40px;
-            border-radius: var(--border-radius-lg);
-            box-shadow: 0 8px 32px var(--shadow-color);
-            border: 1px solid var(--border-color);
-            transition: background-color 0.3s ease, border-color 0.3s ease;
-        }
-
-        /* --- 标题 --- */
-        h1 {
-            color: var(--primary-color);
-            text-align: center;
-            margin-bottom: 30px;
-            font-size: 28px;
-            font-weight: 700;
-        }
-
-        h3 {
-            color: var(--secondary-color);
-            font-size: 20px;
-            font-weight: 600;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        h4 {
-            margin-top: 0;
-            color: var(--primary-color);
-            font-size: 16px;
-            font-weight: 600;
-        }
-
-        /* --- 表单 --- */
-        .form-group {
-            margin-bottom: 25px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: var(--accent-color);
-            font-size: 14px;
-        }
-
-        input[type="text"],
-        input[type="password"],
-        input[type="url"],
-        input[type="number"],
-        select,
-        .config-input,
-        .filter-select {
-            width: 100%;
-            padding: 12px 16px;
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius-md);
-            font-size: 16px;
-            box-sizing: border-box;
-            transition: all 0.3s ease;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-        }
-
-        input[type="text"]:focus,
-        input[type="password"]:focus,
-        input[type="url"]:focus,
-        input[type="number"]:focus,
-        select:focus,
-        .config-input:focus,
-        .filter-select:focus {
-            border-color: var(--primary-color);
-            outline: none;
-            box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 20%, transparent);
-            background-color: var(--surface-color);
-        }
-
-        input::placeholder {
-            color: color-mix(in srgb, var(--text-color) 50%, transparent);
-        }
-
-        input:disabled,
-        .config-input:disabled {
-            background-color: color-mix(in srgb, var(--bg-color) 50%, var(--surface-color));
-            color: color-mix(in srgb, var(--text-color) 60%, transparent);
-            cursor: not-allowed;
-        }
-
-        /* --- 按钮 --- */
-        .btn {
-            background: var(--primary-color);
-            color: var(--bg-color);
-            padding: 14px 30px;
-            border: none;
-            border-radius: var(--border-radius-md);
-            font-size: 16px;
-            cursor: pointer;
-            width: 100%;
-            margin-bottom: 15px;
-            font-weight: 700;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 12px color-mix(in srgb, var(--primary-color) 25%, transparent);
-        }
-
-        .btn:hover:not(:disabled) {
-            transform: translateY(-3px);
-            box-shadow: 0 6px 18px color-mix(in srgb, var(--primary-color) 40%, transparent);
-        }
-
-        .btn:active:not(:disabled) {
-            transform: translateY(-1px);
-        }
-
-        .btn:disabled {
-            background: color-mix(in srgb, var(--text-color) 20%, transparent);
-            color: color-mix(in srgb, var(--text-color) 50%, transparent);
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
-
-        .btn.secondary {
-            background: var(--secondary-color);
-            box-shadow: 0 4px 12px color-mix(in srgb, var(--secondary-color) 25%, transparent);
-        }
-
-        /* --- 隐藏与加载 --- */
-        .hidden {
-            display: none;
-        }
-
-        .loading {
-            text-align: center;
-            color: var(--primary-color);
-        }
-
-        /* --- 登录表单 --- */
-        .login-form {
-            text-align: center;
-            padding: 50px 0;
-        }
-
-        .login-form input[type="password"] {
-            width: 400px;
-            max-width: 90%;
-            text-align: center;
-        }
-
-        /* --- 标签页 --- */
-        .tabs {
-            display: flex;
-            border-bottom: 1px solid var(--border-color);
-            margin-bottom: 30px;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        .tab {
-            padding: 12px 24px;
-            cursor: pointer;
-            border: none;
-            background: transparent;
-            border-bottom: 3px solid transparent;
-            font-weight: 500;
-            color: var(--text-color);
-            transition: all 0.3s ease;
-            border-radius: var(--border-radius-sm) var(--border-radius-sm) 0 0;
-        }
-
-        .tab:hover {
-            background-color: var(--surface-color);
-            color: var(--primary-color);
-        }
-
-        .tab.active {
-            border-bottom-color: var(--primary-color);
-            color: var(--primary-color);
-            font-weight: 700;
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-            animation: fadeIn 0.5s ease-in-out;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        /* --- 信息框通用样式 --- */
-        .auth-url,
-        .credentials,
-        .status,
-        .steps,
-        .callback-url-section .info-box,
-        .callback-url-section .steps-box {
-            background-color: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius-md);
-            padding: 20px;
-            margin: 25px 0;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .auth-url::before,
-        .credentials::before,
-        .status::before,
-        .steps::before,
-        .callback-url-section .info-box::before,
-        .callback-url-section .steps-box::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            bottom: 0;
-            width: 4px;
-        }
-
-        .auth-url a {
-            color: var(--primary-color);
-            text-decoration: none;
-            font-weight: 600;
-            word-break: break-all;
-        }
-
-        .auth-url a:hover {
-            text-decoration: underline;
-        }
-
-        .credentials,
-        .cred-content,
-        #logContainer {
-            font-family: var(--font-mono);
-            font-size: 13px;
-            white-space: pre-wrap;
-            word-break: break-all;
-            max-height: 400px;
-            overflow-y: auto;
-            background-color: var(--bg-color);
-        }
-
-        .status.success::before {
-            background-color: var(--success-color);
-        }
-
-        .status.success {
-            color: var(--success-color);
-        }
-
-        .status.error::before {
-            background-color: var(--error-color);
-        }
-
-        .status.error {
-            color: var(--error-color);
-        }
-
-        .status.info::before {
-            background-color: var(--secondary-color);
-        }
-
-        .status.info {
-            color: var(--secondary-color);
-        }
-
-        .status.warning::before {
-            background-color: var(--warning-color);
-        }
-
-        .status.warning {
-            color: var(--warning-color);
-        }
-
-        .steps ol,
-        .callback-url-section ol {
-            padding-left: 20px;
-            color: var(--text-color);
-        }
-
-        /* --- 折叠区域 --- */
-        .collapsible-header {
-            cursor: pointer;
-            user-select: none;
-            padding: 12px 16px;
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius-md);
-            background-color: var(--surface-color);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            transition: all 0.3s ease;
-        }
-
-        .collapsible-header:hover {
-            background-color: color-mix(in srgb, var(--surface-color) 80%, var(--bg-color));
-            border-color: var(--primary-color);
-        }
-
-        .collapsible-header span {
-            font-weight: 600;
-            color: var(--accent-color);
-        }
-
-        .collapsible-icon {
-            font-size: 14px;
-            color: var(--primary-color);
-            transition: transform 0.3s ease;
-        }
-
-        .collapsible-content {
-            margin-top: 15px;
-            padding: 20px;
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius-md);
-            background-color: var(--panel-color);
-        }
-
-        /* --- 快捷回调URL --- */
-        .callback-url-section {
-            background-color: transparent;
-            border: none;
-            padding: 0;
-        }
-
-        .callback-url-section .info-box::before {
-            background-color: var(--warning-color);
-        }
-
-        .callback-url-section .info-box-title {
-            color: var(--warning-color);
-        }
-
-        .callback-url-section .steps-box::before {
-            background-color: var(--secondary-color);
-        }
-
-        .callback-url-section .steps-title {
-            color: var(--secondary-color);
-        }
-
-        .callback-url-section code {
-            background: var(--bg-color);
-            padding: 4px 8px;
-            border-radius: var(--border-radius-sm);
-            font-size: 12px;
-            word-break: break-all;
-            display: block;
-            margin-top: 4px;
-            border: 1px solid var(--border-color);
-            color: var(--highlight-color);
-        }
-
-        /* --- 文件管理卡片 --- */
-        .cred-card {
-            background-color: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius-md);
-            padding: 20px;
-            margin: 15px 0;
-            position: relative;
-            border-left: 4px solid var(--secondary-color);
-            transition: all 0.3s ease;
-        }
-
-        .cred-card:hover {
-            box-shadow: 0 6px 20px var(--shadow-color);
-            transform: translateY(-3px);
-            border-color: var(--primary-color);
-        }
-
-        .cred-card.disabled {
-            border-left-color: #6c757d;
-            opacity: 0.7;
-        }
-
-        .cred-card.disabled:hover {
-            transform: none;
-            box-shadow: none;
-            border-color: var(--border-color);
-        }
-
-        .cred-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 15px;
-            gap: 20px;
-            flex-wrap: wrap;
-        }
-
-        .cred-filename {
-            font-family: var(--font-mono);
-            font-weight: bold;
-            color: var(--accent-color);
-            font-size: 14px;
-            word-break: break-all;
-        }
-
-        .cred-email {
-            font-size: 12px;
-            color: var(--text-color);
-            margin-top: 5px;
-            font-style: italic;
-        }
-
-        .cred-status {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-
-        .status-badge {
-            padding: 4px 12px;
-            border-radius: 99px;
-            font-size: 12px;
-            font-weight: 700;
-            background-color: var(--success-color);
-            color: var(--panel-color);
-        }
-
-        .status-badge.disabled {
-            background-color: #6c757d;
-            color: var(--panel-color);
-        }
-
-        .error-codes {
-            background-color: var(--error-color);
-            color: var(--panel-color);
-            padding: 4px 12px;
-            border-radius: 99px;
-            font-size: 12px;
-            font-weight: 700;
-        }
-
-        .cred-actions {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-top: 10px;
-        }
-
-        .cred-btn {
-            padding: 6px 14px;
-            border: none;
-            border-radius: var(--border-radius-md);
-            font-size: 12px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-weight: 600;
-            box-shadow: 0 2px 8px var(--shadow-color);
-            color: var(--panel-color);
-        }
-
-        .cred-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px var(--shadow-color);
-        }
-
-        .cred-btn.enable {
-            background-color: var(--success-color);
-        }
-
-        .cred-btn.disable {
-            background-color: var(--warning-color);
-        }
-
-        .cred-btn.delete {
-            background-color: var(--error-color);
-        }
-
-        .cred-btn.download {
-            background-color: var(--secondary-color);
-        }
-
-        .cred-btn.view,
-        .cred-btn.email {
-            background-color: var(--primary-color);
-        }
-
-        .cred-details {
-            margin-top: 15px;
-            display: none;
-        }
-
-        .cred-details.show {
-            display: block;
-            animation: fadeIn 0.3s;
-        }
-
-        /* --- 统计与筛选 --- */
-        .stats-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-
-        .stat-item {
-            background-color: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius-md);
-            padding: 20px;
-            text-align: center;
-            box-shadow: 0 2px 8px var(--shadow-color);
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .stat-item::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 6px;
-        }
-
-        .stat-item:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 6px 16px var(--shadow-color);
-        }
-
-        .stat-number {
-            font-size: 32px;
-            font-weight: bold;
-            display: block;
-        }
-
-        .stat-label {
-            font-size: 13px;
-            text-transform: uppercase;
-            margin-top: 8px;
-            font-weight: 600;
-            color: var(--text-color);
-        }
-
-        .stat-item.total::before {
-            background-color: var(--secondary-color);
-        }
-
-        .stat-item.total .stat-number {
-            color: var(--secondary-color);
-        }
-
-        .stat-item.normal::before {
-            background-color: var(--success-color);
-        }
-
-        .stat-item.normal .stat-number {
-            color: var(--success-color);
-        }
-
-        .stat-item.disabled::before {
-            background-color: #6c757d;
-        }
-
-        .stat-item.disabled .stat-number {
-            color: #6c757d;
-        }
-
-        .filter-container,
-        .pagination-container {
-            display: flex;
-            gap: 15px;
-            margin: 20px 0;
-            align-items: center;
-            flex-wrap: wrap;
-            background-color: var(--surface-color);
-            padding: 15px;
-            border-radius: var(--border-radius-md);
-        }
-
-        .pagination-container {
-            justify-content: center;
-        }
-
-        .pagination-info {
-            color: var(--text-color);
-            font-size: 14px;
-            font-weight: 500;
-        }
-
-        .pagination-btn {
-            padding: 10px 16px;
-            border: 1px solid var(--border-color);
-            background-color: var(--surface-color);
-            cursor: pointer;
-            border-radius: var(--border-radius-md);
-            font-size: 14px;
-            font-weight: 500;
-            color: var(--text-color);
-            transition: all 0.3s ease;
-        }
-
-        .pagination-btn:hover:not(:disabled) {
-            background-color: var(--primary-color);
-            border-color: var(--primary-color);
-            color: var(--panel-color);
-            transform: translateY(-2px);
-        }
-
-        .pagination-btn:disabled {
-            background-color: color-mix(in srgb, var(--bg-color) 50%, var(--surface-color));
-            color: #6c757d;
-            cursor: not-allowed;
-        }
-
-        .pagination-btn.active {
-            background-color: var(--primary-color);
-            color: var(--panel-color);
-            border-color: var(--primary-color);
-        }
-
-        .manage-actions {
-            margin-bottom: 20px;
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        .refresh-btn,
-        .download-all-btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: var(--border-radius-md);
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 8px var(--shadow-color);
-            color: var(--panel-color);
-        }
-
-        .refresh-btn {
-            background-color: var(--secondary-color);
-        }
-
-        .download-all-btn {
-            background-color: var(--success-color);
-        }
-
-        .refresh-btn:hover,
-        .download-all-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px var(--shadow-color);
-        }
-
-        /* --- 批量操作与配置 --- */
-        .batch-controls,
-        .config-group {
-            background-color: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius-md);
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-
-        .batch-actions {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            align-items: center;
-            margin-top: 10px;
-        }
-
-        .batch-btn {
-            padding: 8px 16px;
-            border-radius: var(--border-radius-md);
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--panel-color);
-        }
-
-        .batch-btn.batch-enable {
-            background-color: var(--success-color);
-        }
-
-        .batch-btn.batch-disable {
-            background-color: var(--warning-color);
-        }
-
-        .batch-btn.batch-delete {
-            background-color: var(--error-color);
-        }
-
-        .batch-btn.batch-email {
-            background-color: var(--secondary-color);
-        }
-
-        .batch-btn:disabled {
-            background-color: color-mix(in srgb, var(--text-color) 20%, transparent);
-            color: color-mix(in srgb, var(--text-color) 50%, transparent);
-        }
-
-        .selected-count {
-            font-weight: bold;
-            color: var(--primary-color);
-            margin: 0 10px;
-        }
-
-        .select-all-checkbox,
-        .file-checkbox {
-            margin-right: 8px;
-            transform: scale(1.2);
-            cursor: pointer;
-            accent-color: var(--primary-color);
-        }
-
-        .error-filter-container {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-
-        .error-code-badge {
-            display: inline-block;
-            background-color: var(--error-color);
-            color: var(--panel-color);
-            padding: 4px 10px;
-            border-radius: 99px;
-            font-size: 11px;
-            margin: 2px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-weight: 700;
-        }
-
-        .error-code-badge:hover {
-            transform: scale(1.1);
-            box-shadow: 0 0 10px color-mix(in srgb, var(--error-color) 50%, transparent);
-        }
-
-        .error-code-badge.selected {
-            background-color: var(--secondary-color);
-        }
-
-        .config-group h4 {
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .config-checkbox {
-            margin-right: 8px;
-            transform: scale(1.2);
-            accent-color: var(--primary-color);
-        }
-
-        .config-note {
-            display: block;
-            color: color-mix(in srgb, var(--text-color) 80%, transparent);
-            font-size: 12px;
-            margin-top: 5px;
-            font-style: italic;
-        }
-
-        .config-info {
-            border-left-width: 4px;
-            border-left-style: solid;
-            border-left-color: var(--secondary-color);
-        }
-
-        .env-locked::after {
-            content: "🔒 环境变量锁定";
-            position: absolute;
-            right: 12px;
-            top: 50%;
-            transform: translateY(-50%);
-            background-color: var(--warning-color);
-            color: var(--panel-color);
-            padding: 4px 10px;
-            border-radius: 99px;
-            font-size: 11px;
-            pointer-events: none;
-            font-weight: 700;
-        }
-
-        /* --- 使用统计 --- */
-        .usage-card {
-            border-left: 4px solid var(--primary-color);
-        }
-
-        .usage-filename {
-            color: var(--primary-color);
-        }
-
-        .usage-progress {
-            margin: 20px 0;
-        }
-
-        .usage-progress-label {
-            font-size: 13px;
-            color: var(--accent-color);
-        }
-
-        .usage-progress-bar {
-            width: 100%;
-            height: 12px;
-            background-color: var(--bg-color);
-            border-radius: 99px;
-            overflow: hidden;
-        }
-
-        .usage-progress-fill {
-            height: 100%;
-            transition: width 0.5s cubic-bezier(0.25, 1, 0.5, 1);
-            border-radius: 99px;
-        }
-
-        .usage-progress-fill.gemini {
-            background: linear-gradient(90deg, var(--warning-color), var(--highlight-color));
-        }
-
-        .usage-progress-fill.total {
-            background: linear-gradient(90deg, var(--secondary-color), var(--primary-color));
-        }
-
-        .usage-progress-fill.warning {
-            background: linear-gradient(90deg, var(--warning-color), var(--error-color));
-        }
-
-        .usage-progress-fill.danger {
-            background: linear-gradient(90deg, var(--error-color), #db4b4b);
-        }
-
-        .usage-actions {
-            gap: 10px;
-            margin-top: 20px;
-        }
-
-        .usage-btn {
-            padding: 8px 16px;
-            border-radius: var(--border-radius-md);
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--panel-color);
-        }
-
-        .usage-btn.reset {
-            background-color: #6c757d;
-        }
-
-        .usage-btn.limits {
-            background-color: var(--primary-color);
-        }
-
-        .usage-info {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 10px;
-            margin-top: 15px;
-            font-size: 12px;
-        }
-
-        .usage-info-item {
-            background: var(--bg-color);
-            padding: 10px;
-            border-radius: var(--border-radius-md);
-            border: 1px solid var(--border-color);
-        }
-
-        .usage-info-label {
-            color: var(--secondary-color);
-        }
-
-        .usage-info-value {
-            color: var(--accent-color);
-        }
-
-        /* --- 弹窗样式 (修正版) --- */
-        .modal {
-            display: none;
-            /* 默认隐藏, JS会把它变成 block */
-            position: fixed;
-            /* 固定在屏幕上，不会随滚动条滚动 */
-            z-index: 1000;
-            /* 确保在最顶层 */
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(26, 27, 38, 0.7);
-            backdrop-filter: blur(5px);
-            animation: fadeIn 0.3s;
-            /* 新增一个内层div来帮助垂直居中 */
-            padding-top: 15vh;
-            overflow-y: auto;
-            /* 如果内容超长可以滚动 */
-        }
-
-        @media (prefers-color-scheme: light) {
-            .modal {
-                background-color: rgba(248, 249, 250, 0.7);
-            }
-        }
-
-        .modal-content {
-            background-color: var(--panel-color);
-            margin: 0 auto;
-            /* 水平居中 */
-            padding: 30px;
-            border-radius: var(--border-radius-lg);
-            width: 500px;
-            max-width: 90%;
-            box-shadow: 0 8px 32px var(--shadow-color);
-            border: 1px solid var(--border-color);
-        }
-
-
-        .modal-header {
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .modal-title {
-            color: var(--primary-color);
-        }
-
-        .modal-close {
-            color: color-mix(in srgb, var(--text-color) 70%, transparent);
-            font-size: 28px;
-        }
-
-        .modal-close:hover {
-            color: var(--primary-color);
-        }
-
-        #logContainer {
-            background-color: var(--bg-color);
-            color: var(--accent-color);
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius-md);
-            padding: 20px;
-            height: 600px;
-        }
-
-        /* --- 页脚 --- */
-        .footer {
-            text-align: center;
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid var(--border-color);
-            color: color-mix(in srgb, var(--text-color) 70%, transparent);
-            font-size: 14px;
-        }
-
-        .footer a {
-            color: var(--secondary-color);
-            text-decoration: none;
-            font-weight: 500;
-        }
-
-        .footer a:hover {
-            text-decoration: underline;
-        }
-
-        .project-info {
-            background-color: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius-md);
-            padding: 15px;
-            margin-top: 30px;
-            text-align: center;
-            border-left: 4px solid var(--primary-color);
-        }
-
-        .project-info p {
-            color: var(--text-color);
-        }
-
-        .project-info a {
-            color: var(--secondary-color);
-        }
-
-        /* --- 响应式 --- */
-        @media (max-width: 768px) {
-            body {
-                padding: 5px;
-            }
-
-            .container {
-                padding: 15px;
-            }
-
-            h1 {
-                font-size: 22px;
-            }
-            
-            h3 {
-                font-size: 18px;
-            }
-
-            .tabs {
-                display: flex;
-                overflow-x: auto;
-                -webkit-overflow-scrolling: touch;
-                border-bottom: 1px solid var(--border-color);
-                margin-bottom: 20px;
-            }
-
-            .tab {
-                padding: 10px 15px;
-                white-space: nowrap;
-                flex-shrink: 0;
-                font-size: 14px;
-                border-bottom: 3px solid transparent;
-                border-radius: 0;
-            }
-            
-            .tab.active {
-                 border-bottom-color: var(--primary-color);
-                 background-color: transparent;
-            }
-
-            .login-form input[type="password"] {
-                width: 100%;
-            }
-
-            .cred-header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 10px;
-            }
-
-            .cred-actions {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-                gap: 8px;
-            }
-
-            .cred-btn {
-                padding: 8px 10px;
-            }
-
-            .stats-container {
-                grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-            }
-
-            .stat-number {
-                font-size: 24px;
-            }
-
-            .stat-label {
-                font-size: 12px;
-            }
-
-            .filter-container, .batch-controls {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .batch-actions {
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 8px;
-            }
-
-            .modal-content {
-                width: 95%;
-                padding: 20px;
-            }
-
-            #uploadArea {
-                padding: 20px;
-            }
-            #uploadArea p {
-                font-size: 16px;
-            }
-        }
-
-        /* --- 滚动条 --- */
-        ::-webkit-scrollbar {
-            width: 10px;
-            height: 10px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: var(--bg-color);
-            border-radius: 10px;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: color-mix(in srgb, var(--text-color) 30%, transparent);
-            border-radius: 10px;
-            border: 2px solid var(--bg-color);
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--primary-color);
-        }
-
-        small {
-            color: color-mix(in srgb, var(--text-color) 80%, transparent);
-            font-size: 12px;
-        }
+/* ==================================
+ * Apple-Inspired Glassmorphism Theme
+ * ================================== */
+
+/* --- Color & Style Variables --- */
+:root {
+    /* Light Theme */
+    --bg-color: #f5f5f7;
+    --panel-bg-color: rgba(255, 255, 255, 0.7);
+    --surface-color: rgba(255, 255, 255, 0.85);
+    --primary-color: #007aff;
+    --secondary-color: #5856d6;
+    --text-color: #1d1d1f;
+    --text-color-secondary: #6e6e73;
+    --border-color: rgba(0, 0, 0, 0.1);
+    --shadow-color: rgba(0, 0, 0, 0.08);
+    --success-color: #34c759;
+    --error-color: #ff3b30;
+    --warning-color: #ff9500;
+
+    /* General Styles */
+    --border-radius: 18px;
+    --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", "Arial", sans-serif;
+    --font-mono: "SF Mono", "Menlo", "Consolas", monospace;
+    --transition-speed: 0.4s;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        /* Dark Theme */
+        --bg-color: #1d1d1f;
+        --panel-bg-color: rgba(40, 40, 40, 0.6);
+        --surface-color: rgba(50, 50, 50, 0.8);
+        --primary-color: #0a84ff;
+        --secondary-color: #5e5ce6;
+        --text-color: #f5f5f7;
+        --text-color-secondary: #8e8e93;
+        --border-color: rgba(255, 255, 255, 0.15);
+        --shadow-color: rgba(0, 0, 0, 0.2);
+        --success-color: #30d158;
+        --error-color: #ff453a;
+        --warning-color: #ff9f0a;
+    }
+}
+
+/* --- Global Styles --- */
+body {
+    font-family: var(--font-family);
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    margin: 0;
+    padding: 2rem;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color var(--transition-speed) ease, color var(--transition-speed) ease;
+}
+
+/* --- Main Container --- */
+.container {
+    background-color: var(--panel-bg-color);
+    backdrop-filter: blur(25px) saturate(180%);
+    -webkit-backdrop-filter: blur(25px) saturate(180%);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 2.5rem;
+    max-width: 1200px;
+    margin: 0 auto;
+    box-shadow: 0 10px 30px var(--shadow-color);
+}
+
+/* --- Typography --- */
+h1 {
+    color: var(--text-color);
+    text-align: center;
+    font-size: 2rem;
+    font-weight: 600;
+    margin-bottom: 2rem;
+}
+
+h3 {
+    color: var(--text-color);
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+h4 {
+    color: var(--text-color);
+    font-size: 1rem;
+    font-weight: 600;
+    margin-top: 0;
+}
+
+p {
+    color: var(--text-color-secondary);
+    line-height: 1.6;
+}
+
+/* --- Forms --- */
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: var(--text-color-secondary);
+    font-size: 0.9rem;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="url"],
+input[type="number"],
+select,
+.config-input,
+.filter-select {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    font-size: 1rem;
+    box-sizing: border-box;
+    transition: all var(--transition-speed) ease;
+    background-color: var(--surface-color);
+    color: var(--text-color);
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="url"]:focus,
+input[type="number"]:focus,
+select:focus,
+.config-input:focus,
+.filter-select:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 20%, transparent);
+}
+
+/* --- Buttons --- */
+.btn {
+    background: var(--primary-color);
+    color: #fff;
+    padding: 14px 30px;
+    border: none;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    width: 100%;
+    margin-bottom: 1rem;
+    transition: all var(--transition-speed) ease;
+}
+
+.btn:hover:not(:disabled) {
+    filter: brightness(1.1);
+    transform: translateY(-2px);
+}
+
+.btn.secondary {
+    background: var(--secondary-color);
+}
+
+/* --- Tabs --- */
+.tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 2rem;
+    gap: 1rem;
+}
+
+.tab {
+    padding: 10px 20px;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    border-bottom: 2px solid transparent;
+    font-weight: 500;
+    color: var(--text-color-secondary);
+    transition: all var(--transition-speed) ease;
+}
+
+.tab:hover {
+    color: var(--primary-color);
+}
+
+.tab.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+    font-weight: 600;
+}
+
+.tab-content.active {
+    display: block;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- Cards & Panels --- */
+.cred-card, .usage-card, .config-group, .batch-controls, .filter-container, .status {
+    background-color: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    transition: all var(--transition-speed) ease;
+}
+
+.cred-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px var(--shadow-color);
+}
+
+.cred-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.cred-filename {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.status-badge {
+    padding: 5px 12px;
+    border-radius: 99px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #fff;
+}
+
+.status-badge.enabled { background-color: var(--success-color); }
+.status-badge.disabled { background-color: var(--text-color-secondary); }
+.error-codes { background-color: var(--error-color); color: #fff; }
+
+
+/* --- Modal --- */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    animation: fadeIn 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background-color: var(--panel-bg-color);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    border: 1px solid var(--border-color);
+    padding: 2rem;
+    border-radius: var(--border-radius);
+    width: 500px;
+    max-width: 90%;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--text-color-secondary);
+    cursor: pointer;
+    transition: color var(--transition-speed) ease;
+}
+
+.modal-close:hover {
+    color: var(--error-color);
+}
+
+/* --- Utility --- */
+.hidden {
+    display: none;
+}
+
+.loading {
+    text-align: center;
+    color: var(--primary-color);
+    padding: 2rem;
+}
+
+/* --- Project Info --- */
+.project-info {
+    text-align: center;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.9rem;
+}
+
+.project-info a {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+.project-info a:hover {
+    text-decoration: underline;
+}
+
+/* Add other specific styles from the old file if they are still needed and adjust them to the new theme */
+/* For example, stats, pagination, etc. */
+
+.stats-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.stat-item {
+    background-color: var(--surface-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: 600;
+    display: block;
+}
+
+.stat-label {
+    font-size: 0.8rem;
+    color: var(--text-color-secondary);
+    text-transform: uppercase;
+}
+
+.pagination-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 2rem;
+}
+
+.pagination-btn {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    padding: 8px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all var(--transition-speed) ease;
+}
+
+.pagination-btn:hover:not(:disabled) {
+    background: var(--primary-color);
+    color: #fff;
+    border-color: var(--primary-color);
+}
+
+.pagination-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn.error {
+    background: var(--error-color);
+}
+
+.warning-text {
+    color: var(--error-color);
+    font-weight: 500;
+}

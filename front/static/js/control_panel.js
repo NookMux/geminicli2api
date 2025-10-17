@@ -6,7 +6,6 @@
         let authInProgress = false;
         let authToken = '';
         let credsData = {};
-        let uploadSelectedFiles = []; // 上传页面用的文件列表
 
         // 分页和筛选相关变量
         let filteredCredsData = {};
@@ -22,11 +21,6 @@
             disabled: 0
         };
 
-        // WebSocket日志相关变量
-        let logWebSocket = null;
-        let allLogs = [];
-        let filteredLogs = [];
-        let currentLogFilter = 'all';
 
         // 使用统计相关变量
         let usageStatsData = {};
@@ -98,19 +92,13 @@
         // 标签页切换
         // ===========================
 
-        function switchTab(tabName) {
+        function switchTab(event, tabName) {
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
 
-            event.target.classList.add('active');
+            event.currentTarget.classList.add('active');
             document.getElementById(tabName + 'Tab').classList.add('active');
 
-            if (tabName === 'upload') {
-                // The upload tab is mostly static, maybe setup drag-drop here if not done globally
-            }
-            if (tabName === 'envload') {
-                checkEnvCredsStatus();
-            }
             if (tabName === 'manage') {
                 refreshCredsStatus();
             }
@@ -119,9 +107,6 @@
             }
             if (tabName === 'config') {
                 loadConfig();
-            }
-            if (tabName === 'logs') {
-                connectWebSocket();
             }
         }
 
@@ -184,155 +169,8 @@
             }
         }
 
-        async function getCredentials() {
-            if (!authInProgress) {
-                showStatus('请先获取认证链接并完成授权', 'error');
-                return;
-            }
 
-            const btn = document.getElementById('getCredsBtn');
-            const getAllProjects = document.getElementById('getAllProjectsCreds').checked;
-            btn.disabled = true;
-            btn.textContent = getAllProjects ? '并发批量获取所有项目凭证中...' : '等待OAuth回调中...';
 
-            try {
-                if (getAllProjects) {
-                    showStatus('正在并发为所有项目获取认证凭证，采用并发处理提升速度...', 'info');
-                } else {
-                    showStatus('正在等待OAuth回调...', 'info');
-                }
-
-                const requestBody = {};
-                if (currentProjectId) {
-                    requestBody.project_id = currentProjectId;
-                }
-                if (getAllProjects) {
-                    requestBody.get_all_projects = true;
-                }
-
-                const response = await fetch('/auth/callback', {
-                    method: 'POST',
-                    headers: getAuthHeaders(),
-                    body: JSON.stringify(requestBody)
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    const credentialsSection = document.getElementById('credentialsSection');
-                    const credentialsContent = document.getElementById('credentialsContent');
-
-                    if (getAllProjects && data.multiple_credentials) {
-                        const results = data.multiple_credentials;
-                        let resultText = `批量并发认证完成！成功为 ${results.success.length} 个项目生成凭证：\n\n`;
-
-                        results.success.forEach((item, index) => {
-                            resultText += `${index + 1}. 项目: ${item.project_name} (${item.project_id})\n`;
-                            resultText += `   文件: ${item.file_path}\n\n`;
-                        });
-
-                        if (results.failed.length > 0) {
-                            resultText += `\n失败的项目 (${results.failed.length} 个):\n`;
-                            results.failed.forEach((item, index) => {
-                                resultText += `${index + 1}. 项目: ${item.project_name} (${item.project_id})\n`;
-                                resultText += `   错误: ${item.error}\n\n`;
-                            });
-                        }
-
-                        credentialsContent.textContent = resultText;
-                        showStatus(`✅ 批量并发认证完成！成功生成 ${results.success.length} 个项目的凭证文件${results.failed.length > 0 ? `，${results.failed.length} 个项目失败` : ''}`, 'success');
-                    } else {
-                        credentialsContent.textContent = JSON.stringify(data.credentials, null, 2);
-
-                        if (data.auto_detected_project) {
-                            showStatus(`✅ 认证成功！项目ID已自动检测为: ${data.credentials.project_id}，文件已保存到: ${data.file_path}`, 'success');
-                        } else {
-                            showStatus(`✅ 认证成功！文件已保存到: ${data.file_path}`, 'success');
-                        }
-                    }
-
-                    credentialsSection.classList.remove('hidden');
-                    authInProgress = false;
-                } else {
-                    if (data.requires_project_selection && data.available_projects) {
-                        let projectOptions = "请选择一个项目：\n\n";
-                        data.available_projects.forEach((project, index) => {
-                            projectOptions += `${index + 1}. ${project.name} (${project.projectId})\n`;
-                        });
-                        projectOptions += `\n请输入序号 (1-${data.available_projects.length}):`;
-
-                        const selection = prompt(projectOptions);
-                        const projectIndex = parseInt(selection) - 1;
-
-                        if (projectIndex >= 0 && projectIndex < data.available_projects.length) {
-                            const selectedProject = data.available_projects[projectIndex];
-                            currentProjectId = selectedProject.projectId;
-                            btn.textContent = '重新尝试获取认证文件';
-                            showStatus(`使用选择的项目 ${selectedProject.name} (${selectedProject.projectId}) 重新尝试...`, 'info');
-                            setTimeout(() => getCredentials(), 1000);
-                            return;
-                        } else {
-                            showStatus('无效的选择，请重新开始认证', 'error');
-                        }
-                    } else if (data.requires_manual_project_id) {
-                        const userProjectId = prompt('无法自动检测项目ID，请手动输入您的Google Cloud项目ID:');
-                        if (userProjectId && userProjectId.trim()) {
-                            currentProjectId = userProjectId.trim();
-                            btn.textContent = '重新尝试获取认证文件';
-                            showStatus('使用手动输入的项目ID重新尝试...', 'info');
-                            setTimeout(() => getCredentials(), 1000);
-                            return;
-                        } else {
-                            showStatus('需要项目ID才能完成认证，请重新开始并输入正确的项目ID', 'error');
-                        }
-                    } else {
-                        showStatus(`❌ 错误: ${data.error || '获取认证文件失败'}`, 'error');
-                        if (data.error && data.error.includes('未接收到授权回调')) {
-                            showStatus('提示：请确保已完成浏览器中的OAuth认证', 'info');
-                        }
-                    }
-                }
-            } catch (error) {
-                showStatus(`网络错误: ${error.message}`, 'error');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '获取认证文件';
-            }
-        }
-
-        // ===========================
-        // 折叠区域切换
-        // ===========================
-
-        function toggleProjectIdSection() {
-            const section = document.getElementById('projectIdSection');
-            const icon = document.getElementById('projectIdToggleIcon');
-
-            if (section.style.display === 'none') {
-                section.style.display = 'block';
-                icon.style.transform = 'rotate(90deg)';
-                icon.textContent = '▼';
-            } else {
-                section.style.display = 'none';
-                icon.style.transform = 'rotate(0deg)';
-                icon.textContent = '▶';
-            }
-        }
-
-        function toggleCallbackUrlSection() {
-            const section = document.getElementById('callbackUrlSection');
-            const icon = document.getElementById('callbackUrlToggleIcon');
-
-            if (section.style.display === 'none') {
-                section.style.display = 'block';
-                icon.style.transform = 'rotate(180deg)';
-                icon.textContent = '▲';
-            } else {
-                section.style.display = 'none';
-                icon.style.transform = 'rotate(0deg)';
-                icon.textContent = '▼';
-            }
-        }
 
         // ===========================
         // 回调URL处理
@@ -426,25 +264,6 @@
             }
         }
 
-        function handleGetAllProjectsChange() {
-            const checkbox = document.getElementById('getAllProjectsCreds');
-            const note = document.getElementById('allProjectsNote');
-            const projectIdSection = document.getElementById('projectIdSection');
-            const projectIdToggle = document.querySelector('[onclick="toggleProjectIdSection()"]');
-
-            if (checkbox.checked) {
-                note.style.display = 'block';
-                if (projectIdSection.style.display !== 'none') {
-                    toggleProjectIdSection();
-                }
-                projectIdToggle.style.opacity = '0.5';
-                projectIdToggle.style.pointerEvents = 'none';
-            } else {
-                note.style.display = 'none';
-                projectIdToggle.style.opacity = '1';
-                projectIdToggle.style.pointerEvents = 'auto';
-            }
-        }
 
         // ===========================
         // 凭证文件管理
@@ -985,289 +804,6 @@
             }
         }
 
-        // ===========================
-        // 批量上传
-        // ===========================
-
-        function handleFileSelect(event) {
-            const files = Array.from(event.target.files);
-            addFiles(files);
-        }
-
-        function addFiles(files) {
-            files.forEach(file => {
-                if (file.type === 'application/json' || file.name.endsWith('.json') ||
-                    file.type === 'application/zip' || file.name.endsWith('.zip')) {
-                    if (!uploadSelectedFiles.find(f => f.name === file.name && f.size === file.size)) {
-                        uploadSelectedFiles.push(file);
-                    }
-                } else {
-                    showStatus(`文件 ${file.name} 格式不支持，只支持JSON和ZIP文件`, 'error');
-                }
-            });
-            updateFileList();
-        }
-
-        function updateFileList() {
-            const fileList = document.getElementById('fileList');
-            const fileListSection = document.getElementById('fileListSection');
-
-            if (uploadSelectedFiles.length === 0) {
-                fileListSection.classList.add('hidden');
-                return;
-            }
-
-            fileListSection.classList.remove('hidden');
-            fileList.innerHTML = '';
-
-            uploadSelectedFiles.forEach((file, index) => {
-                const fileItem = document.createElement('div');
-                fileItem.style.cssText = 'background-color: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--border-radius-sm); padding: 10px; margin: 5px 0; display: flex; justify-content: space-between; align-items: center;';
-                const isZip = file.name.endsWith('.zip');
-                const fileIcon = isZip ? '📦' : '📄';
-                const fileType = isZip ? ' (ZIP压缩包)' : ' (JSON文件)';
-                fileItem.innerHTML = `
-                    <div>
-                        <span style="font-family: var(--font-mono); color: var(--text-color); font-size: 14px;">${fileIcon} ${file.name}</span>
-                        <span style="color: var(--text-color); font-size: 12px; margin-left: 10px;">(${formatFileSize(file.size)}${fileType})</span>
-                    </div>
-                    <button onclick="removeFile(${index})" style="background: var(--error-color); color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">删除</button>
-                `;
-                fileList.appendChild(fileItem);
-            });
-        }
-
-        function removeFile(index) {
-            uploadSelectedFiles.splice(index, 1);
-            updateFileList();
-        }
-
-        function clearFiles() {
-            uploadSelectedFiles = [];
-            updateFileList();
-        }
-
-        function formatFileSize(bytes) {
-            if (bytes < 1024) return bytes + ' B';
-            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-        }
-
-        async function uploadFiles() {
-            if (uploadSelectedFiles.length === 0) {
-                showStatus('请选择要上传的文件', 'error');
-                return;
-            }
-
-            const totalSize = uploadSelectedFiles.reduce((sum, file) => sum + file.size, 0);
-            const maxSize = 200 * 1024 * 1024; // 200MB limit
-            if (totalSize > maxSize) {
-                showStatus(`文件总大小 ${(totalSize / 1024 / 1024).toFixed(1)}MB 超过限制 ${maxSize / 1024 / 1024}MB。请分批上传或删除部分文件。`, 'error');
-                return;
-            }
-
-            for (const file of uploadSelectedFiles) {
-                if (file.size > 5 * 1024 * 1024) {
-                    showStatus(`文件 "${file.name}" 大小 ${(file.size / 1024 / 1024).toFixed(1)}MB 超过单文件5MB限制`, 'error');
-                    return;
-                }
-            }
-
-            const progressSection = document.getElementById('uploadProgressSection');
-            const progressFill = document.getElementById('progressFill');
-            const progressText = document.getElementById('progressText');
-
-            progressSection.classList.remove('hidden');
-
-            const formData = new FormData();
-            uploadSelectedFiles.forEach(file => {
-                formData.append('files', file);
-            });
-
-            const hasZipFiles = uploadSelectedFiles.some(file => file.name.endsWith('.zip'));
-            if (hasZipFiles) {
-                showStatus('正在上传并解压ZIP文件...', 'info');
-            }
-
-            try {
-                const xhr = new XMLHttpRequest();
-                xhr.timeout = 300000; // 5 minutes
-
-                xhr.upload.onprogress = function (event) {
-                    if (event.lengthComputable) {
-                        const percentComplete = (event.loaded / event.total) * 100;
-                        progressFill.style.width = percentComplete + '%';
-                        progressText.textContent = Math.round(percentComplete) + '%';
-                    }
-                };
-
-                xhr.onload = function () {
-                    if (xhr.status === 200) {
-                        try {
-                            const data = JSON.parse(xhr.responseText);
-                            showStatus(`成功上传 ${data.uploaded_count} 个文件`, 'success');
-                            clearFiles();
-                            progressSection.classList.add('hidden');
-                        } catch (e) {
-                            showStatus('上传失败: 服务器响应格式错误', 'error');
-                        }
-                    } else {
-                        try {
-                            const error = JSON.parse(xhr.responseText);
-                            showStatus(`上传失败: ${error.detail || error.error || '未知错误'}`, 'error');
-                        } catch (e) {
-                            showStatus(`上传失败: HTTP ${xhr.status} - ${xhr.statusText || '未知错误'}`, 'error');
-                        }
-                    }
-                };
-
-                xhr.onerror = function () {
-                    showStatus(`上传失败：连接中断。建议分批上传。`, 'error');
-                    progressSection.classList.add('hidden');
-                };
-
-                xhr.ontimeout = function () {
-                    showStatus('上传失败：请求超时。请减少文件数量或检查网络连接', 'error');
-                    progressSection.classList.add('hidden');
-                };
-
-                xhr.open('POST', '/auth/upload');
-                xhr.setRequestHeader('Authorization', `Bearer ${authToken}`);
-                xhr.send(formData);
-
-            } catch (error) {
-                showStatus(`上传失败: ${error.message}`, 'error');
-            }
-        }
-
-        function setupDragAndDrop() {
-            const uploadArea = document.getElementById('uploadArea');
-            if (uploadArea) {
-                uploadArea.addEventListener('dragover', function (event) {
-                    event.preventDefault();
-                    uploadArea.style.borderColor = 'var(--primary-color)';
-                    uploadArea.style.backgroundColor = 'var(--surface-color)';
-                });
-
-                uploadArea.addEventListener('dragleave', function (event) {
-                    event.preventDefault();
-                    uploadArea.style.borderColor = 'var(--border-color)';
-                    uploadArea.style.backgroundColor = 'var(--surface-color)';
-                });
-
-                uploadArea.addEventListener('drop', function (event) {
-                    event.preventDefault();
-                    uploadArea.style.borderColor = 'var(--border-color)';
-                    uploadArea.style.backgroundColor = 'var(--surface-color)';
-                    const files = Array.from(event.dataTransfer.files);
-                    addFiles(files);
-                });
-            }
-        }
-
-        // ===========================
-        // 环境变量
-        // ===========================
-
-        async function checkEnvCredsStatus() {
-            const envStatusLoading = document.getElementById('envStatusLoading');
-            const envStatusContent = document.getElementById('envStatusContent');
-
-            try {
-                envStatusLoading.style.display = 'block';
-                envStatusContent.classList.add('hidden');
-
-                const response = await fetch('/auth/env-creds-status', {
-                    method: 'GET',
-                    headers: getAuthHeaders()
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    const envVarsList = document.getElementById('envVarsList');
-                    if (Object.keys(data.available_env_vars).length > 0) {
-                        envVarsList.textContent = Object.keys(data.available_env_vars).join(', ');
-                    } else {
-                        envVarsList.textContent = '未找到GCLI_CREDS_*环境变量';
-                    }
-
-                    const autoLoadStatus = document.getElementById('autoLoadStatus');
-                    autoLoadStatus.textContent = data.auto_load_enabled ? '✅ 已启用' : '❌ 未启用';
-                    autoLoadStatus.style.color = data.auto_load_enabled ? 'var(--success-color)' : 'var(--error-color)';
-
-                    document.getElementById('envFilesCount').textContent = `${data.existing_env_files_count} 个文件`;
-
-                    const envFilesList = document.getElementById('envFilesList');
-                    if (data.existing_env_files.length > 0) {
-                        envFilesList.textContent = data.existing_env_files.join(', ');
-                    } else {
-                        envFilesList.textContent = '无';
-                    }
-
-                    envStatusContent.classList.remove('hidden');
-                    showStatus('环境变量状态检查完成', 'success');
-                } else {
-                    showStatus(`获取环境变量状态失败: ${data.detail || data.error || '未知错误'}`, 'error');
-                }
-            } catch (error) {
-                showStatus(`网络错误: ${error.message}`, 'error');
-            } finally {
-                envStatusLoading.style.display = 'none';
-            }
-        }
-
-        async function loadEnvCredentials() {
-            try {
-                showStatus('正在从环境变量导入凭证...', 'info');
-
-                const response = await fetch('/auth/load-env-creds', {
-                    method: 'POST',
-                    headers: getAuthHeaders()
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    if (data.loaded_count > 0) {
-                        showStatus(`✅ 成功导入 ${data.loaded_count}/${data.total_count} 个凭证文件`, 'success');
-                        setTimeout(() => checkEnvCredsStatus(), 1000);
-                    } else {
-                        showStatus(`⚠️ ${data.message}`, 'info');
-                    }
-                } else {
-                    showStatus(`导入失败: ${data.detail || data.error || '未知错误'}`, 'error');
-                }
-            } catch (error) {
-                showStatus(`网络错误: ${error.message}`, 'error');
-            }
-        }
-
-        async function clearEnvCredentials() {
-            if (!confirm('确定要清除所有从环境变量导入的凭证文件吗？\n这将删除所有文件名以 "env-" 开头的认证文件。')) {
-                return;
-            }
-
-            try {
-                showStatus('正在清除环境变量凭证文件...', 'info');
-
-                const response = await fetch('/auth/env-creds', {
-                    method: 'DELETE',
-                    headers: getAuthHeaders()
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    showStatus(`✅ 成功删除 ${data.deleted_count} 个环境变量凭证文件`, 'success');
-                    setTimeout(() => checkEnvCredsStatus(), 1000);
-                } else {
-                    showStatus(`清除失败: ${data.detail || data.error || '未知错误'}`, 'error');
-                }
-            } catch (error) {
-                showStatus(`网络错误: ${error.message}`, 'error');
-            }
-        }
 
         // ===========================
         // 使用统计
@@ -1537,33 +1073,8 @@
         }
 
         function populateConfigForm() {
-            setConfigField('host', currentConfig.host || '0.0.0.0');
-            setConfigField('port', currentConfig.port || 7861);
             setConfigField('configApiPassword', currentConfig.api_password || '');
             setConfigField('configPanelPassword', currentConfig.panel_password || '');
-            setConfigField('configPassword', currentConfig.password || 'pwd');
-
-            setConfigField('credentialsDir', currentConfig.credentials_dir || '');
-            setConfigField('proxy', currentConfig.proxy || '');
-
-            setConfigField('codeAssistEndpoint', currentConfig.code_assist_endpoint || '');
-            setConfigField('oauthProxyUrl', currentConfig.oauth_proxy_url || '');
-            setConfigField('googleapisProxyUrl', currentConfig.googleapis_proxy_url || '');
-            setConfigField('resourceManagerApiUrl', currentConfig.resource_manager_api_url || '');
-            setConfigField('serviceUsageApiUrl', currentConfig.service_usage_api_url || '');
-
-            document.getElementById('autoBanEnabled').checked = Boolean(currentConfig.auto_ban_enabled);
-            setConfigField('autoBanErrorCodes', (currentConfig.auto_ban_error_codes || []).join(','));
-
-            setConfigField('callsPerRotation', currentConfig.calls_per_rotation || 10);
-
-            document.getElementById('retry429Enabled').checked = Boolean(currentConfig.retry_429_enabled);
-            setConfigField('retry429MaxRetries', currentConfig.retry_429_max_retries || 20);
-            setConfigField('retry429Interval', currentConfig.retry_429_interval || 0.1);
-
-            document.getElementById('compatibilityModeEnabled').checked = Boolean(currentConfig.compatibility_mode_enabled);
-
-            setConfigField('antiTruncationMaxAttempts', currentConfig.anti_truncation_max_attempts || 3);
         }
 
         function setConfigField(fieldId, value) {
@@ -1585,29 +1096,9 @@
         async function saveConfig() {
             try {
                 const config = {
-                    host: document.getElementById('host').value.trim(),
-                    port: parseInt(document.getElementById('port').value) || 7861,
+                    ...currentConfig, // Preserve existing settings
                     api_password: document.getElementById('configApiPassword').value.trim(),
                     panel_password: document.getElementById('configPanelPassword').value.trim(),
-                    password: document.getElementById('configPassword').value.trim(),
-                    code_assist_endpoint: document.getElementById('codeAssistEndpoint').value.trim(),
-                    credentials_dir: document.getElementById('credentialsDir').value.trim(),
-                    proxy: document.getElementById('proxy').value.trim(),
-                    oauth_proxy_url: document.getElementById('oauthProxyUrl').value.trim(),
-                    googleapis_proxy_url: document.getElementById('googleapisProxyUrl').value.trim(),
-                    resource_manager_api_url: document.getElementById('resourceManagerApiUrl').value.trim(),
-                    service_usage_api_url: document.getElementById('serviceUsageApiUrl').value.trim(),
-                    auto_ban_enabled: document.getElementById('autoBanEnabled').checked,
-                    auto_ban_error_codes: document.getElementById('autoBanErrorCodes').value
-                        .split(',')
-                        .map(code => parseInt(code.trim()))
-                        .filter(code => !isNaN(code)),
-                    calls_per_rotation: parseInt(document.getElementById('callsPerRotation').value) || 10,
-                    retry_429_enabled: document.getElementById('retry429Enabled').checked,
-                    retry_429_max_retries: parseInt(document.getElementById('retry429MaxRetries').value) || 20,
-                    retry_429_interval: parseFloat(document.getElementById('retry429Interval').value) || 0.1,
-                    compatibility_mode_enabled: document.getElementById('compatibilityModeEnabled').checked,
-                    anti_truncation_max_attempts: parseInt(document.getElementById('antiTruncationMaxAttempts').value) || 3
                 };
 
                 const response = await fetch('/config/save', {
@@ -1641,221 +1132,11 @@
             }
         }
 
-        // 端点配置快速切换
-        const mirrorUrls = {
-            codeAssistEndpoint: 'https://gcli-api.sukaka.top/cloudcode-pa',
-            oauthProxyUrl: 'https://gcli-api.sukaka.top/oauth2',
-            googleapisProxyUrl: 'https://gcli-api.sukaka.top/googleapis',
-            resourceManagerApiUrl: 'https://gcli-api.sukaka.top/cloudresourcemanager',
-            serviceUsageApiUrl: 'https://gcli-api.sukaka.top/serviceusage'
-        };
-
-        const officialUrls = {
-            codeAssistEndpoint: 'https://cloudcode-pa.googleapis.com',
-            oauthProxyUrl: 'https://oauth2.googleapis.com',
-            googleapisProxyUrl: 'https://www.googleapis.com',
-            resourceManagerApiUrl: 'https://cloudresourcemanager.googleapis.com',
-            serviceUsageApiUrl: 'https://serviceusage.googleapis.com'
-        };
-
-        function useMirrorUrls() {
-            if (confirm('确定要将所有端点配置为镜像网址吗？')) {
-                for (const [fieldId, url] of Object.entries(mirrorUrls)) {
-                    const field = document.getElementById(fieldId);
-                    if (field && !field.disabled) {
-                        field.value = url;
-                    }
-                }
-                showStatus('✅ 已切换到镜像网址配置，记得点击"保存配置"按钮保存设置', 'success');
-            }
-        }
-
-        function restoreOfficialUrls() {
-            if (confirm('确定要将所有端点配置为官方地址吗？')) {
-                for (const [fieldId, url] of Object.entries(officialUrls)) {
-                    const field = document.getElementById(fieldId);
-                    if (field && !field.disabled) {
-                        field.value = url;
-                    }
-                }
-                showStatus('✅ 已切换到官方端点配置，记得点击"保存配置"按钮保存设置', 'success');
-            }
-        }
-
-        // ===========================
-        // 实时日志 (WebSocket)
-        // ===========================
-
-        function connectWebSocket() {
-            if (logWebSocket && logWebSocket.readyState === WebSocket.OPEN) {
-                showStatus('WebSocket已经连接', 'info');
-                return;
-            }
-
-            try {
-                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const wsUrl = `${protocol}//${window.location.host}/auth/logs/stream`;
-
-                document.getElementById('connectionStatusText').textContent = '连接中...';
-                document.getElementById('logConnectionStatus').className = 'status info';
-
-                logWebSocket = new WebSocket(wsUrl);
-
-                logWebSocket.onopen = function (event) {
-                    document.getElementById('connectionStatusText').textContent = '已连接';
-                    document.getElementById('logConnectionStatus').className = 'status success';
-                    showStatus('日志流连接成功', 'success');
-                    clearLogsDisplay();
-                };
-
-                logWebSocket.onmessage = function (event) {
-                    const logLine = event.data;
-                    if (logLine.trim()) {
-                        allLogs.push(logLine);
-                        if (allLogs.length > 1000) {
-                            allLogs = allLogs.slice(-1000);
-                        }
-                        filterLogs();
-                        if (document.getElementById('autoScroll').checked) {
-                            const logContainer = document.getElementById('logContainer');
-                            logContainer.scrollTop = logContainer.scrollHeight;
-                        }
-                    }
-                };
-
-                logWebSocket.onclose = function (event) {
-                    document.getElementById('connectionStatusText').textContent = '连接断开';
-                    document.getElementById('logConnectionStatus').className = 'status error';
-                    showStatus('日志流连接断开', 'info');
-                };
-
-                logWebSocket.onerror = function (error) {
-                    document.getElementById('connectionStatusText').textContent = '连接错误';
-                    document.getElementById('logConnectionStatus').className = 'status error';
-                    showStatus('日志流连接错误: ' + error, 'error');
-                };
-
-            } catch (error) {
-                showStatus('创建WebSocket连接失败: ' + error.message, 'error');
-                document.getElementById('connectionStatusText').textContent = '连接失败';
-                document.getElementById('logConnectionStatus').className = 'status error';
-            }
-        }
-
-        function disconnectWebSocket() {
-            if (logWebSocket) {
-                logWebSocket.close();
-                logWebSocket = null;
-                document.getElementById('connectionStatusText').textContent = '未连接';
-                document.getElementById('logConnectionStatus').className = 'status info';
-                showStatus('日志流连接已断开', 'info');
-            }
-        }
-
-        function clearLogsDisplay() {
-            allLogs = [];
-            filteredLogs = [];
-            document.getElementById('logContent').textContent = '日志已清空，等待新日志...';
-        }
-
-        async function downloadLogs() {
-            try {
-                const response = await fetch('/auth/logs/download', {
-                    method: 'GET',
-                    headers: getAuthHeaders()
-                });
-
-                if (response.ok) {
-                    const contentDisposition = response.headers.get('Content-Disposition');
-                    let filename = 'gcli2api_logs.txt';
-                    if (contentDisposition) {
-                        const filenameMatch = contentDisposition.match(/filename=(.+)/);
-                        if (filenameMatch) {
-                            filename = filenameMatch;
-                        }
-                    }
-
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = filename;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    window.URL.revokeObjectURL(url);
-
-                    showStatus(`日志文件下载成功: ${filename}`, 'success');
-                } else {
-                    const errorText = await response.text();
-                    let errorMsg = '下载失败';
-                    try {
-                        const errorData = JSON.parse(errorText);
-                        errorMsg = errorData.detail || errorData.error || '未知错误';
-                    } catch (e) {
-                        errorMsg = errorText || '未知错误';
-                    }
-                    showStatus(`下载日志失败: ${errorMsg}`, 'error');
-                }
-            } catch (error) {
-                showStatus(`下载日志时网络错误: ${error.message}`, 'error');
-            }
-        }
-
-        async function clearLogs() {
-            try {
-                const response = await fetch('/auth/logs/clear', {
-                    method: 'POST',
-                    headers: getAuthHeaders()
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    clearLogsDisplay();
-                    showStatus(data.message, 'success');
-                } else {
-                    showStatus(`清空日志失败: ${data.detail || data.error || '未知错误'}`, 'error');
-                }
-            } catch (error) {
-                clearLogsDisplay();
-                showStatus(`清空日志时网络错误: ${error.message}`, 'error');
-            }
-        }
-
-        function filterLogs() {
-            const filter = document.getElementById('logLevelFilter').value;
-            currentLogFilter = filter;
-
-            if (filter === 'all') {
-                filteredLogs = [...allLogs];
-            } else {
-                filteredLogs = allLogs.filter(log => log.toUpperCase().includes(filter));
-            }
-
-            displayLogs();
-        }
-
-        function displayLogs() {
-            const logContent = document.getElementById('logContent');
-            if (filteredLogs.length === 0) {
-                logContent.textContent = currentLogFilter === 'all' ?
-                    '暂无日志...' : `暂无${currentLogFilter}级别的日志...`;
-            } else {
-                logContent.textContent = filteredLogs.join('\n');
-            }
-        }
-
         // ===========================
         // 页面初始化
         // ===========================
 
         window.onload = function () {
-            const checkbox = document.getElementById('getAllProjectsCreds');
-            if (checkbox) {
-                checkbox.addEventListener('change', handleGetAllProjectsChange);
-            }
-            setupDragAndDrop();
             showStatus('请输入密码登录', 'info');
         };
 
