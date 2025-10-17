@@ -3,7 +3,7 @@ Configuration constants for the Geminicli2api proxy server.
 Centralizes all configuration to avoid duplication across modules.
 """
 import os
-from typing import Any, Optional, List
+from typing import Any, Optional
 
 # Client Configuration
 
@@ -20,40 +20,38 @@ DEFAULT_SAFETY_SETTINGS = [
 ]
 
 # Helper function to get base model name from any variant
-def get_base_model_name(model_name: str) -> str:
+def get_base_model_name(model_name):
     """Convert variant model name to base model name."""
-    # Remove -maxthinking suffix
-    suffix = "-maxthinking"
-    if model_name.endswith(suffix):
-        return model_name[:-len(suffix)]
+    # Remove all possible suffixes in order
+    suffixes = ["-maxthinking", "-nothinking", "-search"]
+    for suffix in suffixes:
+        if model_name.endswith(suffix):
+            return model_name[:-len(suffix)]
     return model_name
 
+# Helper function to check if model uses search grounding
+def is_search_model(model_name):
+    """Check if model name indicates search grounding should be enabled."""
+    return "-search" in model_name
 
-# Helper function to check if model uses search grounding (DEPRECATED)
-def is_search_model(model_name: str) -> bool:
-    """This feature has been removed. Always returns False."""
-    return False
-
-
-# Helper function to check if model uses no thinking (DEPRECATED)
-def is_nothinking_model(model_name: str) -> bool:
-    """This feature has been removed. Always returns False."""
-    return False
-
+# Helper function to check if model uses no thinking
+def is_nothinking_model(model_name):
+    """Check if model name indicates thinking should be disabled."""
+    return "-nothinking" in model_name
 
 # Helper function to check if model uses max thinking
-def is_maxthinking_model(model_name: str) -> bool:
+def is_maxthinking_model(model_name):
     """Check if model name indicates maximum thinking budget should be used."""
     return "-maxthinking" in model_name
 
 # Helper function to check if model supports thinking
-def is_image_model(model_name: str) -> bool:
+def is_image_model(model_name):
     """Check if model is an image generation model that doesn't support thinking."""
     base_model = get_base_model_name(model_name)
     return "image" in base_model.lower()
 
 # Helper function to get thinking budget for a model
-def get_thinking_budget(model_name: str) -> Optional[int]:
+def get_thinking_budget(model_name):
     """Get the appropriate thinking budget for a model based on its name and variant."""
 
     # 绘图模型不支持thinking配置
@@ -72,10 +70,15 @@ def get_thinking_budget(model_name: str) -> Optional[int]:
         return -1  # Default for all models
 
 # Helper function to check if thinking should be included in output
-def should_include_thoughts(model_name: str) -> bool:
-    """Check if thoughts should be included in the response. Suffix-based logic has been removed."""
-    # For all other modes, include thoughts
-    return True
+def should_include_thoughts(model_name):
+    """Check if thoughts should be included in the response."""
+    if is_nothinking_model(model_name):
+        # For nothinking mode, still include thoughts if it's a pro model
+        base_model = get_base_model_name(model_name)
+        return "gemini-2.5-pro" in base_model
+    else:
+        # For all other modes, include thoughts
+        return True
 
 # Dynamic Configuration System - Optimized for memory efficiency
 async def get_config_value(key: str, default: Any = None, env_var: Optional[str] = None) -> Any:
@@ -92,9 +95,9 @@ async def get_config_value(key: str, default: Any = None, env_var: Optional[str]
         # 检查值是否存在（不是None），允许空字符串、0、False等有效值
         if value is not None:
             return value
-    except Exception:
+    except Exception as e:
         # Debug: print import/storage errors
-        # print(f"Config storage error for key {key}")
+        # print(f"Config storage error for key {key}: {e}")
         pass
     
     return default
@@ -125,7 +128,7 @@ async def get_auto_ban_enabled() -> bool:
     
     return bool(await get_config_value("auto_ban_enabled", False))
 
-async def get_auto_ban_error_codes() -> List[int]:
+async def get_auto_ban_error_codes() -> list:
     """
     Get auto ban error codes.
     
@@ -188,7 +191,7 @@ BASE_MODELS = [
     "gemini-2.5-flash-lite"
 ]
 
-def get_available_models(router_type: str = "openai") -> List[str]:
+def get_available_models(router_type="openai"):
     """
     Get available models with feature prefixes.
     
@@ -198,30 +201,33 @@ def get_available_models(router_type: str = "openai") -> List[str]:
     Returns:
         List of model names with feature prefixes
     """
-    models: List[str] = []
+    models = []
     
     for base_model in BASE_MODELS:
         # 基础模型
         models.append(base_model)
         
         # 支持thinking模式后缀与功能前缀组合
-        if not is_image_model(base_model):
-            models.append(f"{base_model}-maxthinking")
+        for thinking_suffix in ["-maxthinking"]:
+            # 基础模型 + thinking后缀
+            models.append(f"{base_model}{thinking_suffix}")
     
     return models
 
 def is_fake_streaming_model(model_name: str) -> bool:
-    """This feature has been removed. Always returns False."""
-    return False
-
+    """Check if model name indicates fake streaming should be used."""
+    return model_name.startswith("假流式/")
 
 def is_anti_truncation_model(model_name: str) -> bool:
-    """This feature has been removed. Always returns False."""
-    return False
-
+    """Check if model name indicates anti-truncation should be used."""
+    return model_name.startswith("流式抗截断/")
 
 def get_base_model_from_feature_model(model_name: str) -> str:
-    """Get base model name from feature model name. Prefix logic has been removed."""
+    """Get base model name from feature model name."""
+    # Remove feature prefixes
+    for prefix in ["假流式/", "流式抗截断/"]:
+        if model_name.startswith(prefix):
+            return model_name[len(prefix):]
     return model_name
 
 async def get_anti_truncation_max_attempts() -> int:
