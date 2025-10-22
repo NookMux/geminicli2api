@@ -681,6 +681,21 @@ select:focus {
 }
 
 /* --- 批量操作按钮 --- */
+.batch-selection {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.batch-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+}
+
 .batch-btn {
     background: var(--surface-bg);
     border: 1px solid var(--border-color);
@@ -690,6 +705,9 @@ select:focus {
     cursor: pointer;
     transition: all var(--transition-speed) ease;
     font-size: 0.9rem;
+    flex: 1;
+    min-width: 150px;
+    text-align: center;
 }
 
 .batch-btn:hover:not(:disabled) {
@@ -1218,6 +1236,10 @@ h3 {
     transform: translateY(-50%);
     color: var(--text-secondary);
     font-size: 1rem;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .login-form input[type="password"] {

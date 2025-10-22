@@ -738,3 +738,169 @@ async def get_user_email(credentials: Credentials) -> Optional[str]:
    })
    .then(response => response.json())
    .then(data => console.log(data));
+
+
+
+【最小化授权脚本使用说明】
+- 相关脚本：
+~~~python
+import asyncio
+from typing import Any, Dict, List
+
+# 从同目录模块导入（脚本位于 src 目录内）
+import sys
+from pathlib import Path
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from src.auth import create_auth_url, complete_auth_flow_from_callback_url
+# 使用项目根目录的日志模块
+from log import log
+
+
+async def main() -> None:
+    print("最小化OAuth流程测试：生成授权URL并解析回调中的项目ID")
+    confirm = input("是否生成授权URL？输入y生成，输入n退出：").strip().lower()
+    if confirm not in ("y", "yes"):
+        print("已取消")
+        return
+
+    # 生成授权URL（不指定项目ID以测试自动检测逻辑）
+    try:
+        create_res: Dict[str, Any] = await create_auth_url(project_id=None, user_session="min-auth-test", get_all_projects=False)
+    except Exception as e:
+        log.error(f"创建授权URL出错: {e}")
+        print("创建授权URL失败，详情见日志")
+        return
+
+    if not create_res.get("success"):
+        log.error(f"创建授权URL失败: {create_res.get('error')}")
+        print("创建授权URL失败，详情见日志")
+        return
+
+    auth_url = create_res.get("auth_url")
+    if not auth_url:
+        log.error("返回结果中未包含 auth_url")
+        print("未生成授权URL，详情见日志")
+        return
+
+    log.info(f"授权URL已生成: {auth_url}")
+    print("请在浏览器中打开以下链接完成授权：")
+    print(auth_url)
+    print("授权完成后，请从浏览器地址栏复制完整的回调URL，并粘贴到下方回车提交。")
+
+    callback_url = input("请粘贴回调URL（需包含state与code参数）：").strip()
+    if not callback_url:
+        print("未输入回调URL，已退出")
+        return
+
+    try:
+        complete_res: Dict[str, Any] = await complete_auth_flow_from_callback_url(callback_url=callback_url, project_id=None, get_all_projects=False)
+    except Exception as e:
+        log.error(f"解析回调URL并完成认证出错: {e}")
+        print("解析回调URL失败，详情见日志")
+        return
+
+    # 成功直接返回项目ID
+    if complete_res.get("success"):
+        project_id = complete_res.get("project_id")
+        if project_id:
+            log.info(f"解析到的项目ID: {project_id}")
+            print(f"解析到的项目ID: {project_id}")
+            return
+        # 批量模式（如返回 multiple_credentials）
+        multiple = complete_res.get("multiple_credentials")
+        if isinstance(multiple, list) and multiple:
+            log.info("检测到批量模式，以下为解析到的项目ID：")
+            for item in multiple:
+                pid = item.get("project_id") or item.get("projectId")
+                if pid:
+                    log.info(f"项目ID: {pid}")
+            print("批量模式凭证已记录到日志。")
+            return
+        # 兜底：尝试从凭证文件路径中解析项目ID，或读取JSON文件的project_id
+        file_path = complete_res.get("file_path")
+        if file_path:
+            try:
+                from pathlib import Path
+                import re
+                fp = Path(file_path)
+                name = fp.stem
+                m = re.match(r"(.+)-\d+$", name)
+                candidate = m.group(1) if m else name
+                # 尝试读取凭证JSON覆盖候选值
+                try:
+                    import json
+                    with open(fp, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        candidate = data.get("project_id") or data.get("projectId") or candidate
+                except Exception:
+                    pass
+                if candidate:
+                    log.info(f"兜底解析到的项目ID: {candidate}")
+                    print(f"解析到的项目ID: {candidate}")
+                    return
+            except Exception as e:
+                log.warning(f"无法从凭证文件解析项目ID: {e}")
+        log.info("认证成功，但未返回项目ID。")
+        print("认证成功，但未返回项目ID，详情见日志。")
+        return
+
+    # 需要选择项目
+    if complete_res.get("requires_project_selection"):
+        available: List[Dict[str, Any]] = complete_res.get("available_projects", [])
+        if not available:
+            log.warning("需要项目选择但未提供可用项目列表")
+            print("未提供可选项目列表，详情见日志。")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+~~~
+- 运行方式（二选一）：
+  1) 使用 Python 启动器（推荐）：
+     ```powershell
+     py .\src\min_auth_flow_test.py
+     ```
+  2) 以模块方式运行：
+     ```powershell
+     py -m src.min_auth_flow_test
+     ```
+- 交互步骤：
+  1) 程序将生成一条 Google OAuth 授权 URL 并提示你在浏览器完成登录；
+  2) 登录成功后，复制浏览器地址栏的完整回调 URL 粘贴回终端；
+  3) 程序解析并完成授权码交换，保存凭证文件，记录项目 ID（单项目模式或批量模式）。
+
+【流程概述（简版）】
+- 授权 URL 生成：<mcfile name="auth.py" path="c:\Users\zhongruan\Desktop\GitHub\geminicli2api\src\auth.py"></mcfile> 的 `create_auth_url` 会动态分配回调端口并生成 URL；
+- 回调解析与授权码交换：`complete_auth_flow_from_callback_url` 解析回调参数并完成授权码交换；
+- OAuth 交换逻辑由 <mcfile name="google_oauth_api.py" path="c:\Users\zhongruan\Desktop\GitHub\geminicli2api\src\google_oauth_api.py"></mcfile> 的 `Flow` 与 `Credentials` 管理；
+- 项目选择：在检测到多个项目时会自动选择一个默认项目（例如第一个）。
+
+【返回结构与字段说明】
+- 单项目模式返回：`{"success": true/false, "project_id": 可选, "file_path": 凭证路径}`；
+- 批量模式返回：`{"success": true/false, "multiple_credentials": [{"project_id":..., "file_path":...}, ...]}`；
+- 注意：部分成功路径可能未显式包含 `project_id`，需结合兜底策略获取（见下文）。
+
+【项目 ID 解析兜底策略】
+- 为避免部分成功路径未返回 `project_id`，脚本实现了双重兜底：
+  1) 从凭证文件名解析：如 `modular-button-473914-k4.json` 去掉后缀与末尾数字段；
+  2) 读取凭证 JSON：如果可读，优先使用其中的项目 ID 字段；
+- 当前测试日志已验证该策略可稳定获取项目 ID（例如：`modular-button-473914-k4`）。
+
+【常见问题与排查】
+- PowerShell 无法识别 `python`：使用 `py` 启动器运行，或检查 PATH 与应用执行别名；
+- 导入错误（相对导入失败）：脚本中已将项目根目录加入 `sys.path` 并改为 `from src.auth import ...` 的导入方式；
+- 浏览器额外回调请求：若日志出现“收到OAuth回调: code=未获取”，通常为浏览器资源请求的附带访问，可忽略；
+- 日志文件：运行脚本会在 <mcfile name="log.txt" path="c:\Users\zhongruan\Desktop\GitHub\geminicli2api\log.txt"></mcfile> 记录完整流程，便于审计与排查。
+
+【独立脚本积累与后续重构规划】
+- 当前已完成：<mcfile name="min_auth_flow_test.py" path="c:\Users\zhongruan\Desktop\GitHub\geminicli2api\src\min_auth_flow_test.py"></mcfile>；
+- 建议持续积累独立脚本，示例目录：
+  - `src/cli_auth_login.py`：专注授权登录与凭证保存；
+  - `src/cli_project_select.py`：手动选择项目并验证可用性；
+  - `src/cli_verify_credentials.py`：校验凭证有效期与刷新逻辑；
+- 重构目标：将通用逻辑上移到 <mcfile name="utils.py" path="c:\Users\zhongruan\Desktop\GitHub\geminicli2api\src\utils.py"></mcfile>（如 `parse_project_id_from_credentials(file_path)`），实现脚本与路由的复用，减少重复代码。
+
+【备注】
+- 若未来决定统一由源实现返回 `project_id`，可在 <mcfile name="auth.py" path="c:\Users\zhongruan\Desktop\GitHub\geminicli2api\src\auth.py"></mcfile> 成功路径上补齐字段，并同步更新文档“返回结构与字段说明”一节。
