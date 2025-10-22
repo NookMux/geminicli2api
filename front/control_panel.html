@@ -121,13 +121,15 @@
 
                 <div class="batch-controls">
                     <h4><i class="fas fa-tasks"></i> 批量操作</h4>
-                    <div class="batch-actions">
+                    <div class="batch-selection">
                         <div style="display: flex; align-items: center;">
                             <input type="checkbox" id="selectAllCheckbox" class="select-all-checkbox"
                                 onchange="toggleSelectAll()">
                             <label for="selectAllCheckbox">全选</label>
                         </div>
                         <span class="selected-count" id="selectedCount">已选择 0 项</span>
+                    </div>
+                    <div class="batch-actions" style="display: flex; justify-content: space-between; margin-top: 10px;">
                         <button class="batch-btn batch-enable" id="batchEnableBtn" onclick="batchAction('enable')"
                             disabled><i class="fas fa-check-circle"></i> 批量启用</button>
                         <button class="batch-btn batch-disable" id="batchDisableBtn" onclick="batchAction('disable')"
