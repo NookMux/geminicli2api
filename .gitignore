@@ -2,7 +2,7 @@
 creds/
 CLIProxyAPI-参考项目
 node_modules
-
+.trae/
 # Environment configuration
 .env
 

@@ -1070,9 +1070,22 @@ async def save_credentials(creds: Credentials, project_id: str) -> str:
     
     # 通过存储适配器保存
     storage_adapter = await get_storage_adapter()
+    existing_credentials = await storage_adapter.list_credentials()
+    log.info(
+        f"准备保存凭证: project_id={project_id}, filename={filename}, existing_count={len(existing_credentials)}"
+    )
     success = await storage_adapter.store_credential(filename, creds_data)
     
     if success:
+        try:
+            updated_credentials = await storage_adapter.list_credentials()
+            log.info(
+                f"凭证写入完成: filename={filename}, total_credentials={len(updated_credentials)}"
+            )
+        except Exception as update_count_error:
+            log.warning(
+                f"统计凭证数量失败 {filename}: {update_count_error}"
+            )
         # 创建默认状态记录
         try:
             default_state = {

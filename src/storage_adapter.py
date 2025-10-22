@@ -171,7 +171,10 @@ class StorageAdapter:
     async def store_credential(self, filename: str, credential_data: Dict[str, Any]) -> bool:
         """存储凭证数据"""
         self._ensure_initialized()
-        return await self._backend.store_credential(filename, credential_data)
+        log.debug(f"存储凭证请求: filename={filename}")
+        result = await self._backend.store_credential(filename, credential_data)
+        log.debug(f"存储凭证完成: filename={filename}, success={result}")
+        return result
     
     async def get_credential(self, filename: str) -> Optional[Dict[str, Any]]:
         """获取凭证数据"""
