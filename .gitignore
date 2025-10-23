@@ -85,3 +85,6 @@ Thumbs.db
 *.log
 log.txt
 .trae/rules/project_rules.md
+/.trae
+.trae/rules/project_rules.md
+/.trae
