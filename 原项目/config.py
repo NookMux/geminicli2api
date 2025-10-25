@@ -44,30 +44,17 @@ def is_maxthinking_model(model_name):
     """Check if model name indicates maximum thinking budget should be used."""
     return "-maxthinking" in model_name
 
-# Helper function to check if model supports thinking
-def is_image_model(model_name):
-    """Check if model is an image generation model that doesn't support thinking."""
-    base_model = get_base_model_name(model_name)
-    return "image" in base_model.lower()
-
 # Helper function to get thinking budget for a model
 def get_thinking_budget(model_name):
     """Get the appropriate thinking budget for a model based on its name and variant."""
-
-    # 绘图模型不支持thinking配置
-    if is_image_model(model_name):
-        return None
-
-    if is_maxthinking_model(model_name):
-        base_model = get_base_model_name(model_name)
-        # pro模型使用32768，flash模型使用24576
-        if "pro" in base_model.lower():
-            return 32768
-        else:
-            return 24576
+    
+    if is_nothinking_model(model_name):
+        return 128  # Limited thinking for pro
+    elif is_maxthinking_model(model_name):
+        return 32768
     else:
         # Default thinking budget for regular models
-        return -1  # Default for all models
+        return None  # Default for all models
 
 # Helper function to check if thinking should be included in output
 def should_include_thoughts(model_name):
@@ -75,7 +62,7 @@ def should_include_thoughts(model_name):
     if is_nothinking_model(model_name):
         # For nothinking mode, still include thoughts if it's a pro model
         base_model = get_base_model_name(model_name)
-        return "gemini-2.5-pro" in base_model
+        return "pro" in base_model
     else:
         # For all other modes, include thoughts
         return True
@@ -181,14 +168,20 @@ async def get_retry_429_interval() -> float:
 
 # Model name lists for different features
 BASE_MODELS = [
-    "gemini-2.5-pro-preview-06-05",
-    "gemini-2.5-pro",
-    "gemini-2.5-pro-preview-05-06",
     "gemini-2.5-pro-preview-03-25",
+    "gemini-2.5-pro-preview-05-06",
+    "gemini-2.5-pro-preview-06-05",
+    "gemini-2.5-pro", 
     "gemini-2.5-flash",
+    "gemini-flash-latest",
+    "gemini-2.5-flash-preview-09-2025",
     "gemini-2.5-flash-image",
     "gemini-2.5-flash-image-preview",
-    "gemini-2.5-flash-lite"
+]
+
+PUBLIC_API_MODELS = [
+    "gemini-2.5-flash-image",
+    "gemini-2.5-flash-image-preview"
 ]
 
 def get_available_models(router_type="openai"):
@@ -418,7 +411,6 @@ async def get_service_usage_api_url() -> str:
     return str(await get_config_value("service_usage_api_url", "https://serviceusage.googleapis.com", "SERVICE_USAGE_API_URL"))
 
 
-# 数据库，无需看这段代码，实际生产不会启用
 async def get_mongodb_uri() -> str:
     return str(await get_config_value("mongodb_uri", "", "MONGODB_URI"))
 
