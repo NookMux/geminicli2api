@@ -85,11 +85,11 @@ class UsageStats:
         try:
             from config import get_base_model_name, get_base_model_from_feature_model
             
-            # Remove feature prefixes (流式抗截断/, 假流式/)
-            base_with_suffix = get_base_model_from_feature_model(model_name)
-            
+            # Remove feature prefixes
+            # (removed fake streaming and anti-truncation prefixes)
+
             # Remove thinking/search suffixes (-maxthinking, -nothinking, -search)
-            pure_base_model = get_base_model_name(base_with_suffix)
+            pure_base_model = get_base_model_name(model_name)
             
             # Check if the pure base model is exactly "gemini-2.5-pro"
             return pure_base_model == "gemini-2.5-pro"
@@ -97,7 +97,7 @@ class UsageStats:
         except ImportError:
             # Fallback logic if config import fails
             clean_model = model_name
-            for prefix in ["流式抗截断/", "假流式/"]:
+            for prefix in []:
                 if clean_model.startswith(prefix):
                     clean_model = clean_model[len(prefix):]
                     break

@@ -1121,8 +1121,6 @@ async def get_config(token: str = Depends(verify_token)):
         current_config["retry_429_interval"] = await config.get_retry_429_interval()
         
         
-        # 抗截断配置
-        current_config["anti_truncation_max_attempts"] = await config.get_anti_truncation_max_attempts()
         
         # 兼容性配置
         current_config["compatibility_mode_enabled"] = await config.get_compatibility_mode_enabled()
@@ -1141,8 +1139,6 @@ async def get_config(token: str = Depends(verify_token)):
             env_locked.append("retry_429_enabled")
         if os.getenv("RETRY_429_INTERVAL"):
             env_locked.append("retry_429_interval")
-        if os.getenv("ANTI_TRUNCATION_MAX_ATTEMPTS"):
-            env_locked.append("anti_truncation_max_attempts")
         if os.getenv("COMPATIBILITY_MODE"):
             env_locked.append("compatibility_mode_enabled")
         if os.getenv("HOST"):

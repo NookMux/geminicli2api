@@ -470,7 +470,6 @@ def extract_model_settings(model: str) -> Dict[str, Any]:
     """
     return {
         "base_model": get_base_model_name(model),
-        "use_fake_streaming": model.endswith("-假流式"),
         "thinking_budget": get_thinking_budget(model),
         "include_thoughts": should_include_thoughts(model),
     }

@@ -207,38 +207,6 @@ def get_available_models(router_type="openai"):
     
     return models
 
-def is_fake_streaming_model(model_name: str) -> bool:
-    """Check if model name indicates fake streaming should be used."""
-    return model_name.startswith("假流式/")
-
-def is_anti_truncation_model(model_name: str) -> bool:
-    """Check if model name indicates anti-truncation should be used."""
-    return model_name.startswith("流式抗截断/")
-
-def get_base_model_from_feature_model(model_name: str) -> str:
-    """Get base model name from feature model name."""
-    # Remove feature prefixes
-    for prefix in ["假流式/", "流式抗截断/"]:
-        if model_name.startswith(prefix):
-            return model_name[len(prefix):]
-    return model_name
-
-async def get_anti_truncation_max_attempts() -> int:
-    """
-    Get maximum attempts for anti-truncation continuation.
-    
-    Environment variable: ANTI_TRUNCATION_MAX_ATTEMPTS
-    TOML config key: anti_truncation_max_attempts
-    Default: 3
-    """
-    env_value = os.getenv("ANTI_TRUNCATION_MAX_ATTEMPTS")
-    if env_value:
-        try:
-            return int(env_value)
-        except ValueError:
-            pass
-    
-    return int(await get_config_value("anti_truncation_max_attempts", 3))
 
 # Server Configuration
 async def get_server_host() -> str:
