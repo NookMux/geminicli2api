@@ -745,7 +745,7 @@ async function refreshUsageStats() {
             usageStatsData = statsData.data;
 
             document.getElementById('totalApiCalls').textContent = aggregatedData.data.total_all_model_calls || 0;
-            document.getElementById('geminiProCalls').textContent = aggregatedData.data.total_gemini_2_5_pro_calls || 0;
+            document.getElementById('geminiProCalls').textContent = aggregatedData.data.total_pro_model_calls || 0;
             document.getElementById('totalFiles').textContent = aggregatedData.data.total_files || 0;
 
             renderUsageList();
@@ -779,8 +779,8 @@ function createUsageCard(filename, stats) {
     const div = document.createElement('div');
     div.className = 'usage-card';
 
-    const geminiPercent = Math.min((stats.gemini_2_5_pro_calls / stats.daily_limit_gemini_2_5_pro) * 100, 100);
-    const totalPercent = Math.min((stats.total_calls / stats.daily_limit_total) * 100, 100);
+    const geminiPercent = Math.min((stats.pro_model_calls || 0) / (stats.daily_limit_pro_models || 100) * 100, 100);
+    const totalPercent = Math.min((stats.total_calls || 0) / (stats.daily_limit_total || 1000) * 100, 100);
 
     function getProgressClass(percent) {
         if (percent >= 90) return 'danger';
@@ -811,8 +811,8 @@ function createUsageCard(filename, stats) {
 
         <div class="usage-progress">
             <div class="usage-progress-label">
-                <span>Gemini 2.5 Pro</span>
-                <span>${stats.gemini_2_5_pro_calls}/${stats.daily_limit_gemini_2_5_pro} (${geminiPercent.toFixed(1)}%)</span>
+                <span>Pro Models</span>
+                <span>${stats.pro_model_calls || 0}/${stats.daily_limit_pro_models || 100} (${geminiPercent.toFixed(1)}%)</span>
             </div>
             <div class="usage-progress-bar">
                 <div class="usage-progress-fill ${getProgressClass(geminiPercent)}" style="width: ${geminiPercent}%"></div>
@@ -822,7 +822,7 @@ function createUsageCard(filename, stats) {
         <div class="usage-progress">
             <div class="usage-progress-label">
                 <span>所有模型</span>
-                <span>${stats.total_calls}/${stats.daily_limit_total} (${totalPercent.toFixed(1)}%)</span>
+                <span>${stats.total_calls || 0}/${stats.daily_limit_total || 1000} (${totalPercent.toFixed(1)}%)</span>
             </div>
             <div class="usage-progress-bar">
                 <div class="usage-progress-fill ${getTotalProgressClass(totalPercent)}" style="width: ${totalPercent}%"></div>
