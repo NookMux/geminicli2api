@@ -97,15 +97,25 @@ async def get_proxy_config():
     return proxy_url if proxy_url else None
 
 async def get_calls_per_rotation() -> int:
-    """Get calls per rotation setting."""
+    """
+    获取凭证轮换调用次数配置。
+
+    优先级：
+    1. 环境变量 CALLS_PER_ROTATION
+    2. 统一配置存储中的 calls_per_rotation
+    3. 默认值 75（更贴近单凭证 100 / 1000 总配额的使用场景）
+    """
     env_value = os.getenv("CALLS_PER_ROTATION")
     if env_value:
         try:
             return int(env_value)
         except ValueError:
+            # 环境变量格式不对时，回退到存储 / 默认值
             pass
-    
-    return int(await get_config_value("calls_per_rotation", 100))
+
+    # 这里的默认值从 100 调整为 75，便于在未显式配置时
+    # 更均匀地分摊到多个凭证上，同时保留一定安全裕量
+    return int(await get_config_value("calls_per_rotation", 75))
 
 async def get_auto_ban_enabled() -> bool:
     """Get auto ban enabled setting."""
@@ -168,17 +178,9 @@ async def get_retry_429_interval() -> float:
 
 # Model name lists for different features
 BASE_MODELS = [
-    "gemini-2.5-pro-preview-03-25",
-    "gemini-2.5-pro-preview-05-06",
-    "gemini-2.5-pro-preview-06-05",
     "gemini-2.5-pro", 
     "gemini-2.5-flash",
-    "gemini-flash-latest",
-    "gemini-2.5-flash-preview-09-2025",
-    "gemini-2.5-flash-image",
-    "gemini-2.5-flash-image-preview",
-    "gemini-3-pro-preview-11-2025",
-
+    "gemini-3-pro-preview"
 ]
 
 PUBLIC_API_MODELS = [

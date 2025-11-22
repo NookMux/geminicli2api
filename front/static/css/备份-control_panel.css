@@ -1,7 +1,3 @@
-/* ==================================
- * 箱宝的软萌UI设计 - 粉嫩白天模式
- * ================================== */
-
 @keyframes spin {
     from {
         transform: rotate(0deg);
@@ -1752,6 +1748,20 @@ select:focus {
 }
 
 /* --- 批量操作按钮 --- */
+.batch-selection {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.batch-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    align-items: center;
+}
+
 .batch-btn {
     background: var(--surface-bg);
     border: 1px solid var(--border-color);
@@ -1764,6 +1774,7 @@ select:focus {
     display: flex;
     align-items: center;
     gap: 5px;
+    flex: 0 0 auto;
 }
 
 .batch-btn:hover:not(:disabled) {
@@ -1787,6 +1798,30 @@ select:focus {
     background-color: rgba(245, 163, 163, 0.2);
     color: #a55555;
     border-color: rgba(245, 163, 163, 0.3);
+}
+
+/* --- 筛选容器新布局 --- */
+.filter-row {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.filter-item {
+    flex: 1;
+    min-width: 200px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.filter-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 0.9rem;
 }
 
 /* --- 使用统计卡片 --- */

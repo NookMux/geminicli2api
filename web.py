@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 # Import all routers
-from src.openai_router import router as openai_router
+# from src.openai_router import router as openai_router
 from src.gemini_router import router as gemini_router
 from src.web_routes import router as web_router
 
@@ -87,13 +87,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 挂载静态文件
+app.mount("/static", StaticFiles(directory="front/static"), name="static")
+
 # 挂载路由器
 # OpenAI兼容路由 - 处理OpenAI格式请求
-app.include_router(
-    openai_router,
-    prefix="",
-    tags=["OpenAI Compatible API"]
-)
+# app.include_router(
+#     openai_router,
+#     prefix="",
+#     tags=["OpenAI Compatible API"]
+# )
 
 # Gemini原生路由 - 处理Gemini格式请求
 app.include_router(
@@ -108,10 +111,6 @@ app.include_router(
     prefix="",
     tags=["Web Interface"]
 )
-
-# 静态文件路由 - 服务docs目录下的文件（如捐赠图片）
-app.mount("/docs", StaticFiles(directory="docs"), name="docs")
-app.mount("/static", StaticFiles(directory="front/static"), name="static")
 
 # 保活接口（仅响应 HEAD）
 @app.head("/keepalive")
