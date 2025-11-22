@@ -25,7 +25,7 @@
             <p>请输入密码</p>
             <div class="input-wrapper">
                 <i class="fas fa-lock input-icon"></i>
-                <input type="password" id="loginPassword" placeholder="输入密码" onkeypress="handlePasswordEnter(event)" />
+                <input type="password" id="loginPassword" placeholder="输入密码" />
             </div>
             <button class="btn" onclick="login()">
                 <i class="fas fa-sign-in-alt"></i> 进入
@@ -275,7 +275,27 @@
     </div>
     </div>
 
-    <script src="/static/js/control_panel.js"></script>
+    <!-- JavaScript 模块 -->
+    <!-- 通用工具函数 -->
+    <script src="/static/js/common.js"></script>
+
+    <!-- 功能模块 -->
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/manage.js"></script>
+    <script src="/static/js/usage.js"></script>
+    <script src="/static/js/config.js"></script>
+
+    <!-- 初始化脚本 -->
+    <script>
+        // 页面初始化
+        window.onload = function() {
+            showStatus('请输入密码登录', 'info');
+            // 移除旧的onkeypress事件，改为在auth.js中处理
+            document.getElementById('loginPassword').addEventListener('keypress', function(event) {
+                handleLoginEnter(event);
+            });
+        };
+    </script>
 </body>
 
 </html>
