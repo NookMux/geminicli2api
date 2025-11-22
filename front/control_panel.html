@@ -17,14 +17,14 @@
             <div class="login-icon">
                 <i class="fas fa-heart"></i>
             </div>
-            <h1>箱宝的GAPI小窝</h1>
-            <p>宝宝，请输入密码进入我的小窝～</p>
+            <h1>GeminiCli2API</h1>
+            <p>请输入密码</p>
             <div class="input-wrapper">
                 <i class="fas fa-lock input-icon"></i>
                 <input type="password" id="loginPassword" placeholder="输入密码" onkeypress="handlePasswordEnter(event)" />
             </div>
             <button class="btn" onclick="login()">
-                <i class="fas fa-sign-in-alt"></i> 进入小窝
+                <i class="fas fa-sign-in-alt"></i> 进入
             </button>
         </div>
 
@@ -33,7 +33,7 @@
             <div class="header-decoration">
                 <i class="fas fa-sparkles"></i>
             </div>
-            <h1>箱宝的GAPI小窝</h1>
+            <h1>GeminiCli2API</h1>
             <div id="statusSection"></div>
 
             <!-- 标签页 -->
@@ -97,8 +97,6 @@
             <!-- 文件管理标签页 -->
             <div id="manageTab" class="tab-content">
                 <h3><i class="fas fa-folder-open"></i> 凭证文件管理</h3>
-                <p>管理所有认证文件，查看状态和执行操作</p>
-
                 <div class="stats-container" id="statsContainer">
                     <div class="stat-item total">
                         <span class="stat-number" id="statTotal">0</span>
@@ -157,14 +155,10 @@
                     <label for="errorCodeFilter"><i class="fas fa-exclamation-triangle"></i> 错误码筛选：</label>
                     <select id="errorCodeFilter" class="filter-select" onchange="applyFilters()">
                         <option value="all">全部错误码</option>
-                        <option value="no-errors">无错误</option>
                         <option value="has-errors">有错误</option>
-                        <option value="400">错误码 400</option>
                         <option value="401">错误码 401</option>
                         <option value="403">错误码 403</option>
-                        <option value="404">错误码 404</option>
                         <option value="429">错误码 429</option>
-                        <option value="500">错误码 500</option>
                     </select>
 
                     <label for="pageSizeSelect"><i class="fas fa-list"></i> 每页显示：</label>
@@ -196,7 +190,6 @@
             <!-- 使用统计标签页 -->
             <div id="usageTab" class="tab-content">
                 <h3><i class="fas fa-chart-line"></i> 使用统计</h3>
-                <p>查看每个凭证文件的API调用统计和配额使用情况</p>
 
                 <div class="stats-container" id="usageStatsContainer">
                     <div class="stat-item total">
@@ -259,14 +252,12 @@
                         <div class="config-group">
                             <h4><i class="fas fa-key"></i> 密码配置</h4>
                             <div class="form-group">
-                                <label for="configApiPassword">API访问密码:</label>
+                                <label for="configApiPassword">APIKey:</label>
                                 <input type="text" id="configApiPassword" class="config-input" placeholder="pwd" />
-                                <small class="config-note">聊天API访问密码，用于OpenAI和Gemini API端点的认证</small>
                             </div>
                             <div class="form-group">
                                 <label for="configPanelPassword">控制面板密码:</label>
                                 <input type="text" id="configPanelPassword" class="config-input" placeholder="pwd" />
-                                <small class="config-note">控制面板访问密码，用于web界面登录认证</small>
                             </div>
                         </div>
                     </div>
