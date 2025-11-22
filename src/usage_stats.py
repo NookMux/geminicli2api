@@ -217,7 +217,10 @@ class UsageStats:
                 "pro_model_calls": 0,
                 "total_calls": 0,
                 "next_reset_time": next_reset.isoformat(),
-                "daily_limit_pro_models": 50,
+                # 默认 Pro 模型每日上限：100 次
+                # 实际上 Google 单凭证典型配额是 100 次 Pro + 900 次非 Pro
+                # 这里使用 100 / 1000 作为更贴近真实的默认值
+                "daily_limit_pro_models": 100,
                 "daily_limit_total": 1000
             }
             self._cache_dirty = True  # 标记缓存已修改
