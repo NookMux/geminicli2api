@@ -75,25 +75,26 @@ class UsageStats:
             
         return os.path.basename(filename)
     
-    def _is_gemini_2_5_pro(self, model_name: str) -> bool:
+    def _is_pro_model(self, model_name: str) -> bool:
         """
-        Check if model is gemini-2.5-pro variant (including prefixes and suffixes).
+        Check if model is any Pro variant (including prefixes and suffixes).
+        This covers gemini-2.5-pro, gemini-3-pro-preview, and future Pro models.
         """
         if not model_name:
             return False
-        
+
         try:
             from config import get_base_model_name, get_base_model_from_feature_model
-            
+
             # Remove feature prefixes
             # (removed fake streaming and anti-truncation prefixes)
 
-            # Remove thinking/search suffixes (-maxthinking, -nothinking, -search)
+            # Remove thinking suffix (-maxthinking)
             pure_base_model = get_base_model_name(model_name)
-            
-            # Check if the pure base model is exactly "gemini-2.5-pro"
-            return pure_base_model == "gemini-2.5-pro"
-            
+
+            # Check if the pure base model contains "pro" anywhere in the name
+            return "pro" in pure_base_model.lower()
+
         except ImportError:
             # Fallback logic if config import fails
             clean_model = model_name
@@ -101,13 +102,13 @@ class UsageStats:
                 if clean_model.startswith(prefix):
                     clean_model = clean_model[len(prefix):]
                     break
-            
-            for suffix in ["-maxthinking", "-nothinking", "-search"]:
+
+            for suffix in ["-maxthinking"]:
                 if clean_model.endswith(suffix):
                     clean_model = clean_model[:-len(suffix)]
                     break
-            
-            return clean_model == "gemini-2.5-pro"
+
+            return "pro" in clean_model.lower()
     
     async def _load_stats(self):
         """Load statistics from unified storage"""
@@ -130,16 +131,16 @@ class UsageStats:
                         
                         # 提取使用统计字段
                         usage_data = {
-                            "gemini_2_5_pro_calls": stats_data.get("gemini_2_5_pro_calls", 0),
+                            "pro_model_calls": stats_data.get("pro_model_calls", 0),
                             "total_calls": stats_data.get("total_calls", 0),
                             "next_reset_time": stats_data.get("next_reset_time"),
-                            "daily_limit_gemini_2_5_pro": stats_data.get("daily_limit_gemini_2_5_pro", 50),
+                            "daily_limit_pro_models": stats_data.get("daily_limit_pro_models", 50),
                             "daily_limit_total": stats_data.get("daily_limit_total", 1000)
                         }
-                        
+
                         # 只加载有实际使用数据的统计，或者有reset时间的
-                        if (usage_data.get("gemini_2_5_pro_calls", 0) > 0 or 
-                            usage_data.get("total_calls", 0) > 0 or 
+                        if (usage_data.get("pro_model_calls", 0) > 0 or
+                            usage_data.get("total_calls", 0) > 0 or
                             usage_data.get("next_reset_time")):
                             stats_cache[normalized_filename] = usage_data
                             processed_count += 1
@@ -177,10 +178,10 @@ class UsageStats:
             for filename, stats in self._stats_cache.items():
                 try:
                     stats_data = {
-                        "gemini_2_5_pro_calls": stats.get("gemini_2_5_pro_calls", 0),
+                        "pro_model_calls": stats.get("pro_model_calls", 0),
                         "total_calls": stats.get("total_calls", 0),
                         "next_reset_time": stats.get("next_reset_time"),
-                        "daily_limit_gemini_2_5_pro": stats.get("daily_limit_gemini_2_5_pro", 50),
+                        "daily_limit_pro_models": stats.get("daily_limit_pro_models", 50),
                         "daily_limit_total": stats.get("daily_limit_total", 1000)
                     }
                     
@@ -213,10 +214,10 @@ class UsageStats:
             
             next_reset = _get_next_utc_7am()
             self._stats_cache[normalized_filename] = {
-                "gemini_2_5_pro_calls": 0,
+                "pro_model_calls": 0,
                 "total_calls": 0,
                 "next_reset_time": next_reset.isoformat(),
-                "daily_limit_gemini_2_5_pro": 50,
+                "daily_limit_pro_models": 50,
                 "daily_limit_total": 1000
             }
             self._cache_dirty = True  # 标记缓存已修改
@@ -240,19 +241,19 @@ class UsageStats:
             
             # Simple comparison: if current time >= next reset time, then reset
             if now >= next_reset:
-                old_gemini_calls = stats.get("gemini_2_5_pro_calls", 0)
+                old_pro_calls = stats.get("pro_model_calls", 0)
                 old_total_calls = stats.get("total_calls", 0)
-                
+
                 # Reset counters and set new next reset time
                 new_next_reset = _get_next_utc_7am()
                 stats.update({
-                    "gemini_2_5_pro_calls": 0,
+                    "pro_model_calls": 0,
                     "total_calls": 0,
                     "next_reset_time": new_next_reset.isoformat()
                 })
-                
+
                 self._cache_dirty = True  # 标记缓存已修改
-                log.info(f"Daily quota reset performed. Previous stats - Gemini 2.5 Pro: {old_gemini_calls}, Total: {old_total_calls}")
+                log.info(f"Daily quota reset performed. Previous stats - Pro Models: {old_pro_calls}, Total: {old_total_calls}")
                 return True
             
             return False
@@ -274,16 +275,16 @@ class UsageStats:
                 reset_performed = self._check_and_reset_daily_quota(stats)
                 
                 # Increment counters
-                is_gemini_2_5_pro = self._is_gemini_2_5_pro(model_name)
-                
+                is_pro_model = self._is_pro_model(model_name)
+
                 stats["total_calls"] += 1
-                if is_gemini_2_5_pro:
-                    stats["gemini_2_5_pro_calls"] += 1
-                
+                if is_pro_model:
+                    stats["pro_model_calls"] += 1
+
                 self._cache_dirty = True  # 标记缓存已修改
-                
+
                 log.debug(f"Usage recorded - File: {normalized_filename}, Model: {model_name}, "
-                         f"Gemini 2.5 Pro: {stats['gemini_2_5_pro_calls']}/{stats.get('daily_limit_gemini_2_5_pro', 100)}, "
+                         f"Pro Models: {stats['pro_model_calls']}/{stats.get('daily_limit_pro_models', 100)}, "
                          f"Total: {stats['total_calls']}/{stats.get('daily_limit_total', 1000)}")
                 
                 if reset_performed:
@@ -311,9 +312,9 @@ class UsageStats:
                 self._check_and_reset_daily_quota(stats)
                 return {
                     "filename": normalized_filename,
-                    "gemini_2_5_pro_calls": stats.get("gemini_2_5_pro_calls", 0),
+                    "pro_model_calls": stats.get("pro_model_calls", 0),
                     "total_calls": stats.get("total_calls", 0),
-                    "daily_limit_gemini_2_5_pro": stats.get("daily_limit_gemini_2_5_pro", 100),
+                    "daily_limit_pro_models": stats.get("daily_limit_pro_models", 100),
                     "daily_limit_total": stats.get("daily_limit_total", 1000),
                     "next_reset_time": stats.get("next_reset_time")
                 }
@@ -324,9 +325,9 @@ class UsageStats:
                     # Check for daily reset for each file
                     self._check_and_reset_daily_quota(stats)
                     all_stats[filename] = {
-                        "gemini_2_5_pro_calls": stats.get("gemini_2_5_pro_calls", 0),
+                        "pro_model_calls": stats.get("pro_model_calls", 0),
                         "total_calls": stats.get("total_calls", 0),
-                        "daily_limit_gemini_2_5_pro": stats.get("daily_limit_gemini_2_5_pro", 50),
+                        "daily_limit_pro_models": stats.get("daily_limit_pro_models", 50),
                         "daily_limit_total": stats.get("daily_limit_total", 1000),
                         "next_reset_time": stats.get("next_reset_time")
                     }
@@ -339,45 +340,45 @@ class UsageStats:
             await self.initialize()
         
         all_stats = await self.get_usage_stats()
-        
-        total_gemini_2_5_pro = 0
+
+        total_pro_models = 0
         total_all_models = 0
         total_files = len(all_stats)
-        
+
         for stats in all_stats.values():
-            total_gemini_2_5_pro += stats["gemini_2_5_pro_calls"]
+            total_pro_models += stats["pro_model_calls"]
             total_all_models += stats["total_calls"]
-        
+
         return {
             "total_files": total_files,
-            "total_gemini_2_5_pro_calls": total_gemini_2_5_pro,
+            "total_pro_model_calls": total_pro_models,
             "total_all_model_calls": total_all_models,
-            "avg_gemini_2_5_pro_per_file": total_gemini_2_5_pro / max(total_files, 1),
+            "avg_pro_model_per_file": total_pro_models / max(total_files, 1),
             "avg_total_per_file": total_all_models / max(total_files, 1),
             "next_reset_time": _get_next_utc_7am().isoformat()
         }
     
-    async def update_daily_limits(self, filename: str, gemini_2_5_pro_limit: int = None, 
+    async def update_daily_limits(self, filename: str, pro_models_limit: int = None,
                                 total_limit: int = None):
         """Update daily limits for a specific credential file."""
         if not self._initialized:
             await self.initialize()
-        
+
         with self._lock:
             try:
                 normalized_filename = self._normalize_filename(filename)
                 stats = self._get_or_create_stats(normalized_filename)
-                
-                if gemini_2_5_pro_limit is not None:
-                    stats["daily_limit_gemini_2_5_pro"] = gemini_2_5_pro_limit
-                
+
+                if pro_models_limit is not None:
+                    stats["daily_limit_pro_models"] = pro_models_limit
+
                 if total_limit is not None:
                     stats["daily_limit_total"] = total_limit
-                
+
                 log.info(f"Updated daily limits for {normalized_filename}: "
-                        f"Gemini 2.5 Pro = {stats.get('daily_limit_gemini_2_5_pro', 100)}, "
+                        f"Pro Models = {stats.get('daily_limit_pro_models', 100)}, "
                         f"Total = {stats.get('daily_limit_total', 1000)}")
-                
+
             except Exception as e:
                 log.error(f"Failed to update daily limits: {e}")
                 raise
@@ -396,7 +397,7 @@ class UsageStats:
                     # Manual reset: reset counters and set new next reset time
                     next_reset = _get_next_utc_7am()
                     self._stats_cache[normalized_filename].update({
-                        "gemini_2_5_pro_calls": 0,
+                        "pro_model_calls": 0,
                         "total_calls": 0,
                         "next_reset_time": next_reset.isoformat()
                     })
@@ -406,7 +407,7 @@ class UsageStats:
                 next_reset = _get_next_utc_7am()
                 for filename, stats in self._stats_cache.items():
                     stats.update({
-                        "gemini_2_5_pro_calls": 0,
+                        "pro_model_calls": 0,
                         "total_calls": 0,
                         "next_reset_time": next_reset.isoformat()
                     })
