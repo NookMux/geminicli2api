@@ -87,6 +87,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 挂载静态文件
+app.mount("/static", StaticFiles(directory="front/static"), name="static")
+
 # 挂载路由器
 # OpenAI兼容路由 - 处理OpenAI格式请求
 # app.include_router(
