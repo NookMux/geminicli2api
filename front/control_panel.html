@@ -53,14 +53,18 @@
                 </button>
             </div>
             <div id="oauthTab" class="tab-content active">
-                <div class="status info">
-                    <strong>说明：</strong>认证将默认获取当前Google账号下所有项目的凭证。
+                <div class="form-group">
+                    <label for="projectId">
+                        <i class="fas fa-project-diagram"></i> 项目ID (可选):
+                    </label>
+                    <input type="text" id="projectId" placeholder="留空将自动检测项目" />
                 </div>
 
-                <!-- Hidden input to default to getting all project credentials -->
-                <div style="display: none;">
-                    <input type="checkbox" id="getAllProjectsCreds" checked>
-                    <input type="text" id="projectId" value="" />
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="getAllProjectsCreds">
+                        <i class="fas fa-layer-group"></i> 获取当前账号的所有项目凭证
+                    </label>
                 </div>
 
                 <button class="btn" id="getAuthBtn" onclick="startAuth()">
