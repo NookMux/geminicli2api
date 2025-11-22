@@ -1,5 +1,5 @@
 // ===========================
-// 凭证管理功能
+// 凭证管理功能 (jQuery重构版)
 // ===========================
 
 // 凭证数据和相关变量
@@ -25,12 +25,12 @@ let statsData = {
  * 刷新凭证状态
  */
 async function refreshCredsStatus() {
-    const credsLoading = document.getElementById('credsLoading');
-    const credsList = document.getElementById('credsList');
+    const $credsLoading = $('#credsLoading');
+    const $credsList = $('#credsList');
 
     try {
-        credsLoading.style.display = 'block';
-        credsList.innerHTML = '';
+        $credsLoading.show();
+        $credsList.empty();
 
         const response = await fetch('/creds/status', {
             method: 'GET',
@@ -52,7 +52,7 @@ async function refreshCredsStatus() {
     } catch (error) {
         showStatus(`网络错误: ${error.message}`, 'error');
     } finally {
-        credsLoading.style.display = 'none';
+        $credsLoading.hide();
     }
 }
 
@@ -85,21 +85,21 @@ function calculateStats() {
  * 更新错误码徽章
  */
 function updateErrorCodeBadges() {
-    const errorCodeBadges = document.getElementById('errorCodeBadges');
-    errorCodeBadges.innerHTML = '';
+    const $errorCodeBadges = $('#errorCodeBadges');
+    $errorCodeBadges.empty();
 
     if (availableErrorCodes.size === 0) {
-        errorCodeBadges.innerHTML = '<span style="color: #4CAF50;">所有文件都无错误</span>';
+        $errorCodeBadges.html('<span style="color: #4CAF50;">所有文件都无错误</span>');
         return;
     }
 
     const sortedCodes = Array.from(availableErrorCodes).sort((a, b) => a - b);
     sortedCodes.forEach(code => {
-        const badge = document.createElement('span');
-        badge.className = 'error-code-badge';
-        badge.textContent = code;
-        badge.onclick = () => filterByErrorCode(code);
-        errorCodeBadges.appendChild(badge);
+        const $badge = $('<span>')
+            .addClass('error-code-badge')
+            .text(code)
+            .click(() => filterByErrorCode(code));
+        $errorCodeBadges.append($badge);
     });
 }
 
@@ -108,7 +108,7 @@ function updateErrorCodeBadges() {
  * @param {number} code - 错误码
  */
 function filterByErrorCode(code) {
-    document.getElementById('errorCodeFilter').value = code.toString();
+    $('#errorCodeFilter').val(code.toString());
     applyFilters();
 }
 
@@ -116,17 +116,17 @@ function filterByErrorCode(code) {
  * 更新统计显示
  */
 function updateStatsDisplay() {
-    document.getElementById('statTotal').textContent = statsData.total;
-    document.getElementById('statNormal').textContent = statsData.normal;
-    document.getElementById('statDisabled').textContent = statsData.disabled;
+    $('#statTotal').text(statsData.total);
+    $('#statNormal').text(statsData.normal);
+    $('#statDisabled').text(statsData.disabled);
 }
 
 /**
  * 应用筛选条件
  */
 function applyFilters() {
-    const statusFilter = document.getElementById('statusFilter').value;
-    const errorCodeFilter = document.getElementById('errorCodeFilter').value;
+    const statusFilter = $('#statusFilter').val();
+    const errorCodeFilter = $('#errorCodeFilter').val();
     currentFilter = statusFilter;
     currentErrorCodeFilter = errorCodeFilter;
     filteredCredsData = {};
@@ -190,25 +190,25 @@ function getTotalPages() {
  * 渲染凭证列表
  */
 function renderCredsList() {
-    const credsList = document.getElementById('credsList');
-    credsList.innerHTML = '';
+    const $credsList = $('#credsList');
+    $credsList.empty();
 
     const currentPageData = getCurrentPageData();
 
     if (currentPageData.length === 0) {
         const message = Object.keys(credsData).length === 0 ?
             '暂无凭证文件' : '当前筛选条件下暂无数据';
-        credsList.innerHTML = `<p style="text-align: center; color: #666;">${message}</p>`;
-        document.getElementById('paginationContainer').style.display = 'none';
+        $credsList.html(`<p style="text-align: center; color: #666;">${message}</p>`);
+        $('#paginationContainer').hide();
         return;
     }
 
     for (const [fullPath, credInfo] of currentPageData) {
-        const card = createCredCard(fullPath, credInfo);
-        credsList.appendChild(card);
+        const $card = createCredCard(fullPath, credInfo);
+        $credsList.append($card);
     }
 
-    document.getElementById('paginationContainer').style.display = getTotalPages() > 1 ? 'flex' : 'none';
+    $('#paginationContainer').toggle(getTotalPages() > 1);
     updateBatchControls();
 }
 
@@ -221,11 +221,12 @@ function updatePagination() {
     const startItem = (currentPage - 1) * pageSize + 1;
     const endItem = Math.min(currentPage * pageSize, totalItems);
 
-    document.getElementById('paginationInfo').textContent =
-        `第 ${currentPage} 页，共 ${totalPages} 页 (显示 ${startItem}-${endItem}，共 ${totalItems} 项)`;
+    $('#paginationInfo').text(
+        `第 ${currentPage} 页，共 ${totalPages} 页 (显示 ${startItem}-${endItem}，共 ${totalItems} 项)`
+    );
 
-    document.getElementById('prevPageBtn').disabled = currentPage <= 1;
-    document.getElementById('nextPageBtn').disabled = currentPage >= totalPages;
+    $('#prevPageBtn').prop('disabled', currentPage <= 1);
+    $('#nextPageBtn').prop('disabled', currentPage >= totalPages);
 }
 
 /**
@@ -247,7 +248,7 @@ function changePage(direction) {
  * 更改页面大小
  */
 function changePageSize() {
-    pageSize = parseInt(document.getElementById('pageSizeSelect').value);
+    pageSize = parseInt($('#pageSizeSelect').val());
     currentPage = 1;
     renderCredsList();
     updatePagination();
@@ -257,14 +258,11 @@ function changePageSize() {
  * 创建凭证卡片
  * @param {string} fullPath - 完整路径
  * @param {Object} credInfo - 凭证信息
- * @returns {HTMLElement} 凭证卡片元素
+ * @returns {jQuery} 凭证卡片元素
  */
 function createCredCard(fullPath, credInfo) {
-    const div = document.createElement('div');
     const status = credInfo.status;
     const filename = credInfo.filename;
-
-    div.className = 'cred-card';
 
     let statusDotClass = 'status-dot';
     if (status.disabled) {
@@ -281,9 +279,9 @@ function createCredCard(fullPath, credInfo) {
     }
 
     actionButtons += `
-                <button class="cred-btn email" onclick="fetchUserEmail('${filename}')">获取邮箱</button>
-                <button class="cred-btn delete" data-filename="${filename}" data-action="delete">删除</button>
-            `;
+        <button class="cred-btn email" onclick="fetchUserEmail('${filename}')">获取邮箱</button>
+        <button class="cred-btn delete" data-filename="${filename}" data-action="delete">删除</button>
+    `;
 
     let emailInfo = '';
     if (credInfo.user_email) {
@@ -292,39 +290,34 @@ function createCredCard(fullPath, credInfo) {
         emailInfo = `<div class="cred-email">点击"获取邮箱"来刷新</div>`;
     }
 
-    div.innerHTML = `
-                <div class="cred-header">
-                    <div class="cred-filename">
-                        <span class="${statusDotClass}"></span>
-                        <span>${filename}</span>
-                    </div>
-                    <input type="checkbox" class="file-checkbox" data-filename="${filename}" onchange="toggleFileSelection('${filename}')">
-                </div>
-                ${emailInfo}
-                <div class="cred-actions">${actionButtons}</div>
-            `;
+    const $div = $('<div>').addClass('cred-card').html(`
+        <div class="cred-header">
+            <div class="cred-filename">
+                <span class="${statusDotClass}"></span>
+                <span>${filename}</span>
+            </div>
+            <input type="checkbox" class="file-checkbox" data-filename="${filename}" onchange="toggleFileSelection('${filename}')">
+        </div>
+        ${emailInfo}
+        <div class="cred-actions">${actionButtons}</div>
+    `);
 
-    const actionButtonElements = div.querySelectorAll('[data-filename][data-action]');
-    actionButtonElements.forEach(button => {
-        button.addEventListener('click', function (e) {
-            e.stopPropagation(); // Prevent card click event
-            const filename = this.getAttribute('data-filename');
-            const action = this.getAttribute('data-action');
-            if (action === 'delete') {
-                deleteCred(filename);
-            } else {
-                credAction(filename, action);
-            }
-        });
+    $div.find('[data-filename][data-action]').on('click', function(e) {
+        e.stopPropagation();
+        const filename = $(this).data('filename');
+        const action = $(this).data('action');
+        if (action === 'delete') {
+            deleteCred(filename);
+        } else {
+            credAction(filename, action);
+        }
     });
 
-    // Add event listener for checkbox as well to stop propagation
-    const checkbox = div.querySelector('.file-checkbox');
-    checkbox.addEventListener('click', function (e) {
+    $div.find('.file-checkbox').on('click', function(e) {
         e.stopPropagation();
     });
 
-    return div;
+    return $div;
 }
 
 /**
@@ -385,20 +378,18 @@ function toggleFileSelection(filename) {
  * 切换全选
  */
 function toggleSelectAll() {
-    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
-    const fileCheckboxes = document.querySelectorAll('.file-checkbox');
+    const $selectAllCheckbox = $('#selectAllCheckbox');
+    const $fileCheckboxes = $('.file-checkbox');
 
-    if (selectAllCheckbox.checked) {
-        fileCheckboxes.forEach(checkbox => {
-            const filename = checkbox.getAttribute('data-filename');
+    if ($selectAllCheckbox.prop('checked')) {
+        $fileCheckboxes.each(function() {
+            const filename = $(this).data('filename');
             selectedCredFiles.add(filename);
-            checkbox.checked = true;
+            $(this).prop('checked', true);
         });
     } else {
         selectedCredFiles.clear();
-        fileCheckboxes.forEach(checkbox => {
-            checkbox.checked = false;
-        });
+        $fileCheckboxes.prop('checked', false);
     }
     updateBatchControls();
 }
@@ -408,37 +399,36 @@ function toggleSelectAll() {
  */
 function updateBatchControls() {
     const selectedCount = selectedCredFiles.size;
-    const selectedCountElement = document.getElementById('selectedCount');
-    const batchEnableBtn = document.getElementById('batchEnableBtn');
-    const batchDisableBtn = document.getElementById('batchDisableBtn');
-    const batchDeleteBtn = document.getElementById('batchDeleteBtn');
-    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    const $selectedCountElement = $('#selectedCount');
+    const $batchEnableBtn = $('#batchEnableBtn');
+    const $batchDisableBtn = $('#batchDisableBtn');
+    const $batchDeleteBtn = $('#batchDeleteBtn');
+    const $selectAllCheckbox = $('#selectAllCheckbox');
 
-    selectedCountElement.textContent = `已选择 ${selectedCount} 项`;
+    $selectedCountElement.text(`已选择 ${selectedCount} 项`);
 
     const hasSelection = selectedCount > 0;
-    batchEnableBtn.disabled = !hasSelection;
-    batchDisableBtn.disabled = !hasSelection;
-    batchDeleteBtn.disabled = !hasSelection;
+    $batchEnableBtn.prop('disabled', !hasSelection);
+    $batchDisableBtn.prop('disabled', !hasSelection);
+    $batchDeleteBtn.prop('disabled', !hasSelection);
 
-    const currentPageFileCount = document.querySelectorAll('.file-checkbox').length;
-    const currentPageSelectedCount = Array.from(document.querySelectorAll('.file-checkbox'))
-        .filter(checkbox => selectedCredFiles.has(checkbox.getAttribute('data-filename'))).length;
+    const currentPageFileCount = $('.file-checkbox').length;
+    const currentPageSelectedCount = $('.file-checkbox')
+        .filter(function() {
+            return selectedCredFiles.has($(this).data('filename'));
+        }).length;
 
     if (currentPageSelectedCount === 0) {
-        selectAllCheckbox.indeterminate = false;
-        selectAllCheckbox.checked = false;
+        $selectAllCheckbox.prop('indeterminate', false).prop('checked', false);
     } else if (currentPageSelectedCount === currentPageFileCount) {
-        selectAllCheckbox.indeterminate = false;
-        selectAllCheckbox.checked = true;
+        $selectAllCheckbox.prop('indeterminate', false).prop('checked', true);
     } else {
-        selectAllCheckbox.indeterminate = true;
-        selectAllCheckbox.checked = false;
+        $selectAllCheckbox.prop('indeterminate', true).prop('checked', false);
     }
 
-    document.querySelectorAll('.file-checkbox').forEach(checkbox => {
-        const filename = checkbox.getAttribute('data-filename');
-        checkbox.checked = selectedCredFiles.has(filename);
+    $('.file-checkbox').each(function() {
+        const filename = $(this).data('filename');
+        $(this).prop('checked', selectedCredFiles.has(filename));
     });
 }
 

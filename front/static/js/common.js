@@ -1,5 +1,5 @@
 // ===========================
-// 通用工具函数
+// 通用工具函数 (jQuery重构版)
 // ===========================
 
 /**
@@ -8,10 +8,10 @@
  * @param {string} type - 消息类型 ('info', 'success', 'error', 'warning')
  */
 function showStatus(message, type = 'info') {
-    const statusSection = document.getElementById('statusSection');
-    if (statusSection) {
-        statusSection.innerHTML = `<div class="status ${type}">${message}</div>`;
-        statusSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const $statusSection = $('#statusSection');
+    if ($statusSection.length) {
+        $statusSection.html(`<div class="status ${type}">${message}</div>`)
+            .get(0).scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 }
 
@@ -27,14 +27,12 @@ function getAuthHeaders() {
 }
 
 /**
- * 处理密码回车事件
+ * 处理密码回车事件 (jQuery重构版)
  * @param {Event} event - 键盘事件
  * @param {Function} callback - 回调函数
  */
 function handlePasswordEnter(event, callback) {
-    if (event.key === 'Enter') {
-        callback();
-    }
+    if (event.key === 'Enter') callback();
 }
 
 /**
@@ -53,41 +51,51 @@ function formatTime(isoString) {
 }
 
 /**
- * 根据百分比获取进度条样式类
- * @param {number} percent - 百分比
- * @returns {string} 样式类名
+ * 进度条样式类获取器
  */
-function getProgressClass(percent) {
-    if (percent >= 90) return 'danger';
-    if (percent >= 70) return 'warning';
-    return 'gemini';
-}
+const ProgressUtils = {
+    /**
+     * 根据百分比获取进度条样式类
+     * @param {number} percent - 百分比
+     * @returns {string} 样式类名
+     */
+    getClass(percent) {
+        if (percent >= 90) return 'danger';
+        if (percent >= 70) return 'warning';
+        return 'gemini';
+    },
+
+    /**
+     * 根据百分比获取总进度条样式类
+     * @param {number} percent - 百分比
+     * @returns {string} 样式类名
+     */
+    getTotalClass(percent) {
+        if (percent >= 90) return 'danger';
+        if (percent >= 70) return 'warning';
+        return 'total';
+    }
+};
 
 /**
- * 根据百分比获取总进度条样式类
- * @param {number} percent - 百分比
- * @returns {string} 样式类名
- */
-function getTotalProgressClass(percent) {
-    if (percent >= 90) return 'danger';
-    if (percent >= 70) return 'warning';
-    return 'total';
-}
-
-/**
- * 标签页切换功能
+ * 标签页切换功能 (jQuery重构版)
  * @param {Event} event - 点击事件
  * @param {string} tabName - 标签页名称
  */
 function switchTab(event, tabName) {
-    document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    $('.tab').removeClass('active');
+    $('.tab-content').removeClass('active');
 
-    event.currentTarget.classList.add('active');
-    document.getElementById(tabName + 'Tab').classList.add('active');
+    $(event.currentTarget).addClass('active');
+    $(`#${tabName}Tab`).addClass('active');
 
     // 触发对应标签页的初始化函数
-    if (typeof window[`init${tabName.charAt(0).toUpperCase() + tabName.slice(1)}Tab`] === 'function') {
-        window[`init${tabName.charAt(0).toUpperCase() + tabName.slice(1)}Tab`]();
+    const initFn = window[`init${tabName.charAt(0).toUpperCase() + tabName.slice(1)}Tab`];
+    if (typeof initFn === 'function') {
+        initFn();
     }
 }
+
+// 向后兼容性
+window.getProgressClass = ProgressUtils.getClass;
+window.getTotalProgressClass = ProgressUtils.getTotalClass;

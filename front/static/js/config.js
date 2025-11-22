@@ -1,5 +1,5 @@
 // ===========================
-// 配置管理功能
+// 配置管理功能 (jQuery重构版)
 // ===========================
 
 // 配置管理相关变量
@@ -14,12 +14,12 @@ let envLockedFields = new Set();
  * 加载配置
  */
 async function loadConfig() {
-    const configLoading = document.getElementById('configLoading');
-    const configForm = document.getElementById('configForm');
+    const $configLoading = $('#configLoading');
+    const $configForm = $('#configForm');
 
     try {
-        configLoading.style.display = 'block';
-        configForm.classList.add('hidden');
+        $configLoading.show();
+        $configForm.addClass('hidden');
 
         const response = await fetch('/config/get', {
             method: 'GET',
@@ -32,7 +32,7 @@ async function loadConfig() {
             currentConfig = data.config;
             envLockedFields = new Set(data.env_locked || []);
             populateConfigForm();
-            configForm.classList.remove('hidden');
+            $configForm.removeClass('hidden');
             showStatus('配置加载成功', 'success');
         } else {
             showStatus(`加载配置失败: ${data.detail || data.error || '未知错误'}`, 'error');
@@ -40,7 +40,7 @@ async function loadConfig() {
     } catch (error) {
         showStatus(`网络错误: ${error.message}`, 'error');
     } finally {
-        configLoading.style.display = 'none';
+        $configLoading.hide();
     }
 }
 
@@ -58,17 +58,15 @@ function populateConfigForm() {
  * @param {string} value - 字段值
  */
 function setConfigField(fieldId, value) {
-    const field = document.getElementById(fieldId);
-    if (field) {
-        field.value = value;
+    const $field = $(`#${fieldId}`);
+    if ($field.length) {
+        $field.val(value);
 
         const configKey = fieldId.replace(/([A-Z])/g, '_$1').toLowerCase();
         if (envLockedFields.has(configKey)) {
-            field.disabled = true;
-            field.classList.add('env-locked');
+            $field.prop('disabled', true).addClass('env-locked');
         } else {
-            field.disabled = false;
-            field.classList.remove('env-locked');
+            $field.prop('disabled', false).removeClass('env-locked');
         }
     }
 }
@@ -79,9 +77,9 @@ function setConfigField(fieldId, value) {
 async function saveConfig() {
     try {
         const config = {
-            ...currentConfig, // Preserve existing settings
-            api_password: document.getElementById('configApiPassword').value.trim(),
-            panel_password: document.getElementById('configPanelPassword').value.trim(),
+            ...currentConfig,
+            api_password: $('#configApiPassword').val().trim(),
+            panel_password: $('#configPanelPassword').val().trim(),
         };
 
         const response = await fetch('/config/save', {

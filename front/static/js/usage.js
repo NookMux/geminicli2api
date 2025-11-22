@@ -1,5 +1,5 @@
 // ===========================
-// 使用统计功能
+// 使用统计功能 (jQuery重构版)
 // ===========================
 
 // 使用统计相关变量
@@ -13,12 +13,12 @@ let usageStatsData = {};
  * 刷新使用统计
  */
 async function refreshUsageStats() {
-    const usageLoading = document.getElementById('usageLoading');
-    const usageList = document.getElementById('usageList');
+    const $usageLoading = $('#usageLoading');
+    const $usageList = $('#usageList');
 
     try {
-        usageLoading.style.display = 'block';
-        usageList.innerHTML = '';
+        $usageLoading.show();
+        $usageList.empty();
 
         const [statsResponse, aggregatedResponse] = await Promise.all([
             fetch('/usage/stats', { method: 'GET', headers: getAuthHeaders() }),
@@ -31,9 +31,9 @@ async function refreshUsageStats() {
         if (statsResponse.ok && aggregatedResponse.ok) {
             usageStatsData = statsData.data;
 
-            document.getElementById('totalApiCalls').textContent = aggregatedData.data.total_all_model_calls || 0;
-            document.getElementById('geminiProCalls').textContent = aggregatedData.data.total_pro_model_calls || 0;
-            document.getElementById('totalFiles').textContent = aggregatedData.data.total_files || 0;
+            $('#totalApiCalls').text(aggregatedData.data.total_all_model_calls || 0);
+            $('#geminiProCalls').text(aggregatedData.data.total_pro_model_calls || 0);
+            $('#totalFiles').text(aggregatedData.data.total_files || 0);
 
             renderUsageList();
             showStatus(`已加载 ${aggregatedData.data.total_files} 个文件的使用统计`, 'success');
@@ -43,7 +43,7 @@ async function refreshUsageStats() {
     } catch (error) {
         showStatus(`网络错误: ${error.message}`, 'error');
     } finally {
-        usageLoading.style.display = 'none';
+        $usageLoading.hide();
     }
 }
 
@@ -51,17 +51,17 @@ async function refreshUsageStats() {
  * 渲染使用统计列表
  */
 function renderUsageList() {
-    const usageList = document.getElementById('usageList');
-    usageList.innerHTML = '';
+    const $usageList = $('#usageList');
+    $usageList.empty();
 
     if (Object.keys(usageStatsData).length === 0) {
-        usageList.innerHTML = '<p style="text-align: center; color: #666;">暂无使用统计数据</p>';
+        $usageList.html('<p style="text-align: center; color: #666;">暂无使用统计数据</p>');
         return;
     }
 
     for (const [filename, stats] of Object.entries(usageStatsData)) {
-        const card = createUsageCard(filename, stats);
-        usageList.appendChild(card);
+        const $card = createUsageCard(filename, stats);
+        $usageList.append($card);
     }
 }
 
@@ -69,16 +69,13 @@ function renderUsageList() {
  * 创建使用统计卡片
  * @param {string} filename - 文件名
  * @param {Object} stats - 统计数据
- * @returns {HTMLElement} 使用统计卡片元素
+ * @returns {jQuery} 使用统计卡片元素
  */
 function createUsageCard(filename, stats) {
-    const div = document.createElement('div');
-    div.className = 'usage-card';
-
     const geminiPercent = Math.min((stats.pro_model_calls || 0) / (stats.daily_limit_pro_models || 100) * 100, 100);
     const totalPercent = Math.min((stats.total_calls || 0) / (stats.daily_limit_total || 1000) * 100, 100);
 
-    div.innerHTML = `
+    return $('<div>').addClass('usage-card').html(`
         <div class="usage-header">
             <div class="usage-filename">${filename}</div>
         </div>
@@ -113,9 +110,7 @@ function createUsageCard(filename, stats) {
         <div class="usage-actions">
             <button class="usage-btn reset" onclick="resetSingleUsageStats('${filename}')">重置统计</button>
         </div>
-    `;
-
-    return div;
+    `);
 }
 
 // ===========================

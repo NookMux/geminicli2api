@@ -14,7 +14,7 @@ let authToken = '';
  * 用户登录
  */
 async function login() {
-    const password = document.getElementById('loginPassword').value;
+    const password = $('#loginPassword').val();
     if (!password) {
         showStatus('请输入密码', 'error');
         return;
@@ -31,9 +31,9 @@ async function login() {
 
         if (response.ok) {
             authToken = data.token;
-            window.authToken = authToken; // 存储到全局变量供其他模块使用
-            document.getElementById('loginSection').classList.add('hidden');
-            document.getElementById('mainSection').classList.remove('hidden');
+            window.authToken = authToken;
+            $('#loginSection').addClass('hidden');
+            $('#mainSection').removeClass('hidden');
             showStatus('登录成功', 'success');
         } else {
             showStatus(`登录失败: ${data.detail || data.error || '密码错误'}`, 'error');
@@ -45,7 +45,6 @@ async function login() {
 
 /**
  * 处理登录密码框的回车事件
- * @param {Event} event - 键盘事件
  */
 function handleLoginEnter(event) {
     handlePasswordEnter(event, login);
@@ -59,13 +58,12 @@ function handleLoginEnter(event) {
  * 开始OAuth认证流程
  */
 async function startAuth() {
-    const projectId = document.getElementById('projectId').value.trim();
-    const getAllProjects = document.getElementById('getAllProjectsCreds').checked;
+    const projectId = $('#projectId').val().trim();
+    const getAllProjects = $('#getAllProjectsCreds').prop('checked');
     currentProjectId = projectId || null;
 
-    const btn = document.getElementById('getAuthBtn');
-    btn.disabled = true;
-    btn.textContent = '正在获取认证链接...';
+    const $btn = $('#getAuthBtn');
+    $btn.prop('disabled', true).text('正在获取认证链接...');
 
     try {
         const requestBody = {};
@@ -90,9 +88,8 @@ async function startAuth() {
         const data = await response.json();
 
         if (response.ok) {
-            document.getElementById('authUrl').href = data.auth_url;
-            document.getElementById('authUrl').textContent = data.auth_url;
-            document.getElementById('authUrlSection').classList.remove('hidden');
+            $('#authUrl').attr('href', data.auth_url).text(data.auth_url);
+            $('#authUrlSection').removeClass('hidden');
 
             if (getAllProjects) {
                 showStatus('批量并发认证链接已生成，完成授权后将并发为所有可访问项目生成凭证文件', 'info');
@@ -108,8 +105,7 @@ async function startAuth() {
     } catch (error) {
         showStatus(`网络错误: ${error.message}`, 'error');
     } finally {
-        btn.disabled = false;
-        btn.textContent = '获取认证链接';
+        $btn.prop('disabled', false).text('获取认证链接');
     }
 }
 
@@ -121,9 +117,8 @@ async function startAuth() {
  * 处理回调URL
  */
 async function processCallbackUrl() {
-    const callbackUrlInput = document.getElementById('callbackUrlInput');
-    const callbackUrl = callbackUrlInput.value.trim();
-    const getAllProjects = document.getElementById('getAllProjectsCreds').checked;
+    const callbackUrl = $('#callbackUrlInput').val().trim();
+    const getAllProjects = $('#getAllProjectsCreds').prop('checked');
 
     if (!callbackUrl) {
         showStatus('请输入回调URL', 'error');
@@ -147,15 +142,14 @@ async function processCallbackUrl() {
     }
 
     try {
-        const projectIdInput = document.getElementById('projectId');
-        const projectId = projectIdInput ? projectIdInput.value.trim() : null;
+        const projectId = $('#projectId').val().trim() || null;
 
         const response = await fetch('/auth/callback-url', {
             method: 'POST',
             headers: getAuthHeaders(),
             body: JSON.stringify({
                 callback_url: callbackUrl,
-                project_id: projectId || null,
+                project_id: projectId,
                 get_all_projects: getAllProjects
             })
         });
@@ -179,15 +173,16 @@ async function processCallbackUrl() {
                 });
             }
 
-            document.getElementById('credentialsContent').textContent = resultText;
-            document.getElementById('credentialsSection').classList.remove('hidden');
+            $('#credentialsContent').text(resultText);
+            $('#credentialsSection').removeClass('hidden');
             showStatus(`✅ 批量并发认证完成！成功生成 ${results.success.length} 个项目的凭证文件${results.failed.length > 0 ? `，${results.failed.length} 个项目失败` : ''}`, 'success');
 
         } else if (result.credentials) {
             showStatus(result.message || '从回调URL获取凭证成功！', 'success');
-            document.getElementById('credentialsContent').innerHTML =
-                '<pre>' + JSON.stringify(result.credentials, null, 2) + '</pre>';
-            document.getElementById('credentialsSection').classList.remove('hidden');
+            $('#credentialsContent').html(
+                '<pre>' + JSON.stringify(result.credentials, null, 2) + '</pre>'
+            );
+            $('#credentialsSection').removeClass('hidden');
 
         } else if (result.requires_manual_project_id) {
             showStatus('需要手动指定项目ID，请在高级选项中填入Google Cloud项目ID后重试', 'error');
@@ -201,7 +196,7 @@ async function processCallbackUrl() {
             showStatus(result.error || '从回调URL获取凭证失败', 'error');
         }
 
-        callbackUrlInput.value = '';
+        $('#callbackUrlInput').val('');
     } catch (error) {
         console.error('从回调URL获取凭证时出错:', error);
         showStatus(`从回调URL获取凭证失败: ${error.message}`, 'error');
@@ -212,6 +207,5 @@ async function processCallbackUrl() {
  * 初始化认证标签页
  */
 function initAuthTab() {
-    // 认证标签页初始化时不需要特别操作
     console.log('认证标签页已加载');
 }
