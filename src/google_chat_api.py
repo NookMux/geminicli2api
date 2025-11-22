@@ -26,7 +26,7 @@ from config import (
 from .httpx_client import http_client, create_streaming_client_with_kwargs
 from log import log
 from .credential_manager import CredentialManager
-from .usage_stats import record_successful_call
+from .usage_stats import record_successful_call, get_usage_stats_instance
 from .utils import get_user_agent
 
 def _create_error_response(message: str, status_code: int = 500) -> Response:
@@ -59,6 +59,103 @@ async def _handle_api_error(credential_manager: CredentialManager, status_code: 
         else:
             log.warning(f"Google API returned status {status_code} - auto ban triggered, rotating credentials")
         await credential_manager.force_rotate_credential()
+
+
+async def _is_quota_available_for_credential(credential_file: str, model_name: str) -> bool:
+    """
+    检查指定凭证在当前模型上的每日配额是否仍然可用。
+
+    使用 usage_stats 中的统计数据：
+    - pro_model_calls / daily_limit_pro_models
+    - total_calls / daily_limit_total
+
+    Pro 模型的判断逻辑基于基础模型名中是否包含 "pro"，与 usage_stats 中的统计逻辑保持一致。
+    """
+    if not credential_file:
+        return False
+
+    try:
+        stats_instance = await get_usage_stats_instance()
+        # 这里会自动触发每日配额重置逻辑
+        usage = await stats_instance.get_usage_stats(credential_file)
+
+        pro_calls = usage.get("pro_model_calls", 0)
+        total_calls = usage.get("total_calls", 0)
+        pro_limit = usage.get("daily_limit_pro_models", 100)
+        total_limit = usage.get("daily_limit_total", 1000)
+
+        # 检查总配额
+        if total_calls >= total_limit:
+            log.info(
+                f"Credential {credential_file} has exhausted total daily quota "
+                f"({total_calls}/{total_limit}), skipping this credential"
+            )
+            return False
+
+        # 根据模型是否为 Pro 模型检查 Pro 配额
+        base_model_name = get_base_model_name(model_name or "")
+        is_pro_model = "pro" in base_model_name.lower() if base_model_name else False
+
+        if is_pro_model and pro_calls >= pro_limit:
+            log.info(
+                f"Credential {credential_file} has exhausted Pro daily quota "
+                f"({pro_calls}/{pro_limit}) for model {base_model_name}, skipping this credential"
+            )
+            return False
+
+        return True
+
+    except Exception as e:
+        # 配额检查失败时，为了不影响主流程，保守地认为可用，但记录错误日志
+        log.error(f"Failed to check usage quota for {credential_file}: {e}")
+        return True
+
+
+async def _select_credential_respecting_quota(
+    credential_manager: CredentialManager,
+    model_name: str,
+):
+    """
+    在凭证轮换的基础上，考虑每日使用配额选择可用凭证。
+
+    逻辑：
+    1. 通过 credential_manager.get_valid_credential() 获取当前可用凭证
+    2. 查询该凭证的使用统计，判断是否触达每日配额
+    3. 若配额已满，则尝试轮换到下一个凭证，但不标记 disabled，避免跨天失效
+    4. 通过 visited 集合避免死循环：如果所有凭证都检查过仍无可用配额，则返回 None
+    """
+    if not credential_manager:
+        return None
+
+    visited = set()
+
+    while True:
+        credential_result = await credential_manager.get_valid_credential()
+        if not credential_result:
+            return None
+
+        current_file, credential_data = credential_result
+        if not current_file:
+            return None
+
+        if current_file in visited:
+            # 所有可用凭证都已经检查过了
+            log.error("All credentials have exhausted their daily quotas")
+            return None
+
+        visited.add(current_file)
+
+        if await _is_quota_available_for_credential(current_file, model_name):
+            # 当前凭证在配额范围内，可以使用
+            return current_file, credential_data
+
+        # 当前凭证配额已满，尝试轮换到下一个凭证
+        log.info(f"Credential {current_file} has no remaining quota, rotating to next credential")
+        try:
+            await credential_manager.force_rotate_credential()
+        except Exception as e:
+            log.error(f"Failed to rotate credential after quota exhaustion: {e}")
+            return None
 
 async def _prepare_request_headers_and_payload(payload: dict, credential_data: dict, use_public_api: bool, target_url: str):
     """Prepare request headers and final payload from credential data."""
