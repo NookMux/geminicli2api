@@ -133,7 +133,7 @@ class UsageStats:
                             "gemini_2_5_pro_calls": stats_data.get("gemini_2_5_pro_calls", 0),
                             "total_calls": stats_data.get("total_calls", 0),
                             "next_reset_time": stats_data.get("next_reset_time"),
-                            "daily_limit_gemini_2_5_pro": stats_data.get("daily_limit_gemini_2_5_pro", 100),
+                            "daily_limit_gemini_2_5_pro": stats_data.get("daily_limit_gemini_2_5_pro", 50),
                             "daily_limit_total": stats_data.get("daily_limit_total", 1000)
                         }
                         
@@ -180,7 +180,7 @@ class UsageStats:
                         "gemini_2_5_pro_calls": stats.get("gemini_2_5_pro_calls", 0),
                         "total_calls": stats.get("total_calls", 0),
                         "next_reset_time": stats.get("next_reset_time"),
-                        "daily_limit_gemini_2_5_pro": stats.get("daily_limit_gemini_2_5_pro", 100),
+                        "daily_limit_gemini_2_5_pro": stats.get("daily_limit_gemini_2_5_pro", 50),
                         "daily_limit_total": stats.get("daily_limit_total", 1000)
                     }
                     
@@ -216,7 +216,7 @@ class UsageStats:
                 "gemini_2_5_pro_calls": 0,
                 "total_calls": 0,
                 "next_reset_time": next_reset.isoformat(),
-                "daily_limit_gemini_2_5_pro": 100,
+                "daily_limit_gemini_2_5_pro": 50,
                 "daily_limit_total": 1000
             }
             self._cache_dirty = True  # 标记缓存已修改
@@ -326,7 +326,7 @@ class UsageStats:
                     all_stats[filename] = {
                         "gemini_2_5_pro_calls": stats.get("gemini_2_5_pro_calls", 0),
                         "total_calls": stats.get("total_calls", 0),
-                        "daily_limit_gemini_2_5_pro": stats.get("daily_limit_gemini_2_5_pro", 100),
+                        "daily_limit_gemini_2_5_pro": stats.get("daily_limit_gemini_2_5_pro", 50),
                         "daily_limit_total": stats.get("daily_limit_total", 1000),
                         "next_reset_time": stats.get("next_reset_time")
                     }
