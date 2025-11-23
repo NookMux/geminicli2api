@@ -157,7 +157,8 @@
                             </select>
                         </div>
                         <div class="filter-item">
-                            <label for="errorCodeFilter" class="filter-label"><i class="fas fa-exclamation-triangle"></i> 错误码筛选</label>
+                            <label for="errorCodeFilter" class="filter-label"><i
+                                    class="fas fa-exclamation-triangle"></i> 错误码筛选</label>
                             <select id="errorCodeFilter" class="filter-select" onchange="applyFilters()">
                                 <option value="all">全部错误码</option>
                                 <option value="has-errors">有错误</option>
@@ -272,11 +273,13 @@
                             <h4><i class="fas fa-chart-bar"></i> 每日配额配置</h4>
                             <div class="form-group">
                                 <label for="configDailyLimitProModels">Pro模型每日限额:</label>
-                                <input type="number" id="configDailyLimitProModels" class="config-input" placeholder="75" min="1" />
+                                <input type="number" id="configDailyLimitProModels" class="config-input"
+                                    placeholder="75" min="1" />
                             </div>
                             <div class="form-group">
                                 <label for="configDailyLimitTotal">总调用每日限额:</label>
-                                <input type="number" id="configDailyLimitTotal" class="config-input" placeholder="600" min="1" />
+                                <input type="number" id="configDailyLimitTotal" class="config-input" placeholder="600"
+                                    min="1" />
                             </div>
                         </div>
                     </div>
@@ -290,23 +293,16 @@
     <!-- JavaScript 模块 -->
     <!-- 通用工具函数 -->
     <script src="/static/js/common.js"></script>
-
-    <!-- 功能模块 -->
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/manage.js"></script>
     <script src="/static/js/usage.js"></script>
     <script src="/static/js/config.js"></script>
+    <script src="/static/js/control_panel.js"></script>
+
 
     <!-- 初始化脚本 -->
     <script>
-        // 页面初始化
-        window.onload = function() {
-            showStatus('请输入密码登录', 'info');
-            // 移除旧的onkeypress事件，改为在auth.js中处理
-            document.getElementById('loginPassword').addEventListener('keypress', function(event) {
-                handleLoginEnter(event);
-            });
-        };
+        // 页面初始化脚本已集成到 control_panel.js 中
     </script>
 </body>
 
