@@ -81,8 +81,9 @@ async def _is_quota_available_for_credential(credential_file: str, model_name: s
 
         pro_calls = usage.get("pro_model_calls", 0)
         total_calls = usage.get("total_calls", 0)
-        pro_limit = usage.get("daily_limit_pro_models", 100)
-        total_limit = usage.get("daily_limit_total", 1000)
+        # 使用动态默认值保持一致性
+        pro_limit = usage.get("daily_limit_pro_models", 75)
+        total_limit = usage.get("daily_limit_total", 600)
 
         # 检查总配额
         if total_calls >= total_limit:

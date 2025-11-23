@@ -1098,6 +1098,12 @@ async def get_config(token: str = Depends(verify_token)):
             env_locked.append("resource_manager_api_url")
         if os.getenv("SERVICE_USAGE_API_URL"):
             env_locked.append("service_usage_api_url")
+
+        # 每日配额环境变量锁定
+        if os.getenv("DAILY_LIMIT_PRO_MODELS"):
+            env_locked.append("daily_limit_pro_models")
+        if os.getenv("DAILY_LIMIT_TOTAL"):
+            env_locked.append("daily_limit_total")
         
         # 自动封禁配置
         current_config["auto_ban_enabled"] = await config.get_auto_ban_enabled()
@@ -1118,6 +1124,10 @@ async def get_config(token: str = Depends(verify_token)):
         
         # 性能配置
         current_config["calls_per_rotation"] = await config.get_calls_per_rotation()
+
+        # 每日配额配置
+        current_config["daily_limit_pro_models"] = await config.get_daily_limit_pro_models()
+        current_config["daily_limit_total"] = await config.get_daily_limit_total()
         
         # 429重试配置
         current_config["retry_429_max_retries"] = await config.get_retry_429_max_retries()
@@ -1228,6 +1238,15 @@ async def save_config(request: ConfigSaveRequest, token: str = Depends(verify_to
         if "password" in new_config:
             if not isinstance(new_config["password"], str):
                 raise HTTPException(status_code=400, detail="访问密码必须是字符串")
+
+        # 验证每日配额配置
+        if "daily_limit_pro_models" in new_config:
+            if not isinstance(new_config["daily_limit_pro_models"], int) or new_config["daily_limit_pro_models"] < 1:
+                raise HTTPException(status_code=400, detail="Pro模型每日限额必须是大于0的整数")
+
+        if "daily_limit_total" in new_config:
+            if not isinstance(new_config["daily_limit_total"], int) or new_config["daily_limit_total"] < 1:
+                raise HTTPException(status_code=400, detail="总调用每日限额必须是大于0的整数")
         
         # 读取现有的配置文件
         credentials_dir = await config.get_credentials_dir()
@@ -1275,7 +1294,13 @@ async def save_config(request: ConfigSaveRequest, token: str = Depends(verify_to
             env_locked_keys.add("panel_password")
         if os.getenv("PASSWORD"):
             env_locked_keys.add("password")
-        
+
+        # 每日配额环境变量锁定
+        if os.getenv("DAILY_LIMIT_PRO_MODELS"):
+            env_locked_keys.add("daily_limit_pro_models")
+        if os.getenv("DAILY_LIMIT_TOTAL"):
+            env_locked_keys.add("daily_limit_total")
+
         for key, value in new_config.items():
             if key not in env_locked_keys:
                 existing_config[key] = value
@@ -1313,6 +1338,7 @@ async def save_config(request: ConfigSaveRequest, token: str = Depends(verify_to
         # - anti_truncation_max_attempts: 抗截断配置
         # - compatibility_mode_enabled: 兼容性模式
         # - api_password, panel_password, password: 访问密码
+        # - daily_limit_pro_models, daily_limit_total: 每日配额配置
         #
         # 需要重启的配置项：
         # - host, port: 服务器地址和端口
