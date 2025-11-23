@@ -10,6 +10,10 @@ from typing import Any, Optional
 # 需要自动封禁的错误码 (默认值，可通过环境变量或配置覆盖)
 AUTO_BAN_ERROR_CODES = [401, 403]
 
+# Default daily quota limits (can be overridden by environment variables or config)
+DEFAULT_DAILY_LIMIT_PRO_MODELS = 75
+DEFAULT_DAILY_LIMIT_TOTAL = 600
+
 # Default Safety Settings for Google API
 DEFAULT_SAFETY_SETTINGS = [
     {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},

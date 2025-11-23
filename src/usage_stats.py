@@ -45,8 +45,8 @@ class UsageStats:
         self._save_interval = 60  # 最多每分钟保存一次，减少I/O
         self._max_cache_size = 100  # 严格限制缓存大小
         # 动态默认配额值，初始化时设置
-        self._default_daily_limit_pro = 75
-        self._default_daily_limit_total = 600
+        self._default_daily_limit_pro = config.DEFAULT_DAILY_LIMIT_PRO_MODELS
+        self._default_daily_limit_total = config.DEFAULT_DAILY_LIMIT_TOTAL
     
     async def initialize(self):
         """Initialize the usage stats module."""
