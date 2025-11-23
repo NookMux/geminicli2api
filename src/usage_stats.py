@@ -8,6 +8,7 @@ from datetime import datetime, timezone, timedelta
 from threading import Lock
 from typing import Dict, Any, Optional
 
+import config
 from config import get_credentials_dir, is_mongodb_mode
 from log import log
 from .state_manager import get_state_manager
