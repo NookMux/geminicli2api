@@ -117,6 +117,40 @@ async def get_calls_per_rotation() -> int:
     # 更均匀地分摊到多个凭证上，同时保留一定安全裕量
     return int(await get_config_value("calls_per_rotation", 75))
 
+async def get_daily_limit_pro_models() -> int:
+    """
+    获取 Pro 系列模型的每凭证每日默认配额。
+
+    优先级：
+    1. 环境变量 DAILY_LIMIT_PRO_MODELS
+    2. 存储配置键 daily_limit_pro_models
+    3. 默认值 75
+    """
+    env_value = os.getenv("DAILY_LIMIT_PRO_MODELS")
+    if env_value:
+        try:
+            return int(env_value)
+        except ValueError:
+            pass
+    return int(await get_config_value("daily_limit_pro_models", 75))
+
+async def get_daily_limit_total() -> int:
+    """
+    获取所有模型合计的每凭证每日默认配额。
+
+    优先级：
+    1. 环境变量 DAILY_LIMIT_TOTAL
+    2. 存储配置键 daily_limit_total
+    3. 默认值 600
+    """
+    env_value = os.getenv("DAILY_LIMIT_TOTAL")
+    if env_value:
+        try:
+            return int(env_value)
+        except ValueError:
+            pass
+    return int(await get_config_value("daily_limit_total", 600))
+
 async def get_auto_ban_enabled() -> bool:
     """Get auto ban enabled setting."""
     env_value = os.getenv("AUTO_BAN")

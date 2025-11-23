@@ -1668,7 +1668,7 @@ async def get_aggregated_usage_statistics(token: str = Depends(verify_token)):
 
 class UsageLimitsUpdateRequest(BaseModel):
     filename: str
-    gemini_2_5_pro_limit: Optional[int] = None
+    pro_models_limit: Optional[int] = None
     total_limit: Optional[int] = None
 
 
@@ -1688,7 +1688,7 @@ async def update_usage_limits(request: UsageLimitsUpdateRequest, token: str = De
         
         await stats_instance.update_daily_limits(
             filename=request.filename,
-            gemini_2_5_pro_limit=request.gemini_2_5_pro_limit,
+            pro_models_limit=request.pro_models_limit,
             total_limit=request.total_limit
         )
         

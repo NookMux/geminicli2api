@@ -44,21 +44,33 @@ class UsageStats:
         self._last_save_time = 0
         self._save_interval = 60  # 最多每分钟保存一次，减少I/O
         self._max_cache_size = 100  # 严格限制缓存大小
+        # 动态默认配额值，初始化时设置
+        self._default_daily_limit_pro = 75
+        self._default_daily_limit_total = 600
     
     async def initialize(self):
         """Initialize the usage stats module."""
         if self._initialized:
             return
-        
+
         # 初始化存储适配器
         self._storage_adapter = await get_storage_adapter()
-        
+
         # 只在文件模式下创建本地状态文件
         if not await is_mongodb_mode():
             credentials_dir = await get_credentials_dir()
             self._state_file = os.path.join(credentials_dir, "creds_state.toml")
             self._state_manager = get_state_manager(self._state_file)
-        
+
+        # 设置动态默认配额值
+        try:
+            from config import get_daily_limit_pro_models, get_daily_limit_total
+            self._default_daily_limit_pro = await get_daily_limit_pro_models()
+            self._default_daily_limit_total = await get_daily_limit_total()
+            log.debug(f"Loaded default quota limits: Pro={self._default_daily_limit_pro}, Total={self._default_daily_limit_total}")
+        except Exception as e:
+            log.error(f"Failed to load default quota limits from config: {e}, using fallback values")
+
         await self._load_stats()
         self._initialized = True
         storage_type = "MongoDB" if await is_mongodb_mode() else "File"
@@ -83,32 +95,11 @@ class UsageStats:
         if not model_name:
             return False
 
-        try:
-            from config import get_base_model_name, get_base_model_from_feature_model
+        # 使用现有的 get_base_model_name 去掉后缀，然后检查是否包含 "pro"
+        from config import get_base_model_name
 
-            # Remove feature prefixes
-            # (removed fake streaming and anti-truncation prefixes)
-
-            # Remove thinking suffix (-maxthinking)
-            pure_base_model = get_base_model_name(model_name)
-
-            # Check if the pure base model contains "pro" anywhere in the name
-            return "pro" in pure_base_model.lower()
-
-        except ImportError:
-            # Fallback logic if config import fails
-            clean_model = model_name
-            for prefix in []:
-                if clean_model.startswith(prefix):
-                    clean_model = clean_model[len(prefix):]
-                    break
-
-            for suffix in ["-maxthinking"]:
-                if clean_model.endswith(suffix):
-                    clean_model = clean_model[:-len(suffix)]
-                    break
-
-            return "pro" in clean_model.lower()
+        base = get_base_model_name(model_name)
+        return "pro" in base.lower()
     
     async def _load_stats(self):
         """Load statistics from unified storage"""
@@ -134,8 +125,8 @@ class UsageStats:
                             "pro_model_calls": stats_data.get("pro_model_calls", 0),
                             "total_calls": stats_data.get("total_calls", 0),
                             "next_reset_time": stats_data.get("next_reset_time"),
-                            "daily_limit_pro_models": stats_data.get("daily_limit_pro_models", 50),
-                            "daily_limit_total": stats_data.get("daily_limit_total", 1000)
+                            "daily_limit_pro_models": stats_data.get("daily_limit_pro_models", self._default_daily_limit_pro),
+                            "daily_limit_total": stats_data.get("daily_limit_total", self._default_daily_limit_total)
                         }
 
                         # 只加载有实际使用数据的统计，或者有reset时间的
@@ -199,8 +190,8 @@ class UsageStats:
                         "pro_model_calls": stats.get("pro_model_calls", 0),
                         "total_calls": stats.get("total_calls", 0),
                         "next_reset_time": stats.get("next_reset_time"),
-                        "daily_limit_pro_models": stats.get("daily_limit_pro_models", 50),
-                        "daily_limit_total": stats.get("daily_limit_total", 1000)
+                        "daily_limit_pro_models": stats.get("daily_limit_pro_models", self._default_daily_limit_pro),
+                        "daily_limit_total": stats.get("daily_limit_total", self._default_daily_limit_total)
                     }
 
                     success = await self._storage_adapter.update_usage_stats(normalized_filename, stats_data)
@@ -239,11 +230,9 @@ class UsageStats:
                 "pro_model_calls": 0,
                 "total_calls": 0,
                 "next_reset_time": next_reset.isoformat(),
-                # 默认 Pro 模型每日上限：100 次
-                # 实际上 Google 单凭证典型配额是 100 次 Pro + 900 次非 Pro
-                # 这里使用 100 / 1000 作为更贴近真实的默认值
-                "daily_limit_pro_models": 100,
-                "daily_limit_total": 1000
+                # 使用动态配置的默认配额值
+                "daily_limit_pro_models": self._default_daily_limit_pro,
+                "daily_limit_total": self._default_daily_limit_total
             }
             self._cache_dirty = True  # 标记缓存已修改
         
@@ -309,8 +298,8 @@ class UsageStats:
                 self._cache_dirty = True  # 标记缓存已修改
 
                 log.debug(f"Usage recorded - File: {normalized_filename}, Model: {model_name}, "
-                         f"Pro Models: {stats['pro_model_calls']}/{stats.get('daily_limit_pro_models', 100)}, "
-                         f"Total: {stats['total_calls']}/{stats.get('daily_limit_total', 1000)}")
+                         f"Pro Models: {stats['pro_model_calls']}/{stats.get('daily_limit_pro_models', self._default_daily_limit_pro)}, "
+                         f"Total: {stats['total_calls']}/{stats.get('daily_limit_total', self._default_daily_limit_total)}")
                 
                 if reset_performed:
                     log.info(f"Daily quota was reset for {normalized_filename}")
@@ -339,8 +328,8 @@ class UsageStats:
                     "filename": normalized_filename,
                     "pro_model_calls": stats.get("pro_model_calls", 0),
                     "total_calls": stats.get("total_calls", 0),
-                    "daily_limit_pro_models": stats.get("daily_limit_pro_models", 100),
-                    "daily_limit_total": stats.get("daily_limit_total", 1000),
+                    "daily_limit_pro_models": stats.get("daily_limit_pro_models", self._default_daily_limit_pro),
+                    "daily_limit_total": stats.get("daily_limit_total", self._default_daily_limit_total),
                     "next_reset_time": stats.get("next_reset_time")
                 }
             else:
@@ -352,8 +341,8 @@ class UsageStats:
                     all_stats[filename] = {
                         "pro_model_calls": stats.get("pro_model_calls", 0),
                         "total_calls": stats.get("total_calls", 0),
-                        "daily_limit_pro_models": stats.get("daily_limit_pro_models", 50),
-                        "daily_limit_total": stats.get("daily_limit_total", 1000),
+                        "daily_limit_pro_models": stats.get("daily_limit_pro_models", self._default_daily_limit_pro),
+                        "daily_limit_total": stats.get("daily_limit_total", self._default_daily_limit_total),
                         "next_reset_time": stats.get("next_reset_time")
                     }
                 
@@ -401,8 +390,8 @@ class UsageStats:
                     stats["daily_limit_total"] = total_limit
 
                 log.info(f"Updated daily limits for {normalized_filename}: "
-                        f"Pro Models = {stats.get('daily_limit_pro_models', 100)}, "
-                        f"Total = {stats.get('daily_limit_total', 1000)}")
+                        f"Pro Models = {stats.get('daily_limit_pro_models', self._default_daily_limit_pro)}, "
+                        f"Total = {stats.get('daily_limit_total', self._default_daily_limit_total)}")
 
             except Exception as e:
                 log.error(f"Failed to update daily limits: {e}")
