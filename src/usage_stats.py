@@ -165,17 +165,35 @@ class UsageStats:
     async def _save_stats(self):
         """Save statistics to unified storage."""
         current_time = time.time()
-        
+
         # 使用脏标记和时间间隔控制，减少不必要的写入
         if not self._cache_dirty or (current_time - self._last_save_time < self._save_interval):
             return
-            
+
         try:
             # 批量更新使用统计到存储适配器
             log.debug(f"Saving {len(self._stats_cache)} usage statistics items...")
-            
+
+            # 只对当前仍存在的凭证保存统计，避免复活已删除的条目
+            try:
+                existing_files_raw = await self._storage_adapter.list_credentials()
+                existing_files = {self._normalize_filename(name) for name in existing_files_raw}
+            except Exception as e:
+                log.error(f"Failed to list credentials when saving usage stats: {e}")
+                existing_files = None
+
             saved_count = 0
+            to_delete_from_cache = []
+
             for filename, stats in self._stats_cache.items():
+                normalized_filename = self._normalize_filename(filename)
+
+                # 如果凭证已经不存在，就不再写统计，并从缓存中移除
+                if existing_files is not None and normalized_filename not in existing_files:
+                    log.debug(f"Skipping usage stats save for deleted credential: {normalized_filename}")
+                    to_delete_from_cache.append(filename)
+                    continue
+
                 try:
                     stats_data = {
                         "pro_model_calls": stats.get("pro_model_calls", 0),
@@ -184,14 +202,18 @@ class UsageStats:
                         "daily_limit_pro_models": stats.get("daily_limit_pro_models", 50),
                         "daily_limit_total": stats.get("daily_limit_total", 1000)
                     }
-                    
-                    success = await self._storage_adapter.update_usage_stats(filename, stats_data)
+
+                    success = await self._storage_adapter.update_usage_stats(normalized_filename, stats_data)
                     if success:
                         saved_count += 1
                 except Exception as e:
                     log.error(f"Failed to save stats for {filename}: {e}")
                     continue
-                
+
+            # 清理掉缓存中指向已删除凭证的统计项
+            for filename in to_delete_from_cache:
+                self._stats_cache.pop(filename, None)
+
             self._cache_dirty = False  # 清除脏标记
             self._last_save_time = current_time
             log.debug(f"Successfully saved {saved_count}/{len(self._stats_cache)} usage statistics to unified storage")
