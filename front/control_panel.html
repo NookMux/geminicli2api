@@ -233,7 +233,7 @@
                     <div class="config-info">
                         <strong>统计范围：</strong>
                         <ul>
-                            <li><strong>每日配额：</strong>默认每日配额 Pro模型: 100次，所有模型: 1000次</li>
+                            <li><strong>每日配额：</strong>默认每日配额 Pro模型: 75次，所有模型: 600次（可在配置面板或环境变量中修改）</li>
                             <li><strong>配额重置：</strong>每天 UTC 07:00 自动重置调用计数</li>
                         </ul>
                     </div>
@@ -266,6 +266,17 @@
                             <div class="form-group">
                                 <label for="configPanelPassword">控制面板密码:</label>
                                 <input type="text" id="configPanelPassword" class="config-input" placeholder="pwd" />
+                            </div>
+                        </div>
+                        <div class="config-group">
+                            <h4><i class="fas fa-chart-bar"></i> 每日配额配置</h4>
+                            <div class="form-group">
+                                <label for="configDailyLimitProModels">Pro模型每日限额:</label>
+                                <input type="number" id="configDailyLimitProModels" class="config-input" placeholder="75" min="1" />
+                            </div>
+                            <div class="form-group">
+                                <label for="configDailyLimitTotal">总调用每日限额:</label>
+                                <input type="number" id="configDailyLimitTotal" class="config-input" placeholder="600" min="1" />
                             </div>
                         </div>
                     </div>

@@ -50,6 +50,8 @@ async function loadConfig() {
 function populateConfigForm() {
     setConfigField('configApiPassword', currentConfig.api_password || '');
     setConfigField('configPanelPassword', currentConfig.panel_password || '');
+    setConfigField('configDailyLimitProModels', currentConfig.daily_limit_pro_models || '');
+    setConfigField('configDailyLimitTotal', currentConfig.daily_limit_total || '');
 }
 
 /**
@@ -80,6 +82,8 @@ async function saveConfig() {
             ...currentConfig,
             api_password: $('#configApiPassword').val().trim(),
             panel_password: $('#configPanelPassword').val().trim(),
+            daily_limit_pro_models: parseInt($('#configDailyLimitProModels').val()) || 75,
+            daily_limit_total: parseInt($('#configDailyLimitTotal').val()) || 600,
         };
 
         const response = await fetch('/config/save', {

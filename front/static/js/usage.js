@@ -72,8 +72,8 @@ function renderUsageList() {
  * @returns {jQuery} 使用统计卡片元素
  */
 function createUsageCard(filename, stats) {
-    const geminiPercent = Math.min((stats.pro_model_calls || 0) / (stats.daily_limit_pro_models || 100) * 100, 100);
-    const totalPercent = Math.min((stats.total_calls || 0) / (stats.daily_limit_total || 1000) * 100, 100);
+    const geminiPercent = Math.min((stats.pro_model_calls || 0) / (stats.daily_limit_pro_models || 75) * 100, 100);
+    const totalPercent = Math.min((stats.total_calls || 0) / (stats.daily_limit_total || 600) * 100, 100);
 
     return $('<div>').addClass('usage-card').html(`
         <div class="usage-header">
@@ -83,7 +83,7 @@ function createUsageCard(filename, stats) {
         <div class="usage-progress">
             <div class="usage-progress-label">
                 <span>Pro Models</span>
-                <span>${stats.pro_model_calls || 0}/${stats.daily_limit_pro_models || 100} (${geminiPercent.toFixed(1)}%)</span>
+                <span>${stats.pro_model_calls || 0}/${stats.daily_limit_pro_models || 75} (${geminiPercent.toFixed(1)}%)</span>
             </div>
             <div class="usage-progress-bar">
                 <div class="usage-progress-fill ${getProgressClass(geminiPercent)}" style="width: ${geminiPercent}%"></div>
@@ -93,7 +93,7 @@ function createUsageCard(filename, stats) {
         <div class="usage-progress">
             <div class="usage-progress-label">
                 <span>所有模型</span>
-                <span>${stats.total_calls || 0}/${stats.daily_limit_total || 1000} (${totalPercent.toFixed(1)}%)</span>
+                <span>${stats.total_calls || 0}/${stats.daily_limit_total || 600} (${totalPercent.toFixed(1)}%)</span>
             </div>
             <div class="usage-progress-bar">
                 <div class="usage-progress-fill ${getTotalProgressClass(totalPercent)}" style="width: ${totalPercent}%"></div>
