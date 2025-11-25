@@ -124,6 +124,11 @@ async def _select_credential_respecting_quota(
     2. 查询该凭证的使用统计，判断是否触达每日配额
     3. 若配额已满，则尝试轮换到下一个凭证，但不标记 disabled，避免跨天失效
     4. 通过 visited 集合避免死循环：如果所有凭证都检查过仍无可用配额，则返回 None
+
+    返回值：
+    - (current_file, credential_data): 正常情况
+    - None, "no_credentials": 没有配置任何凭据或都被禁用
+    - None, "quota_exhausted": 所有凭据配额已满
     """
     if not credential_manager:
         return None
@@ -133,16 +138,30 @@ async def _select_credential_respecting_quota(
     while True:
         credential_result = await credential_manager.get_valid_credential()
         if not credential_result:
-            return None
+            # 检查是否真的没有配置凭据，还是配额都用完了
+            try:
+                # 获取所有凭据来判断情况
+                all_creds = await credential_manager.get_all_credentials()
+                if not all_creds:
+                    log.error("No credentials configured")
+                    return None, "no_credentials"
+                else:
+                    # 有凭据但get_valid_credential返回None，说明都被禁用了
+                    log.error("All credentials are disabled")
+                    return None, "no_credentials"
+            except Exception:
+                # 如果无法获取所有凭据，保守处理
+                log.error("Unable to determine credential availability")
+                return None, "no_credentials"
 
         current_file, credential_data = credential_result
         if not current_file:
-            return None
+            return None, "no_credentials"
 
         if current_file in visited:
             # 所有可用凭证都已经检查过了
             log.error("All credentials have exhausted their daily quotas")
-            return None
+            return None, "quota_exhausted"
 
         visited.add(current_file)
 
@@ -156,7 +175,7 @@ async def _select_credential_respecting_quota(
             await credential_manager.force_rotate_credential()
         except Exception as e:
             log.error(f"Failed to rotate credential after quota exhaustion: {e}")
-            return None
+            return None, "quota_exhausted"
 
 async def _prepare_request_headers_and_payload(payload: dict, credential_data: dict, use_public_api: bool, target_url: str):
     """Prepare request headers and final payload from credential data."""
@@ -224,12 +243,17 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False, credent
         credential_result = await _select_credential_respecting_quota(
             credential_manager, model_name
         )
-        if not credential_result:
-            # 所有凭据都超出 daily_limit_xxx 了，直接 429
-            return _create_error_response(
-                "All credentials have exhausted their daily quotas",
-                429
-            )
+        if not credential_result or credential_result[0] is None:
+            reason = credential_result[1] if credential_result and len(credential_result) > 1 else "unknown"
+            if reason == "no_credentials":
+                # 没有配置凭据或都被禁用，返回500
+                return _create_error_response("No valid credentials available", 500)
+            else:
+                # 所有凭据都超出 daily_limit_xxx 了，直接 429
+                return _create_error_response(
+                    "[非google限制] All credentials have exhausted their daily quotas",
+                    429
+                )
 
         current_file, credential_data = credential_result
         headers, final_payload, target_url = await _prepare_request_headers_and_payload(payload, credential_data, use_public_api, target_url)
@@ -281,25 +305,37 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False, credent
                         if retry_429_enabled and attempt < max_retries:
                             log.warning(f"[RETRY] 429 error encountered, retrying ({attempt + 1}/{max_retries})")
                             if credential_manager:
-                                # 429错误时强制轮换凭证，不增加调用计数
-                                await credential_manager.force_rotate_credential()
-                                # 这里也要尊重 daily_limit
+                                # 这里也要尊重 daily_limit（_select_credential_respecting_quota 会自己处理 rotation）
                                 new_credential_result = await _select_credential_respecting_quota(
                                     credential_manager,
                                     model_name,
                                 )
-                                if not new_credential_result:
-                                    # 已经没有任何在配额内的凭据了，直接返回 429，不再死循环重试
-                                    async def error_stream():
-                                        error_response = {
-                                            "error": {
-                                                "message": "All credentials have exhausted their daily quotas",
-                                                "type": "api_error",
-                                                "code": 429,
+                                if not new_credential_result or new_credential_result[0] is None:
+                                    reason = new_credential_result[1] if new_credential_result and len(new_credential_result) > 1 else "unknown"
+                                    if reason == "no_credentials":
+                                        # 已经没有任何可用凭据了，直接返回 500
+                                        async def error_stream():
+                                            error_response = {
+                                                "error": {
+                                                    "message": "No valid credentials available",
+                                                    "type": "api_error",
+                                                    "code": 500,
+                                                }
                                             }
-                                        }
-                                        yield f"data: {json.dumps(error_response)}\n\n"
-                                    return StreamingResponse(error_stream(), media_type="text/event-stream", status_code=429)
+                                            yield f"data: {json.dumps(error_response)}\n\n"
+                                        return StreamingResponse(error_stream(), media_type="text/event-stream", status_code=500)
+                                    else:
+                                        # 已经没有任何在配额内的凭据了，直接返回 429，不再死循环重试
+                                        async def error_stream():
+                                            error_response = {
+                                                "error": {
+                                                    "message": "[非google限制] All credentials have exhausted their daily quotas",
+                                                    "type": "api_error",
+                                                    "code": 429,
+                                                }
+                                            }
+                                            yield f"data: {json.dumps(error_response)}\n\n"
+                                        return StreamingResponse(error_stream(), media_type="text/event-stream", status_code=429)
 
                                 current_file, credential_data = new_credential_result
                                 headers, updated_payload, target_url = await _prepare_request_headers_and_payload(payload, credential_data, use_public_api, target_url)
@@ -387,19 +423,22 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False, credent
                         if retry_429_enabled and attempt < max_retries:
                             log.warning(f"[RETRY] 429 error encountered, retrying ({attempt + 1}/{max_retries})")
                             if credential_manager:
-                                # 429错误时强制轮换凭证，不增加调用计数
-                                await credential_manager.force_rotate_credential()
-                                # 这里也要尊重 daily_limit
+                                # 这里也要尊重 daily_limit（_select_credential_respecting_quota 会自己处理 rotation）
                                 new_credential_result = await _select_credential_respecting_quota(
                                     credential_manager,
                                     model_name,
                                 )
-                                if not new_credential_result:
-                                    # 已经没有任何在配额内的凭据了，直接返回 429，不再死循环重试
-                                    return _create_error_response(
-                                        "All credentials have exhausted their daily quotas",
-                                        429
-                                    )
+                                if not new_credential_result or new_credential_result[0] is None:
+                                    reason = new_credential_result[1] if new_credential_result and len(new_credential_result) > 1 else "unknown"
+                                    if reason == "no_credentials":
+                                        # 已经没有任何可用凭据了，直接返回 500
+                                        return _create_error_response("No valid credentials available", 500)
+                                    else:
+                                        # 已经没有任何在配额内的凭据了，直接返回 429，不再死循环重试
+                                        return _create_error_response(
+                                            "[非google限制] All credentials have exhausted their daily quotas",
+                                            429
+                                        )
                                 current_file, credential_data = new_credential_result
                                 headers, updated_payload, target_url = await _prepare_request_headers_and_payload(payload, credential_data, use_public_api, target_url)
                                 final_post_data = json.dumps(updated_payload)
