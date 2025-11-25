@@ -194,6 +194,56 @@
                         <button class="pagination-btn" id="nextPageBtn" onclick="changePage(1)">下一页</button>
                     </div>
                 </div>
+
+                <!-- 模型权限设置弹窗 -->
+                <div id="modelPermissionModal" class="modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3><i class="fas fa-shield-alt"></i> 模型权限设置</h3>
+                            <span class="close" onclick="closeModelPermissionModal()">&times;</span>
+                        </div>
+                        <div class="modal-body">
+                            <div class="form-group">
+                                <label for="modalCredentialName">
+                                    <i class="fas fa-file-alt"></i> 凭证文件:
+                                </label>
+                                <input type="text" id="modalCredentialName" readonly class="readonly-input">
+                            </div>
+
+                            <div class="form-group">
+                                <label>
+                                    <input type="radio" name="permissionType" value="all" onchange="handlePermissionTypeChange()">
+                                    <i class="fas fa-globe"></i> 允许所有模型（默认）
+                                </label>
+                            </div>
+
+                            <div class="form-group">
+                                <label>
+                                    <input type="radio" name="permissionType" value="none" onchange="handlePermissionTypeChange()">
+                                    <i class="fas fa-ban"></i> 禁止所有模型（软禁用）
+                                </label>
+                            </div>
+
+                            <div class="form-group">
+                                <label>
+                                    <input type="radio" name="permissionType" value="custom" onchange="handlePermissionTypeChange()">
+                                    <i class="fas fa-list"></i> 自定义允许的模型:
+                                </label>
+                                <div id="customModelSelection" class="model-selection-container">
+                                    <div class="model-list" id="modelCheckboxes"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn secondary" onclick="closeModelPermissionModal()">
+                                <i class="fas fa-times"></i> 取消
+                            </button>
+                            <button class="btn" onclick="saveModelPermissions()">
+                                <i class="fas fa-save"></i> 保存设置
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- 使用统计标签页 -->
