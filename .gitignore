@@ -85,3 +85,5 @@ Thumbs.db
 log.txt
 .spec-workflow/
 docker/
+
+*.md
