@@ -477,16 +477,4 @@ async def get_service_usage_api_url() -> str:
     )
 
 
-async def get_mongodb_uri() -> str:
-    return str(await get_config_value("mongodb_uri", "", "MONGODB_URI"))
-
-
-async def get_mongodb_database() -> str:
-    return str(
-        await get_config_value("mongodb_database", "gcli2api", "MONGODB_DATABASE")
-    )
-
-
-async def is_mongodb_mode() -> bool:
-    mongodb_uri = await get_mongodb_uri()
-    return bool(mongodb_uri and mongodb_uri.strip())
+# 仅文件存储模式下，不再暴露 MongoDB 相关配置接口

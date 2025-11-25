@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 from contextlib import asynccontextmanager
 
-from config import get_calls_per_rotation, is_mongodb_mode
+from config import get_calls_per_rotation
 from log import log
 from .storage_adapter import get_storage_adapter
 from .google_oauth_api import fetch_user_email_from_file, Credentials
@@ -69,8 +69,8 @@ class CredentialManager:
             await self._discover_credentials()
             
             self._initialized = True
-            storage_type = "MongoDB" if await is_mongodb_mode() else "File"
-            log.debug(f"Credential manager initialized with {storage_type} storage backend")
+            # 当前实现仅使用文件存储后端
+            log.debug("Credential manager initialized with File storage backend")
     
     async def close(self):
         """清理资源"""

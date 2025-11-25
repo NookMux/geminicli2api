@@ -9,7 +9,7 @@ from threading import Lock
 from typing import Dict, Any, Optional
 
 import config
-from config import get_credentials_dir, is_mongodb_mode
+from config import get_credentials_dir
 from log import log
 from .state_manager import get_state_manager
 from .storage_adapter import get_storage_adapter
@@ -57,11 +57,10 @@ class UsageStats:
         # 初始化存储适配器
         self._storage_adapter = await get_storage_adapter()
 
-        # 只在文件模式下创建本地状态文件
-        if not await is_mongodb_mode():
-            credentials_dir = await get_credentials_dir()
-            self._state_file = os.path.join(credentials_dir, "creds_state.toml")
-            self._state_manager = get_state_manager(self._state_file)
+        # 文件模式下创建本地状态文件
+        credentials_dir = await get_credentials_dir()
+        self._state_file = os.path.join(credentials_dir, "creds_state.toml")
+        self._state_manager = get_state_manager(self._state_file)
 
         # 设置动态默认配额值
         try:
@@ -74,8 +73,8 @@ class UsageStats:
 
         await self._load_stats()
         self._initialized = True
-        storage_type = "MongoDB" if await is_mongodb_mode() else "File"
-        log.debug(f"Usage statistics module initialized with {storage_type} storage backend")
+        # 当前实现仅使用文件存储后端
+        log.debug("Usage statistics module initialized with File storage backend")
         
     
     def _normalize_filename(self, filename: str) -> str:
