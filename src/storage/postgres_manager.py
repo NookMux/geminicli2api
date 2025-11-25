@@ -152,6 +152,8 @@ class PostgresManager:
             'disabled': False,
             'last_success': time.time(),
             'user_email': None,
+            # None 表示不限制模型，允许所有模型；显式列表时按base model过滤
+            'allowed_base_models': None,
         }
 
     def _get_default_stats(self) -> Dict[str, Any]:

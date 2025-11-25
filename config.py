@@ -216,7 +216,7 @@ async def get_retry_429_interval() -> float:
 
 # Model name lists for different features
 BASE_MODELS = [
-    "gemini-2.5-pro", 
+    "gemini-2.5-pro",
     "gemini-2.5-flash",
     "gemini-3-pro-preview"
 ]
@@ -225,6 +225,9 @@ PUBLIC_API_MODELS = [
     "gemini-2.5-flash-image",
     "gemini-2.5-flash-image-preview"
 ]
+
+ALL_SUPPORTED_MODELS = BASE_MODELS + PUBLIC_API_MODELS
+
 
 def get_available_models(router_type="openai"):
     """

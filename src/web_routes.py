@@ -162,6 +162,11 @@ class CredFileBatchActionRequest(BaseModel):
     action: str  # "enable", "disable", "delete"
     filenames: List[str]  # 批量操作的文件名列表
 
+class CredModelsUpdateRequest(BaseModel):
+    filename: str
+    # 允许使用的基础模型列表（如 gemini-2.5-pro），None 表示不限制
+    allowed_base_models: Optional[List[str]] = None
+
 class ConfigSaveRequest(BaseModel):
     config: dict
 
@@ -802,6 +807,96 @@ async def creds_action(request: CredFileActionRequest, token: str = Depends(veri
         raise
     except Exception as e:
         log.error(f"凭证文件操作失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/creds/update-models")
+async def update_credential_models(
+    request: CredModelsUpdateRequest,
+    token: str = Depends(verify_token)
+):
+    """
+    更新单个凭证允许使用的基础模型列表。
+
+    约定：
+    - allowed_base_models 为 null / 缺失：不限制模型（保持默认行为）；
+    - allowed_base_models 为 []：该凭证不会用于任何模型（等价于软禁用）；
+    - 列表中的元素必须是 config.ALL_SUPPORTED_MODELS 中的基础模型名。
+    """
+    try:
+        await ensure_credential_manager_initialized()
+
+        filename = request.filename
+        allowed_models = request.allowed_base_models
+
+        # 基本校验：文件名必须是 .json
+        if not filename or not filename.endswith(".json"):
+            raise HTTPException(status_code=400, detail="无效的文件名（必须是 .json）")
+
+        # 使用统一存储适配器检查凭证是否存在
+        storage_adapter = await get_storage_adapter()
+        credential_data = await storage_adapter.get_credential(filename)
+        state_data = await storage_adapter.get_credential_state(filename)
+
+        if credential_data is None and not state_data:
+            raise HTTPException(status_code=404, detail="凭证文件不存在")
+
+        # 如果没有提供 allowed_base_models（null / 缺失），表示取消限制
+        if allowed_models is None:
+            final_value = None
+        else:
+            # 校验列表类型与内容
+            if not isinstance(allowed_models, list):
+                raise HTTPException(status_code=400, detail="allowed_base_models 必须是字符串数组或 null")
+
+            # 从配置中获取支持的基础模型列表
+            try:
+                supported_models = getattr(config, "ALL_SUPPORTED_MODELS", [])
+            except Exception:
+                supported_models = []
+
+            if not supported_models:
+                log.warning("ALL_SUPPORTED_MODELS 为空，跳过模型ID校验")
+
+            normalized_list = []
+            for m in allowed_models:
+                if not isinstance(m, str):
+                    raise HTTPException(status_code=400, detail="allowed_base_models 中的模型ID必须是字符串")
+                model_id = m.strip()
+                if not model_id:
+                    raise HTTPException(status_code=400, detail="allowed_base_models 中存在空模型ID")
+                if supported_models and model_id not in supported_models:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"模型ID {model_id} 不在支持列表中，请检查输入"
+                    )
+                normalized_list.append(model_id)
+
+            final_value = normalized_list
+
+        # 写入状态
+        success = await storage_adapter.update_credential_state(
+            filename,
+            {"allowed_base_models": final_value}
+        )
+        if not success:
+            raise HTTPException(status_code=500, detail="更新模型授权配置失败")
+
+        log.info(
+            f"Updated allowed_base_models for credential {filename}: "
+            f"{'不限' if final_value is None else final_value}"
+        )
+
+        return JSONResponse(content={
+            "filename": filename,
+            "allowed_base_models": final_value,
+            "message": "已更新凭证的模型授权配置"
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"更新凭证模型授权配置失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
