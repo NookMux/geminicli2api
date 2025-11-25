@@ -4,24 +4,6 @@
 
 let currentCredentialName = '';
 let allSupportedModels = [];
-let authToken = '';
-
-// 获取认证头
-function getAuthHeaders() {
-    return {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authToken}`
-    };
-}
-
-// 显示状态信息
-function showStatus(message, type = 'info') {
-    const statusSection = document.getElementById('statusSection');
-    if (statusSection) {
-        statusSection.innerHTML = `<div class="status ${type}">${message}</div>`;
-        statusSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-}
 
 // 设置认证token
 function setAuthToken(token) {
@@ -35,19 +17,9 @@ async function openModelPermissionModal(filename) {
         // 获取支持的模型列表
         await loadSupportedModels();
 
-        // 获取当前凭证的权限设置
-        const response = await fetch(`/creds/status`, {
-            method: 'GET',
-            headers: getAuthHeaders()
-        });
-
-        if (!response.ok) {
-            showStatus('获取凭证状态失败', 'error');
-            return;
-        }
-
-        const data = await response.json();
-        const credInfo = data.creds.find(cred => cred.filename === filename);
+        // 直接从全局 credsData 中获取当前凭证信息，避免重复请求
+        const allCreds = (typeof credsData === 'object' && credsData) ? credsData : {};
+        const credInfo = Object.values(allCreds).find(cred => cred.filename === filename);
 
         if (!credInfo) {
             showStatus('未找到凭证信息', 'error');

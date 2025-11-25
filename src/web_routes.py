@@ -1271,6 +1271,33 @@ async def get_config(token: str = Depends(verify_token)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/config/supported-models")
+async def get_supported_models(token: str = Depends(verify_token)):
+    """
+    获取当前服务支持的基础模型列表（用于前端模型权限配置）。
+    返回 config.ALL_SUPPORTED_MODELS，如果不存在则回退到 BASE_MODELS + PUBLIC_API_MODELS。
+    """
+    try:
+        models = []
+        try:
+            models = getattr(config, "ALL_SUPPORTED_MODELS", []) or []
+        except Exception:
+            models = []
+
+        if not models:
+            try:
+                base = getattr(config, "BASE_MODELS", []) or []
+                public = getattr(config, "PUBLIC_API_MODELS", []) or []
+                models = base + public
+            except Exception:
+                models = []
+
+        return JSONResponse(content={"models": models})
+    except Exception as e:
+        log.error(f"获取支持的模型列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/config/save")
 async def save_config(request: ConfigSaveRequest, token: str = Depends(verify_token)):
     """保存配置到TOML文件"""
