@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 from contextlib import asynccontextmanager
 
-from config import get_calls_per_rotation, is_mongodb_mode
+from config import get_calls_per_rotation
 from log import log
 from .storage_adapter import get_storage_adapter
 from .google_oauth_api import fetch_user_email_from_file, Credentials
@@ -69,8 +69,8 @@ class CredentialManager:
             await self._discover_credentials()
             
             self._initialized = True
-            storage_type = "MongoDB" if await is_mongodb_mode() else "File"
-            log.debug(f"Credential manager initialized with {storage_type} storage backend")
+            # 当前实现仅使用文件存储后端
+            log.debug("Credential manager initialized with File storage backend")
     
     async def close(self):
         """清理资源"""
@@ -381,6 +381,57 @@ class CredentialManager:
         except Exception as e:
             log.error(f"Error getting credential statuses: {e}")
             return {}
+
+    async def get_all_credentials(self) -> List[str]:
+        """
+        获取所有凭证文件名（不区分启用/禁用）。
+        主要用于在高级逻辑中判断：是“真的没有凭证”，还是“有凭证但都不可用/被禁用”。
+        """
+        try:
+            if not self._storage_adapter:
+                self._storage_adapter = await get_storage_adapter()
+            credentials = await self._storage_adapter.list_credentials()
+            return credentials or []
+        except Exception as e:
+            log.error(f"Error getting all credentials: {e}")
+            return []
+
+    async def is_model_allowed_for_credential(self, credential_name: str, base_model: str) -> bool:
+        """
+        判断指定基础模型是否允许在给定凭证上使用。
+
+        约定：
+        - 状态中 `allowed_base_models` 字段为 None 或缺失 ⇒ 不限制，视为允许所有模型；
+        - 为非空列表时，仅当 base_model 在列表中时才视为允许；
+        - 配置异常（类型不对等）时，为了不影响主流程，记录一条警告并按“允许”处理。
+        """
+        if not credential_name or not base_model:
+            # 没有模型名时不做限制，避免误杀请求
+            return True
+
+        try:
+            state = await self._storage_adapter.get_credential_state(credential_name)
+            allowed = state.get("allowed_base_models", None)
+
+            # 未配置或显式为 None：表示允许所有模型
+            if allowed is None:
+                return True
+
+            # 显式列表：只允许列表中的基础模型
+            if isinstance(allowed, list):
+                return base_model in allowed
+
+            # 其他异常类型：记录日志但不阻断请求
+            log.warning(
+                f"Invalid 'allowed_base_models' type for credential {credential_name}: "
+                f"{type(allowed)}, treating as unrestricted"
+            )
+            return True
+
+        except Exception as e:
+            # 读取状态失败时，不阻塞主流程，但打日志方便排查
+            log.error(f"Error checking model permission for {credential_name}: {e}")
+            return True
     
     async def get_or_fetch_user_email(self, credential_name: str) -> Optional[str]:
         """获取或获取用户邮箱地址"""

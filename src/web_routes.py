@@ -162,6 +162,11 @@ class CredFileBatchActionRequest(BaseModel):
     action: str  # "enable", "disable", "delete"
     filenames: List[str]  # 批量操作的文件名列表
 
+class CredModelsUpdateRequest(BaseModel):
+    filename: str
+    # 允许使用的基础模型列表（如 gemini-2.5-pro），None 表示不限制
+    allowed_base_models: Optional[List[str]] = None
+
 class ConfigSaveRequest(BaseModel):
     config: dict
 
@@ -761,11 +766,13 @@ async def creds_action(request: CredFileActionRequest, token: str = Depends(veri
         
         # 获取存储适配器
         storage_adapter = await get_storage_adapter()
-        
-        # 检查凭证是否存在
+
+        # 检查是否存在内容或状态
         credential_data = await storage_adapter.get_credential(filename)
-        if not credential_data:
-            log.error(f"Credential not found: {filename}")
+        state_data = await storage_adapter.get_credential_state(filename)
+
+        if credential_data is None and not state_data:
+            log.error(f"Credential fully missing (no content or state): {filename}")
             raise HTTPException(status_code=404, detail="凭证文件不存在")
         
         if action == "enable":
@@ -782,7 +789,7 @@ async def creds_action(request: CredFileActionRequest, token: str = Depends(veri
         
         elif action == "delete":
             try:
-                # 使用存储适配器删除凭证
+                # 即使只有状态（content 为空），也允许删除，清理僵尸条目
                 success = await storage_adapter.delete_credential(filename)
                 if success:
                     log.info(f"Successfully deleted credential: {filename}")
@@ -800,6 +807,96 @@ async def creds_action(request: CredFileActionRequest, token: str = Depends(veri
         raise
     except Exception as e:
         log.error(f"凭证文件操作失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/creds/update-models")
+async def update_credential_models(
+    request: CredModelsUpdateRequest,
+    token: str = Depends(verify_token)
+):
+    """
+    更新单个凭证允许使用的基础模型列表。
+
+    约定：
+    - allowed_base_models 为 null / 缺失：不限制模型（保持默认行为）；
+    - allowed_base_models 为 []：该凭证不会用于任何模型（等价于软禁用）；
+    - 列表中的元素必须是 config.ALL_SUPPORTED_MODELS 中的基础模型名。
+    """
+    try:
+        await ensure_credential_manager_initialized()
+
+        filename = request.filename
+        allowed_models = request.allowed_base_models
+
+        # 基本校验：文件名必须是 .json
+        if not filename or not filename.endswith(".json"):
+            raise HTTPException(status_code=400, detail="无效的文件名（必须是 .json）")
+
+        # 使用统一存储适配器检查凭证是否存在
+        storage_adapter = await get_storage_adapter()
+        credential_data = await storage_adapter.get_credential(filename)
+        state_data = await storage_adapter.get_credential_state(filename)
+
+        if credential_data is None and not state_data:
+            raise HTTPException(status_code=404, detail="凭证文件不存在")
+
+        # 如果没有提供 allowed_base_models（null / 缺失），表示取消限制
+        if allowed_models is None:
+            final_value = None
+        else:
+            # 校验列表类型与内容
+            if not isinstance(allowed_models, list):
+                raise HTTPException(status_code=400, detail="allowed_base_models 必须是字符串数组或 null")
+
+            # 从配置中获取支持的基础模型列表
+            try:
+                supported_models = getattr(config, "ALL_SUPPORTED_MODELS", [])
+            except Exception:
+                supported_models = []
+
+            if not supported_models:
+                log.warning("ALL_SUPPORTED_MODELS 为空，跳过模型ID校验")
+
+            normalized_list = []
+            for m in allowed_models:
+                if not isinstance(m, str):
+                    raise HTTPException(status_code=400, detail="allowed_base_models 中的模型ID必须是字符串")
+                model_id = m.strip()
+                if not model_id:
+                    raise HTTPException(status_code=400, detail="allowed_base_models 中存在空模型ID")
+                if supported_models and model_id not in supported_models:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"模型ID {model_id} 不在支持列表中，请检查输入"
+                    )
+                normalized_list.append(model_id)
+
+            final_value = normalized_list
+
+        # 写入状态
+        success = await storage_adapter.update_credential_state(
+            filename,
+            {"allowed_base_models": final_value}
+        )
+        if not success:
+            raise HTTPException(status_code=500, detail="更新模型授权配置失败")
+
+        log.info(
+            f"Updated allowed_base_models for credential {filename}: "
+            f"{'不限' if final_value is None else final_value}"
+        )
+
+        return JSONResponse(content={
+            "filename": filename,
+            "allowed_base_models": final_value,
+            "message": "已更新凭证的模型授权配置"
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"更新凭证模型授权配置失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -830,9 +927,11 @@ async def creds_batch_action(request: CredFileBatchActionRequest, token: str = D
                     errors.append(f"{filename}: 无效的文件类型")
                     continue
                 
-                # 检查凭证是否存在
+                # 检查是否存在内容或状态
                 credential_data = await storage_adapter.get_credential(filename)
-                if not credential_data:
+                state_data = await storage_adapter.get_credential_state(filename)
+
+                if credential_data is None and not state_data:
                     errors.append(f"{filename}: 凭证不存在")
                     continue
                 
@@ -1094,6 +1193,12 @@ async def get_config(token: str = Depends(verify_token)):
             env_locked.append("resource_manager_api_url")
         if os.getenv("SERVICE_USAGE_API_URL"):
             env_locked.append("service_usage_api_url")
+
+        # 每日配额环境变量锁定
+        if os.getenv("DAILY_LIMIT_PRO_MODELS"):
+            env_locked.append("daily_limit_pro_models")
+        if os.getenv("DAILY_LIMIT_TOTAL"):
+            env_locked.append("daily_limit_total")
         
         # 自动封禁配置
         current_config["auto_ban_enabled"] = await config.get_auto_ban_enabled()
@@ -1114,6 +1219,10 @@ async def get_config(token: str = Depends(verify_token)):
         
         # 性能配置
         current_config["calls_per_rotation"] = await config.get_calls_per_rotation()
+
+        # 每日配额配置
+        current_config["daily_limit_pro_models"] = await config.get_daily_limit_pro_models()
+        current_config["daily_limit_total"] = await config.get_daily_limit_total()
         
         # 429重试配置
         current_config["retry_429_max_retries"] = await config.get_retry_429_max_retries()
@@ -1159,6 +1268,33 @@ async def get_config(token: str = Depends(verify_token)):
         
     except Exception as e:
         log.error(f"获取配置失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/config/supported-models")
+async def get_supported_models(token: str = Depends(verify_token)):
+    """
+    获取当前服务支持的基础模型列表（用于前端模型权限配置）。
+    返回 config.ALL_SUPPORTED_MODELS，如果不存在则回退到 BASE_MODELS + PUBLIC_API_MODELS。
+    """
+    try:
+        models = []
+        try:
+            models = getattr(config, "ALL_SUPPORTED_MODELS", []) or []
+        except Exception:
+            models = []
+
+        if not models:
+            try:
+                base = getattr(config, "BASE_MODELS", []) or []
+                public = getattr(config, "PUBLIC_API_MODELS", []) or []
+                models = base + public
+            except Exception:
+                models = []
+
+        return JSONResponse(content={"models": models})
+    except Exception as e:
+        log.error(f"获取支持的模型列表失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1224,6 +1360,15 @@ async def save_config(request: ConfigSaveRequest, token: str = Depends(verify_to
         if "password" in new_config:
             if not isinstance(new_config["password"], str):
                 raise HTTPException(status_code=400, detail="访问密码必须是字符串")
+
+        # 验证每日配额配置
+        if "daily_limit_pro_models" in new_config:
+            if not isinstance(new_config["daily_limit_pro_models"], int) or new_config["daily_limit_pro_models"] < 1:
+                raise HTTPException(status_code=400, detail="Pro模型每日限额必须是大于0的整数")
+
+        if "daily_limit_total" in new_config:
+            if not isinstance(new_config["daily_limit_total"], int) or new_config["daily_limit_total"] < 1:
+                raise HTTPException(status_code=400, detail="总调用每日限额必须是大于0的整数")
         
         # 读取现有的配置文件
         credentials_dir = await config.get_credentials_dir()
@@ -1271,7 +1416,13 @@ async def save_config(request: ConfigSaveRequest, token: str = Depends(verify_to
             env_locked_keys.add("panel_password")
         if os.getenv("PASSWORD"):
             env_locked_keys.add("password")
-        
+
+        # 每日配额环境变量锁定
+        if os.getenv("DAILY_LIMIT_PRO_MODELS"):
+            env_locked_keys.add("daily_limit_pro_models")
+        if os.getenv("DAILY_LIMIT_TOTAL"):
+            env_locked_keys.add("daily_limit_total")
+
         for key, value in new_config.items():
             if key not in env_locked_keys:
                 existing_config[key] = value
@@ -1309,6 +1460,7 @@ async def save_config(request: ConfigSaveRequest, token: str = Depends(verify_to
         # - anti_truncation_max_attempts: 抗截断配置
         # - compatibility_mode_enabled: 兼容性模式
         # - api_password, panel_password, password: 访问密码
+        # - daily_limit_pro_models, daily_limit_total: 每日配额配置
         #
         # 需要重启的配置项：
         # - host, port: 服务器地址和端口
@@ -1664,7 +1816,7 @@ async def get_aggregated_usage_statistics(token: str = Depends(verify_token)):
 
 class UsageLimitsUpdateRequest(BaseModel):
     filename: str
-    gemini_2_5_pro_limit: Optional[int] = None
+    pro_models_limit: Optional[int] = None
     total_limit: Optional[int] = None
 
 
@@ -1684,7 +1836,7 @@ async def update_usage_limits(request: UsageLimitsUpdateRequest, token: str = De
         
         await stats_instance.update_daily_limits(
             filename=request.filename,
-            gemini_2_5_pro_limit=request.gemini_2_5_pro_limit,
+            pro_models_limit=request.pro_models_limit,
             total_limit=request.total_limit
         )
         

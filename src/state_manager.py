@@ -6,7 +6,6 @@ import os
 from typing import Dict, Any
 from contextlib import asynccontextmanager
 
-from config import is_mongodb_mode
 from log import log
 from .storage_adapter import get_storage_adapter
 
@@ -43,11 +42,8 @@ class StateManager:
         if not self._initialized:
             self._storage_adapter = await get_storage_adapter()
             self._initialized = True
-            
-            if await is_mongodb_mode():
-                log.debug(f"Unified state manager initialized with MongoDB backend for: {self._storage_purpose}")
-            else:
-                log.debug(f"Unified state manager initialized with file backend for: {self._storage_purpose}")
+            # 当前实现仅使用文件存储后端
+            log.debug(f"Unified state manager initialized with file backend for: {self._storage_purpose}")
     
     async def _load_state(self) -> Dict[str, Any]:
         """加载状态数据"""
