@@ -131,7 +131,7 @@ async def _select_credential_respecting_quota(
     - None, "quota_exhausted": 所有凭据配额已满
     """
     if not credential_manager:
-        return None
+        return None, "no_credentials"
 
     visited = set()
 
