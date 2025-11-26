@@ -14,6 +14,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from config import get_available_models
 from log import log
+from .call_trace import log_call_event
 from .credential_manager import CredentialManager
 from .google_chat_api import send_gemini_request
 from .models import ChatCompletionRequest, ModelList, Model
@@ -57,7 +58,8 @@ async def chat_completions(
     token: str = Depends(authenticate)
 ):
     """处理OpenAI格式的聊天完成请求"""
-    
+    call_id = str(uuid.uuid4())
+
     # 获取原始请求数据
     try:
         raw_data = await request.json()
@@ -71,6 +73,19 @@ async def chat_completions(
     except Exception as e:
         log.error(f"Request validation failed: {e}")
         raise HTTPException(status_code=400, detail=f"Request validation error: {str(e)}")
+
+    is_streaming = getattr(request_data, "stream", False)
+    model_name = getattr(request_data, "model", None)
+    log_call_event(
+        call_id,
+        "router_request_received",
+        {
+            "router": "openai",
+            "endpoint": "chat_completions",
+            "model": model_name,
+            "streaming": bool(is_streaming),
+        },
+    )
     
     # 健康检查
     if (len(request_data.messages) == 1 and 
@@ -132,14 +147,16 @@ async def chat_completions(
         log.error(f"OpenAI to Gemini conversion failed: {e}")
         raise HTTPException(status_code=500, detail="Request conversion failed")
 
+    # 注入追踪ID，供下游详细日志使用
+    api_payload["_trace_id"] = call_id
+
     # 发送请求（429重试已在google_api_client中处理）
-    is_streaming = getattr(request_data, "stream", False)
-    log.debug(f"Sending request: streaming={is_streaming}, model={model}")
+    log.debug(f"Sending request: streaming={is_streaming}, model={model_name}")
     response = await send_gemini_request(api_payload, is_streaming, cred_mgr)
     
     # 如果是流式响应，直接返回
     if is_streaming:
-        return await convert_streaming_response(response, model)
+        return await convert_streaming_response(response, model_name)
     
     # 转换非流式响应
     try:
@@ -148,7 +165,7 @@ async def chat_completions(
         else:
             response_data = json.loads(response.content.decode() if isinstance(response.content, bytes) else response.content)
 
-        openai_response = gemini_response_to_openai(response_data, model)
+        openai_response = gemini_response_to_openai(response_data, model_name)
         return JSONResponse(content=openai_response)
 
     except Exception as e:

@@ -496,60 +496,77 @@ class FileStorageManager:
             return False
     
     async def get_usage_stats(self, filename: str) -> Dict[str, Any]:
-        """从统一缓存获取使用统计"""
+        """从统一缓存获取使用统计（使用新版字段名）"""
         self._ensure_initialized()
-        
+
         try:
             filename = self._normalize_filename(filename)
             all_data = await self._credentials_cache_manager.get_all()
-            
+
+            # 如果这个凭证还没有任何统计记录，返回默认值
             if filename not in all_data:
-                # 返回基本的统计字段
-                default_state = self.get_default_state()
-                return {k: v for k, v in default_state.items() if k in {"gemini_2_5_pro_calls", "total_calls", "next_reset_time", "daily_limit_gemini_2_5_pro", "daily_limit_total"}}
-            
+                return {
+                    "pro_model_calls": 0,
+                    "total_calls": 0,
+                    "next_reset_time": None,
+                    "daily_limit_pro_models": 50,
+                    "daily_limit_total": 1000,
+                }
+
             section_data = all_data[filename]
-            
-            # 提取统计字段
-            stats_fields = {"gemini_2_5_pro_calls", "total_calls", "next_reset_time", "daily_limit_gemini_2_5_pro", "daily_limit_total"}
-            stats_data = {k: v for k, v in section_data.items() if k in stats_fields}
-            
-            # 确保必要字段存在
-            default_state = self.get_default_state()
-            for field in stats_fields:
-                if field not in stats_data:
-                    stats_data[field] = default_state[field]
-            
-            return stats_data
-            
+
+            # 直接使用新版字段名；不存在就用安全默认值
+            pro_calls = section_data.get("pro_model_calls", 0)
+            total_calls = section_data.get("total_calls", 0)
+            next_reset_time = section_data.get("next_reset_time")
+            daily_limit_pro = section_data.get("daily_limit_pro_models", 50)
+            daily_limit_total = section_data.get("daily_limit_total", 1000)
+
+            return {
+                "pro_model_calls": pro_calls,
+                "total_calls": total_calls,
+                "next_reset_time": next_reset_time,
+                "daily_limit_pro_models": daily_limit_pro,
+                "daily_limit_total": daily_limit_total,
+            }
+
         except Exception as e:
             log.error(f"Error getting usage stats {filename}: {e}")
-            return self.get_default_state()
+            # 异常时也给一份安全默认值，避免上层炸掉
+            return {
+                "pro_model_calls": 0,
+                "total_calls": 0,
+                "next_reset_time": None,
+                "daily_limit_pro_models": 50,
+                "daily_limit_total": 1000,
+            }
     
     async def get_all_usage_stats(self) -> Dict[str, Dict[str, Any]]:
-        """从统一缓存获取所有使用统计"""
+        """从统一缓存获取所有使用统计（返回新版字段名）"""
         self._ensure_initialized()
-        
+
         try:
             all_data = await self._credentials_cache_manager.get_all()
-            
-            stats = {}
-            stats_fields = {"gemini_2_5_pro_calls", "total_calls", "next_reset_time", "daily_limit_gemini_2_5_pro", "daily_limit_total"}
-            
+
+            stats: Dict[str, Dict[str, Any]] = {}
+
             for filename, section_data in all_data.items():
-                # 提取统计字段
-                stats_data = {k: v for k, v in section_data.items() if k in stats_fields}
-                
-                # 确保必要字段存在
-                default_state = self.get_default_state()
-                for field in stats_fields:
-                    if field not in stats_data:
-                        stats_data[field] = default_state[field]
-                
-                stats[filename] = stats_data
-            
+                pro_calls = section_data.get("pro_model_calls", 0)
+                total_calls = section_data.get("total_calls", 0)
+                next_reset_time = section_data.get("next_reset_time")
+                daily_limit_pro = section_data.get("daily_limit_pro_models", 50)
+                daily_limit_total = section_data.get("daily_limit_total", 1000)
+
+                stats[filename] = {
+                    "pro_model_calls": pro_calls,
+                    "total_calls": total_calls,
+                    "next_reset_time": next_reset_time,
+                    "daily_limit_pro_models": daily_limit_pro,
+                    "daily_limit_total": daily_limit_total,
+                }
+
             return stats
-            
+
         except Exception as e:
             log.error(f"Error getting all usage stats: {e}")
             return {}

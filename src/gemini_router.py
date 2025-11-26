@@ -4,6 +4,8 @@ Gemini Router - Handles native Gemini format API requests
 """
 import asyncio
 import json
+import time
+import uuid
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -13,6 +15,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from config import get_available_models, get_base_model_name
 from log import log
+from .call_trace import log_call_event
 from .credential_manager import CredentialManager
 from .google_chat_api import send_gemini_request, build_gemini_payload_from_native
 from .openai_transfer import _extract_content_and_reasoning
@@ -119,7 +122,17 @@ async def generate_content(
     api_key: str = Depends(authenticate_gemini_flexible)
 ):
     """处理Gemini格式的内容生成请求（非流式）"""
-    
+    call_id = str(uuid.uuid4())
+    log_call_event(
+        call_id,
+        "router_request_received",
+        {
+            "router": "gemini",
+            "endpoint": "generateContent",
+            "model": model,
+            "streaming": False,
+        },
+    )
     
     # 获取原始请求数据
     try:
@@ -181,6 +194,9 @@ async def generate_content(
     except Exception as e:
         log.error(f"Gemini payload build failed: {e}")
         raise HTTPException(status_code=500, detail="Request processing failed")
+
+    # 注入追踪ID，供下游详细日志使用
+    api_payload["_trace_id"] = call_id
     
     # 发送请求（429重试已在google_api_client中处理）
     response = await send_gemini_request(api_payload, False, cred_mgr)
@@ -214,6 +230,17 @@ async def stream_generate_content(
     api_key: str = Depends(authenticate_gemini_flexible)
 ):
     """处理Gemini格式的流式内容生成请求"""
+    call_id = str(uuid.uuid4())
+    log_call_event(
+        call_id,
+        "router_request_received",
+        {
+            "router": "gemini",
+            "endpoint": "streamGenerateContent",
+            "model": model,
+            "streaming": True,
+        },
+    )
     log.debug(f"Stream request received for model: {model}")
     log.debug(f"Request headers: {dict(request.headers)}")
     log.debug(f"API key received: {api_key[:10] if api_key else None}...")
@@ -269,6 +296,9 @@ async def stream_generate_content(
     except Exception as e:
         log.error(f"Gemini payload build failed: {e}")
         raise HTTPException(status_code=500, detail="Request processing failed")
+
+    # 注入追踪ID，供下游详细日志使用
+    api_payload["_trace_id"] = call_id
 
     # 常规流式请求（429重试已在google_api_client中处理）
     response = await send_gemini_request(api_payload, True, cred_mgr)
