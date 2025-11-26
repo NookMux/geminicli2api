@@ -5,6 +5,8 @@ This module is used by both OpenAI compatibility layer and native Gemini endpoin
 import asyncio
 import gc
 import json
+import time
+import uuid
 
 from fastapi import Response
 from fastapi.responses import StreamingResponse
@@ -21,10 +23,11 @@ from config import (
     get_retry_429_max_retries,
     get_retry_429_enabled,
     get_retry_429_interval,
-    PUBLIC_API_MODELS
+    PUBLIC_API_MODELS,
 )
 from .httpx_client import http_client, create_streaming_client_with_kwargs
 from log import log
+from .call_trace import log_call_event
 from .credential_manager import CredentialManager
 from .usage_stats import record_successful_call, get_usage_stats_instance
 from .utils import get_user_agent
@@ -115,6 +118,7 @@ async def _is_quota_available_for_credential(credential_file: str, model_name: s
 async def _select_credential_respecting_quota(
     credential_manager: CredentialManager,
     model_name: str,
+    trace_id: str = None,
 ):
     """
     在凭证轮换的基础上，考虑每日使用配额选择可用凭证。
@@ -132,6 +136,8 @@ async def _select_credential_respecting_quota(
     - None, "model_not_allowed": 存在凭据，但没有任何凭据允许当前模型
     """
     if not credential_manager:
+        if trace_id:
+            log_call_event(trace_id, "select_credential_no_manager", {})
         return None, "no_credentials"
 
     # 归一化基础模型名，用于按base model做授权检查
@@ -141,7 +147,18 @@ async def _select_credential_respecting_quota(
     any_model_allowed = False if base_model else True
 
     while True:
+        loop_start = time.time()
         credential_result = await credential_manager.get_valid_credential()
+        if trace_id and credential_result:
+            current_file_preview = credential_result[0]
+            log_call_event(
+                trace_id,
+                "select_get_valid_credential",
+                {
+                    "credential": current_file_preview,
+                    "elapsed_ms": int((time.time() - loop_start) * 1000),
+                },
+            )
         if not credential_result:
             # 检查是否真的没有配置凭据，还是配额都用完了
             try:
@@ -149,18 +166,26 @@ async def _select_credential_respecting_quota(
                 all_creds = await credential_manager.get_all_credentials()
                 if not all_creds:
                     log.error("No credentials configured")
+                    if trace_id:
+                        log_call_event(trace_id, "select_no_credentials", {})
                     return None, "no_credentials"
                 else:
                     # 有凭据但get_valid_credential返回None，说明都被禁用了
                     log.error("All credentials are disabled")
+                    if trace_id:
+                        log_call_event(trace_id, "select_all_credentials_disabled", {})
                     return None, "no_credentials"
             except Exception:
                 # 如果无法获取所有凭据，保守处理
                     log.error("Unable to determine credential availability")
+                    if trace_id:
+                        log_call_event(trace_id, "select_credential_unknown_state", {})
                     return None, "no_credentials"
 
         current_file, credential_data = credential_result
         if not current_file:
+            if trace_id:
+                log_call_event(trace_id, "select_empty_current_file", {})
             return None, "no_credentials"
 
         # 检查是否已经完整遍历过一轮
@@ -168,9 +193,17 @@ async def _select_credential_respecting_quota(
             # 如果到这里都没有任何凭证允许该模型，则返回模型未授权错误
             if not any_model_allowed and base_model:
                 log.error(f"No credential allows requested model base '{base_model}'")
+                if trace_id:
+                    log_call_event(
+                        trace_id,
+                        "select_model_not_allowed",
+                        {"base_model": base_model},
+                    )
                 return None, "model_not_allowed"
 
             log.error("All credentials have exhausted their daily quotas (or are otherwise unusable)")
+            if trace_id:
+                log_call_event(trace_id, "select_quota_exhausted_all", {})
             return None, "quota_exhausted"
 
         visited.add(current_file)
@@ -178,10 +211,24 @@ async def _select_credential_respecting_quota(
         # 先做模型授权检查，再做配额检查，避免在不支持该模型的凭证上浪费配额判断
         if base_model:
             try:
+                model_allowed_start = time.time()
                 model_allowed = await credential_manager.is_model_allowed_for_credential(
                     current_file,
                     base_model,
                 )
+                if trace_id:
+                    log_call_event(
+                        trace_id,
+                        "select_model_allowed_check",
+                        {
+                            "credential": current_file,
+                            "base_model": base_model,
+                            "allowed": bool(model_allowed),
+                            "elapsed_ms": int(
+                                (time.time() - model_allowed_start) * 1000
+                            ),
+                        },
+                    )
             except Exception as e:
                 log.error(f"Failed to check model permission for credential {current_file}: {e}")
                 model_allowed = True
@@ -191,6 +238,12 @@ async def _select_credential_respecting_quota(
                     f"Credential {current_file} does not allow model base '{base_model}', "
                     f"rotating to next credential"
                 )
+                if trace_id:
+                    log_call_event(
+                        trace_id,
+                        "select_model_not_allowed_single",
+                        {"credential": current_file, "base_model": base_model},
+                    )
                 try:
                     await credential_manager.force_rotate_credential()
                 except Exception as e:
@@ -202,13 +255,37 @@ async def _select_credential_respecting_quota(
                 any_model_allowed = True
 
         # 然后检查配额
-        if await _is_quota_available_for_credential(current_file, model_name):
+        quota_start = time.time()
+        quota_ok = await _is_quota_available_for_credential(current_file, model_name)
+        if trace_id:
+            log_call_event(
+                trace_id,
+                "select_quota_checked",
+                {
+                    "credential": current_file,
+                    "quota_ok": bool(quota_ok),
+                    "elapsed_ms": int((time.time() - quota_start) * 1000),
+                },
+            )
+        if quota_ok:
             # 当前凭证在配额范围内，可以使用
+            if trace_id:
+                log_call_event(
+                    trace_id,
+                    "select_credential_chosen",
+                    {"credential": current_file},
+                )
             return current_file, credential_data
 
         # 当前凭证配额已满，尝试轮换到下一个凭证
         log.info(f"Credential {current_file} has no remaining quota, rotating to next credential")
         try:
+            if trace_id:
+                log_call_event(
+                    trace_id,
+                    "select_quota_exhausted_single",
+                    {"credential": current_file},
+                )
             await credential_manager.force_rotate_credential()
         except Exception as e:
             log.error(f"Failed to rotate credential after quota exhaustion: {e}")
@@ -256,6 +333,19 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False, credent
     Returns:
         FastAPI Response object
     """
+    trace_id = payload.pop("_trace_id", None)
+    if not trace_id:
+        trace_id = str(uuid.uuid4())
+    call_start = time.time()
+    log_call_event(
+        trace_id,
+        "call_start",
+        {
+            "model": payload.get("model", ""),
+            "is_streaming": bool(is_streaming),
+        },
+    )
+
     # 获取429重试配置
     max_retries = await get_retry_429_max_retries()
     retry_429_enabled = await get_retry_429_enabled()
@@ -272,16 +362,28 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False, credent
 
     # 确保有credential_manager
     if not credential_manager:
+        log_call_event(trace_id, "call_no_credential_manager", {})
         return _create_error_response("Credential manager not provided", 500)
     
     # 获取当前凭证
     try:
         # 在所有凭据里挑一个"还在日配额内"的
+        select_start = time.time()
         credential_result = await _select_credential_respecting_quota(
-            credential_manager, model_name
+            credential_manager,
+            model_name,
+            trace_id,
         )
         if not credential_result or credential_result[0] is None:
             reason = credential_result[1] if credential_result and len(credential_result) > 1 else "unknown"
+            log_call_event(
+                trace_id,
+                "call_select_credential_failed",
+                {
+                    "reason": reason,
+                    "elapsed_ms": int((time.time() - select_start) * 1000),
+                },
+            )
             if reason == "no_credentials":
                 # 没有配置凭据或都被禁用，返回500
                 return _create_error_response("No valid credentials available", 500)
@@ -299,8 +401,26 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False, credent
                 )
 
         current_file, credential_data = credential_result
-        headers, final_payload, target_url = await _prepare_request_headers_and_payload(payload, credential_data, use_public_api, target_url)
+        log_call_event(
+            trace_id,
+            "call_select_credential_ok",
+            {
+                "credential": current_file,
+                "elapsed_ms": int((time.time() - select_start) * 1000),
+            },
+        )
+        headers, final_payload, target_url = await _prepare_request_headers_and_payload(
+            payload,
+            credential_data,
+            use_public_api,
+            target_url,
+        )
     except Exception as e:
+        log_call_event(
+            trace_id,
+            "call_select_credential_exception",
+            {"error": str(e)},
+        )
         return _create_error_response(str(e), 500)
 
     # 预序列化payload，避免重试时重复序列化
@@ -315,8 +435,28 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False, credent
                 
                 try:
                     # 使用stream方法但不在async with块中消费数据
+                    request_start = time.time()
+                    log_call_event(
+                        trace_id,
+                        "http_attempt_start",
+                        {
+                            "attempt": attempt,
+                            "is_streaming": True,
+                            "url": target_url,
+                        },
+                    )
                     stream_ctx = client.stream("POST", target_url, content=final_post_data, headers=headers)
                     resp = await stream_ctx.__aenter__()
+                    log_call_event(
+                        trace_id,
+                        "http_attempt_response",
+                        {
+                            "attempt": attempt,
+                            "status_code": resp.status_code,
+                            "elapsed_ms": int((time.time() - request_start) * 1000),
+                            "is_streaming": True,
+                        },
+                    )
                     
                     if resp.status_code == 429:
                         # 记录429错误并获取响应内容
@@ -352,6 +492,7 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False, credent
                                 new_credential_result = await _select_credential_respecting_quota(
                                     credential_manager,
                                     model_name,
+                                    trace_id,
                                 )
                                 if not new_credential_result or new_credential_result[0] is None:
                                     reason = new_credential_result[1] if new_credential_result and len(new_credential_result) > 1 else "unknown"
@@ -366,6 +507,14 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False, credent
                                                 }
                                             }
                                             yield f"data: {json.dumps(error_response)}\n\n"
+                                        log_call_event(
+                                            trace_id,
+                                            "http_attempt_quota_no_credentials",
+                                            {
+                                                "attempt": attempt,
+                                                "status_code": 500,
+                                            },
+                                        )
                                         return StreamingResponse(error_stream(), media_type="text/event-stream", status_code=500)
                                     elif reason == "model_not_allowed":
                                         # 存在凭据，但没有任何凭据允许当前模型
@@ -378,6 +527,14 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False, credent
                                                 }
                                             }
                                             yield f"data: {json.dumps(error_response)}\n\n"
+                                        log_call_event(
+                                            trace_id,
+                                            "http_attempt_quota_model_not_allowed",
+                                            {
+                                                "attempt": attempt,
+                                                "status_code": 400,
+                                            },
+                                        )
                                         return StreamingResponse(error_stream(), media_type="text/event-stream", status_code=400)
                                     else:
                                         # 已经没有任何在配额内的凭据了，直接返回 429，不再死循环重试
@@ -390,6 +547,14 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False, credent
                                                 }
                                             }
                                             yield f"data: {json.dumps(error_response)}\n\n"
+                                        log_call_event(
+                                            trace_id,
+                                            "http_attempt_quota_exhausted_all",
+                                            {
+                                                "attempt": attempt,
+                                                "status_code": 429,
+                                            },
+                                        )
                                         return StreamingResponse(error_stream(), media_type="text/event-stream", status_code=429)
 
                                 current_file, credential_data = new_credential_result
@@ -408,6 +573,14 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False, credent
                                     }
                                 }
                                 yield f"data: {json.dumps(error_response)}\n\n"
+                            log_call_event(
+                                trace_id,
+                                "http_attempt_429_max_retries",
+                                {
+                                    "attempt": attempt,
+                                    "status_code": 429,
+                                },
+                            )
                             return StreamingResponse(error_stream(), media_type="text/event-stream", status_code=429)
                     elif resp.status_code != 200:
                         # 处理其他非200状态码的错误
@@ -449,10 +622,26 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False, credent
                                 }
                             }
                             yield f"data: {json.dumps(error_response)}\n\n"
+                        log_call_event(
+                            trace_id,
+                            "http_attempt_streaming_error_status",
+                            {
+                                "attempt": attempt,
+                                "status_code": resp.status_code,
+                            },
+                        )
                         return StreamingResponse(error_stream(), media_type="text/event-stream", status_code=resp.status_code)
                     else:
                         # 成功响应，传递所有资源给流式处理函数管理
-                        return _handle_streaming_response_managed(resp, stream_ctx, client, credential_manager, payload.get("model", ""), current_file)
+                        return _handle_streaming_response_managed(
+                            resp,
+                            stream_ctx,
+                            client,
+                            credential_manager,
+                            payload.get("model", ""),
+                            current_file,
+                            trace_id,
+                        )
                         
                 except Exception as e:
                     # 清理资源
@@ -465,8 +654,28 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False, credent
             else:
                 # 非流式请求处理 - 使用httpx_client模块
                 async with http_client.get_client(timeout=None) as client:
+                    request_start = time.time()
+                    log_call_event(
+                        trace_id,
+                        "http_attempt_start",
+                        {
+                            "attempt": attempt,
+                            "is_streaming": False,
+                            "url": target_url,
+                        },
+                    )
                     resp = await client.post(
                         target_url, content=final_post_data, headers=headers
+                    )
+                    log_call_event(
+                        trace_id,
+                        "http_attempt_response",
+                        {
+                            "attempt": attempt,
+                            "status_code": resp.status_code,
+                            "elapsed_ms": int((time.time() - request_start) * 1000),
+                            "is_streaming": False,
+                        },
                     )
                     
                     if resp.status_code == 429:
@@ -482,20 +691,45 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False, credent
                                 new_credential_result = await _select_credential_respecting_quota(
                                     credential_manager,
                                     model_name,
+                                    trace_id,
                                 )
                                 if not new_credential_result or new_credential_result[0] is None:
                                     reason = new_credential_result[1] if new_credential_result and len(new_credential_result) > 1 else "unknown"
                                     if reason == "no_credentials":
                                         # 已经没有任何可用凭据了，直接返回 500
+                                        log_call_event(
+                                            trace_id,
+                                            "http_attempt_quota_no_credentials",
+                                            {
+                                                "attempt": attempt,
+                                                "status_code": 500,
+                                            },
+                                        )
                                         return _create_error_response("No valid credentials available", 500)
                                     elif reason == "model_not_allowed":
                                         # 存在凭据，但没有任何凭据允许当前模型
+                                        log_call_event(
+                                            trace_id,
+                                            "http_attempt_quota_model_not_allowed",
+                                            {
+                                                "attempt": attempt,
+                                                "status_code": 400,
+                                            },
+                                        )
                                         return _create_error_response(
                                             f"Requested model '{model_name}' is not allowed by any configured credential",
                                             400,
                                         )
                                     else:
                                         # 已经没有任何在配额内的凭据了，直接返回 429，不再死循环重试
+                                        log_call_event(
+                                            trace_id,
+                                            "http_attempt_quota_exhausted_all",
+                                            {
+                                                "attempt": attempt,
+                                                "status_code": 429,
+                                            },
+                                        )
                                         return _create_error_response(
                                             "[非google限制] All credentials have exhausted their daily quotas",
                                             429,
@@ -507,10 +741,24 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False, credent
                             continue
                         else:
                             log.error(f"[RETRY] Max retries exceeded for 429 error")
+                            log_call_event(
+                                trace_id,
+                                "http_attempt_429_max_retries",
+                                {
+                                    "attempt": attempt,
+                                    "status_code": 429,
+                                },
+                            )
                             return _create_error_response("429 rate limit exceeded, max retries reached", 429)
                     else:
                         # 非429错误或成功响应，正常处理
-                        return await _handle_non_streaming_response(resp, credential_manager, payload.get("model", ""), current_file)
+                        return await _handle_non_streaming_response(
+                            resp,
+                            credential_manager,
+                            payload.get("model", ""),
+                            current_file,
+                            trace_id,
+                        )
                     
         except Exception as e:
             if attempt < max_retries:
@@ -519,13 +767,37 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False, credent
                 continue
             else:
                 log.error(f"Request to Google API failed: {str(e)}")
+                log_call_event(
+                    trace_id,
+                    "call_exception",
+                    {
+                        "error": str(e),
+                        "attempt": attempt,
+                    },
+                )
                 return _create_error_response(f"Request failed: {str(e)}")
     
     # 如果循环结束仍未成功，返回错误
+    log_call_event(
+        trace_id,
+        "call_max_retries_exceeded",
+        {
+            "max_retries": max_retries,
+            "elapsed_ms": int((time.time() - call_start) * 1000),
+        },
+    )
     return _create_error_response("Max retries exceeded", 429)
 
 
-def _handle_streaming_response_managed(resp, stream_ctx, client, credential_manager: CredentialManager = None, model_name: str = "", current_file: str = None) -> StreamingResponse:
+def _handle_streaming_response_managed(
+    resp,
+    stream_ctx,
+    client,
+    credential_manager: CredentialManager = None,
+    model_name: str = "",
+    current_file: str = None,
+    trace_id: str = None,
+) -> StreamingResponse:
     """Handle streaming response with complete resource lifecycle management."""
     
     # 检查HTTP错误
@@ -576,6 +848,14 @@ def _handle_streaming_response_managed(resp, stream_ctx, client, credential_mana
                     "code": resp.status_code
                 }
             }
+            if trace_id:
+                log_call_event(
+                    trace_id,
+                    "streaming_http_error",
+                    {
+                        "status_code": resp.status_code,
+                    },
+                )
             yield f'data: {json.dumps(error_response)}\n\n'.encode('utf-8')
         
         return StreamingResponse(
@@ -588,6 +868,7 @@ def _handle_streaming_response_managed(resp, stream_ctx, client, credential_mana
     async def managed_stream_generator():
         success_recorded = False
         managed_stream_generator._chunk_count = 0  # 初始化chunk计数器
+        first_chunk_logged = False
         try:
             async for chunk in resp.aiter_lines():
                 if not chunk or not chunk.startswith('data: '):
@@ -611,6 +892,15 @@ def _handle_streaming_response_managed(resp, stream_ctx, client, credential_mana
                         data = obj["response"]
                         yield f"data: {json.dumps(data, separators=(',',':'))}\n\n".encode()
                         await asyncio.sleep(0)  # 让其他协程有机会运行
+                        if trace_id and not first_chunk_logged:
+                            first_chunk_logged = True
+                            log_call_event(
+                                trace_id,
+                                "stream_first_chunk",
+                                {
+                                    "model": model_name,
+                                },
+                            )
                         
                         # 定期释放内存（每100个chunk）
                         if hasattr(managed_stream_generator, '_chunk_count'):
@@ -627,6 +917,14 @@ def _handle_streaming_response_managed(resp, stream_ctx, client, credential_mana
             err = {"error": {"message": str(e), "type": "api_error", "code": 500}}
             yield f"data: {json.dumps(err)}\n\n".encode()
         finally:
+            if trace_id:
+                log_call_event(
+                    trace_id,
+                    "stream_finished",
+                    {
+                        "model": model_name,
+                    },
+                )
             # 确保清理所有资源
             try:
                 await stream_ctx.__aexit__(None, None, None)
@@ -642,7 +940,13 @@ def _handle_streaming_response_managed(resp, stream_ctx, client, credential_mana
         media_type="text/event-stream"
     )
 
-async def _handle_non_streaming_response(resp, credential_manager: CredentialManager = None, model_name: str = "", current_file: str = None) -> Response:
+async def _handle_non_streaming_response(
+    resp,
+    credential_manager: CredentialManager = None,
+    model_name: str = "",
+    current_file: str = None,
+    trace_id: str = None,
+) -> Response:
     """Handle non-streaming response from Google API."""
     if resp.status_code == 200:
         try:
@@ -663,6 +967,15 @@ async def _handle_non_streaming_response(resp, credential_manager: CredentialMan
             log.debug(f"Google API原始响应: {json.dumps(google_api_response, ensure_ascii=False)[:500]}...")
             standard_gemini_response = google_api_response.get("response")
             log.debug(f"提取的response字段: {json.dumps(standard_gemini_response, ensure_ascii=False)[:500]}...")
+            if trace_id:
+                log_call_event(
+                    trace_id,
+                    "non_stream_success",
+                    {
+                        "model": model_name,
+                        "status_code": 200,
+                    },
+                )
             return Response(
                 content=json.dumps(standard_gemini_response),
                 status_code=200,
@@ -670,6 +983,16 @@ async def _handle_non_streaming_response(resp, credential_manager: CredentialMan
             )
         except Exception as e:
             log.error(f"Failed to parse Google API response: {str(e)}")
+            if trace_id:
+                log_call_event(
+                    trace_id,
+                    "non_stream_parse_error",
+                    {
+                        "model": model_name,
+                        "status_code": resp.status_code,
+                        "error": str(e),
+                    },
+                )
             return Response(
                 content=resp.content,
                 status_code=resp.status_code,
@@ -708,7 +1031,15 @@ async def _handle_non_streaming_response(resp, credential_manager: CredentialMan
             await credential_manager.record_api_call_result(current_file, False, resp.status_code)
         
         await _handle_api_error(credential_manager, resp.status_code, response_content)
-        
+        if trace_id:
+            log_call_event(
+                trace_id,
+                "non_stream_error_status",
+                {
+                    "model": model_name,
+                    "status_code": resp.status_code,
+                },
+            )
         return _create_error_response(f"API error: {resp.status_code}", resp.status_code)
 
 def build_gemini_payload_from_native(native_request: dict, model_from_path: str) -> dict:
