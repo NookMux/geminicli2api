@@ -31,6 +31,7 @@ from .call_trace import log_call_event
 from .credential_manager import CredentialManager
 from .usage_stats import record_successful_call, get_usage_stats_instance
 from .utils import get_user_agent
+from .api_call_logger import log_api_call
 
 def _create_error_response(message: str, status_code: int = 500) -> Response:
     """Create standardized error response."""
@@ -869,6 +870,7 @@ def _handle_streaming_response_managed(
         success_recorded = False
         managed_stream_generator._chunk_count = 0  # 初始化chunk计数器
         first_chunk_logged = False
+        usage_logged = False
         try:
             async for chunk in resp.aiter_lines():
                 if not chunk or not chunk.startswith('data: '):
@@ -890,6 +892,26 @@ def _handle_streaming_response_managed(
                     obj = json.loads(payload)
                     if "response" in obj:
                         data = obj["response"]
+                        # 如果本次chunk包含 usageMetadata 且尚未记录，则记录一次API调用日志
+                        if (
+                            not usage_logged
+                            and isinstance(data, dict)
+                            and "usageMetadata" in data
+                        ):
+                            try:
+                                usage = data.get("usageMetadata") or {}
+                                prompt_tokens = usage.get("promptTokenCount")
+                                completion_tokens = usage.get("candidatesTokenCount")
+                                if current_file:
+                                    log_api_call(
+                                        current_file,
+                                        model_name,
+                                        prompt_tokens,
+                                        completion_tokens,
+                                    )
+                                usage_logged = True
+                            except Exception as e:
+                                log.debug(f"Failed to log streaming API usage: {e}")
                         yield f"data: {json.dumps(data, separators=(',',':'))}\n\n".encode()
                         await asyncio.sleep(0)  # 让其他协程有机会运行
                         if trace_id and not first_chunk_logged:
@@ -958,7 +980,7 @@ async def _handle_non_streaming_response(
                     await record_successful_call(current_file, model_name)
                 except Exception as e:
                     log.debug(f"Failed to record usage statistics: {e}")
-            
+
             raw = await resp.aread()
             google_api_response = raw.decode('utf-8')
             if google_api_response.startswith('data: '):
@@ -967,6 +989,20 @@ async def _handle_non_streaming_response(
             log.debug(f"Google API原始响应: {json.dumps(google_api_response, ensure_ascii=False)[:500]}...")
             standard_gemini_response = google_api_response.get("response")
             log.debug(f"提取的response字段: {json.dumps(standard_gemini_response, ensure_ascii=False)[:500]}...")
+            # 如果存在 usageMetadata，则记录一次API调用日志（时间-凭证-模型-输入/输出tokens）
+            try:
+                if current_file and isinstance(standard_gemini_response, dict):
+                    usage = standard_gemini_response.get("usageMetadata") or {}
+                    prompt_tokens = usage.get("promptTokenCount")
+                    completion_tokens = usage.get("candidatesTokenCount")
+                    log_api_call(
+                        current_file,
+                        model_name,
+                        prompt_tokens,
+                        completion_tokens,
+                    )
+            except Exception as e:
+                log.debug(f"Failed to log non-streaming API usage: {e}")
             if trace_id:
                 log_call_event(
                     trace_id,
