@@ -10,7 +10,9 @@
     <link rel="stylesheet" href="/static/css/manage.css">
     <link rel="stylesheet" href="/static/css/usage.css">
     <link rel="stylesheet" href="/static/css/config.css">
+    <link rel="stylesheet" href="/static/css/apilog.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
@@ -51,6 +53,9 @@
                 </button>
                 <button class="tab" onclick="switchTab(event, 'usage')">
                     <i class="fas fa-chart-line"></i> 使用统计
+                </button>
+                <button class="tab" onclick="switchTab(event, 'apilog')">
+                    <i class="fas fa-list-alt"></i> 调用日志
                 </button>
                 <button class="tab" onclick="switchTab(event, 'config')">
                     <i class="fas fa-cog"></i> 配置管理
@@ -290,6 +295,142 @@
                 </div>
             </div>
 
+            <!-- 调用日志标签页 -->
+            <div id="apilogTab" class="tab-content">
+                <h3><i class="fas fa-list-alt"></i> 调用日志</h3>
+                <p>查看详细的API调用记录，包含Token使用统计</p>
+
+                <div class="stats-container" id="apiLogStatsContainer">
+                    <div class="stat-item total">
+                        <span class="stat-number" id="totalLogEntries">0</span>
+                        <span class="stat-label">总记录数</span>
+                    </div>
+                    <div class="stat-item normal">
+                        <span class="stat-number" id="totalInputTokens">0</span>
+                        <span class="stat-label">输入Token</span>
+                    </div>
+                    <div class="stat-item disabled">
+                        <span class="stat-number" id="totalOutputTokens">0</span>
+                        <span class="stat-label">输出Token</span>
+                    </div>
+                </div>
+
+                <div class="manage-actions">
+                    <button class="refresh-btn" onclick="refreshApiLog()">
+                        <i class="fas fa-sync-alt"></i> 刷新日志
+                    </button>
+                    <button class="btn" onclick="exportApiLog()">
+                        <i class="fas fa-download"></i> 导出CSV
+                    </button>
+                </div>
+
+                <!-- 筛选控件 -->
+                <div class="filter-container">
+                    <div class="filter-row">
+                        <div class="filter-item">
+                            <label for="credentialFilter" class="filter-label"><i class="fas fa-file-alt"></i> 凭证筛选</label>
+                            <select id="credentialFilter" class="filter-select" onchange="applyLogFilters()">
+                                <option value="all">全部凭证</option>
+                            </select>
+                        </div>
+                        <div class="filter-item">
+                            <label for="modelFilter" class="filter-label"><i class="fas fa-robot"></i> 模型筛选</label>
+                            <select id="modelFilter" class="filter-select" onchange="applyLogFilters()">
+                                <option value="all">全部模型</option>
+                            </select>
+                        </div>
+                        <div class="filter-item">
+                            <label for="logPageSizeSelect" class="filter-label"><i class="fas fa-list"></i> 每页显示</label>
+                            <select id="logPageSizeSelect" class="filter-select" onchange="changeLogPageSize()">
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                                <option value="200">200</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 调用日志表格 -->
+                <div id="apiLogSection">
+                    <div class="loading" id="apiLogLoading">正在加载调用日志...</div>
+                    <div id="apiLogTableContainer" class="hidden">
+                        <div class="table-wrapper">
+                            <table class="api-log-table">
+                                <thead>
+                                    <tr>
+                                        <th onclick="sortLogTable('timestamp')">
+                                            <i class="fas fa-clock"></i> 时间
+                                            <i class="fas fa-sort sort-icon" id="timestamp-sort"></i>
+                                        </th>
+                                        <th onclick="sortLogTable('credential')">
+                                            <i class="fas fa-file-alt"></i> 凭证
+                                            <i class="fas fa-sort sort-icon" id="credential-sort"></i>
+                                        </th>
+                                        <th onclick="sortLogTable('model')">
+                                            <i class="fas fa-robot"></i> 模型
+                                            <i class="fas fa-sort sort-icon" id="model-sort"></i>
+                                        </th>
+                                        <th onclick="sortLogTable('input_tokens')">
+                                            <i class="fas fa-arrow-right"></i> 输入Token
+                                            <i class="fas fa-sort sort-icon" id="input_tokens-sort"></i>
+                                        </th>
+                                        <th onclick="sortLogTable('output_tokens')">
+                                            <i class="fas fa-arrow-left"></i> 输出Token
+                                            <i class="fas fa-sort sort-icon" id="output_tokens-sort"></i>
+                                        </th>
+                                        <th onclick="sortLogTable('total_tokens')">
+                                            <i class="fas fa-calculator"></i> 总Token
+                                            <i class="fas fa-sort sort-icon" id="total_tokens-sort"></i>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody id="apiLogTableBody">
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- 分页控件 -->
+                        <div class="pagination-container" id="logPaginationContainer">
+                            <button class="pagination-btn" id="logPrevPageBtn" onclick="changeLogPage(-1)">上一页</button>
+                            <div class="pagination-info" id="logPaginationInfo">第 1 页，共 1 页</div>
+                            <button class="pagination-btn" id="logNextPageBtn" onclick="changeLogPage(1)">下一页</button>
+                        </div>
+                    </div>
+
+                    <!-- 图表统计区域 -->
+                    <div id="apiLogChartsContainer" class="charts-container hidden">
+                        <div class="chart-grid">
+                            <div class="chart-item">
+                                <h4><i class="fas fa-chart-line"></i> Token使用趋势</h4>
+                                <canvas id="tokenTrendChart"></canvas>
+                            </div>
+                            <div class="chart-item">
+                                <h4><i class="fas fa-chart-pie"></i> 模型使用分布</h4>
+                                <canvas id="modelDistributionChart"></canvas>
+                            </div>
+                            <div class="chart-item">
+                                <h4><i class="fas fa-chart-bar"></i> 凭证使用统计</h4>
+                                <canvas id="credentialUsageChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 使用说明 -->
+                <div class="config-group">
+                    <h4><i class="fas fa-question-circle"></i> 使用说明</h4>
+                    <div class="config-info">
+                        <strong>数据说明：</strong>
+                        <ul>
+                            <li><strong>时间范围：</strong>显示最近的API调用记录，按时间倒序排列</li>
+                            <li><strong>Token统计：</strong>输入/输出Token数来自Google API返回的usageMetadata</li>
+                            <li><strong>数据来源：</strong>基于apilog.csv文件，可通过Docker挂卷持久化存储</li>
+                            <li><strong>图表分析：</strong>支持Token趋势、模型分布、凭证使用等多维度分析</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
             <!-- 配置管理标签页 -->
             <div id="configTab" class="tab-content">
                 <h3><i class="fas fa-cog"></i> 配置管理</h3>
@@ -342,6 +483,7 @@
     <!-- JavaScript 模块 -->
     <script src="/static/js/model_permissions.js"></script>
     <script src="/static/js/control_panel.js"></script>
+    <script src="/static/js/apilog.js"></script>
 </body>
 
 </html>

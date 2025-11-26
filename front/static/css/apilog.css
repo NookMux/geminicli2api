@@ -1,0 +1,359 @@
+/* 调用日志页面样式 */
+
+/* 基础布局 */
+#apilogTab {
+    padding: 20px;
+}
+
+/* 统计卡片样式 */
+#apiLogStatsContainer {
+    margin-bottom: 20px;
+}
+
+#apiLogStatsContainer .stat-item.normal {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+#apiLogStatsContainer .stat-item.disabled {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+}
+
+/* 表格样式 */
+.table-wrapper {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.api-log-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.api-log-table thead {
+    background: linear-gradient(135deg, #e8f4ff 0%, #f0f9ff 100%);
+    border-bottom: 2px solid #dbeafe;
+}
+
+.api-log-table th {
+    padding: 15px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #374151;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.api-log-table th:hover {
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.api-log-table th i {
+    margin-right: 5px;
+    color: #6b7280;
+}
+
+.api-log-table th .sort-icon {
+    margin-left: 8px;
+    font-size: 12px;
+    color: #d1d5db;
+    transition: color 0.3s ease;
+}
+
+.api-log-table th:hover .sort-icon {
+    color: #3b82f6;
+}
+
+.api-log-table th.sort-asc .sort-icon::before {
+    content: '\f0de'; /* fa-sort-up */
+    color: #3b82f6;
+}
+
+.api-log-table th.sort-desc .sort-icon::before {
+    content: '\f0dd'; /* fa-sort-down */
+    color: #3b82f6;
+}
+
+.api-log-table tbody tr {
+    border-bottom: 1px solid #f3f4f6;
+    transition: all 0.3s ease;
+}
+
+.api-log-table tbody tr:hover {
+    background: rgba(59, 130, 246, 0.02);
+    transform: translateX(2px);
+}
+
+.api-log-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.api-log-table td {
+    padding: 12px;
+    color: #4b5563;
+    line-height: 1.5;
+}
+
+/* 特列样式 */
+.api-log-table td .timestamp {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    color: #6b7280;
+}
+
+.api-log-table td .credential {
+    font-family: 'Monaco', 'Menlo', monospace;
+    background: #f9fafb;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #374151;
+    font-weight: 500;
+}
+
+.api-log-table td .model {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.api-log-table td .token-count {
+    font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+    font-weight: 600;
+    text-align: center;
+    display: inline-block;
+    min-width: 60px;
+    padding: 4px 8px;
+    border-radius: 6px;
+}
+
+.api-log-table td .input-tokens {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.api-log-table td .output-tokens {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.api-log-table td .total-tokens {
+    background: #fef3c7;
+    color: #92400e;
+    font-weight: 700;
+}
+
+/* 图表容器样式 */
+.charts-container {
+    margin-top: 30px;
+}
+
+.chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.chart-item {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.chart-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+.chart-item h4 {
+    margin: 0 0 15px 0;
+    color: #374151;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+}
+
+.chart-item h4 i {
+    margin-right: 8px;
+    color: #6b7280;
+}
+
+.chart-item canvas {
+    max-height: 200px;
+    width: 100% !important;
+}
+
+/* 空状态样式 */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6b7280;
+}
+
+.empty-state i {
+    font-size: 48px;
+    color: #d1d5db;
+    margin-bottom: 20px;
+}
+
+.empty-state h3 {
+    margin: 0 0 10px 0;
+    color: #374151;
+    font-size: 18px;
+}
+
+.empty-state p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+/* 加载状态 */
+.api-log-loading {
+    text-align: center;
+    padding: 40px;
+    color: #6b7280;
+}
+
+.api-log-loading i {
+    font-size: 24px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .api-log-table {
+        font-size: 12px;
+    }
+
+    .api-log-table th,
+    .api-log-table td {
+        padding: 8px 6px;
+    }
+
+    .chart-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+
+    .chart-item {
+        padding: 15px;
+    }
+
+    #apiLogStatsContainer .stat-item {
+        flex: 1;
+        min-width: 80px;
+    }
+}
+
+/* 动画效果 */
+.api-log-table tbody tr {
+    animation: fadeInUp 0.3s ease forwards;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 高亮筛选结果 */
+.api-log-table tbody tr.filtered {
+    background: rgba(251, 191, 36, 0.1);
+}
+
+/* 操作按钮样式 */
+.log-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+}
+
+.log-actions .btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 统计信息增强 */
+.log-summary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 20px 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+}
+
+.log-summary .summary-item {
+    text-align: center;
+}
+
+.log-summary .summary-value {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 5px;
+}
+
+.log-summary .summary-label {
+    font-size: 12px;
+    opacity: 0.9;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* 工具提示 */
+.tooltip {
+    position: relative;
+    cursor: help;
+}
+
+.tooltip::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1f2937;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    z-index: 1000;
+    pointer-events: none;
+}
+
+.tooltip:hover::after {
+    opacity: 1;
+    visibility: visible;
+}
