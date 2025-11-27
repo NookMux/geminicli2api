@@ -16,6 +16,9 @@ services:
       - PORT=7861
       - API_PASSWORD=your_api_key
       - PANEL_PASSWORD=your_password
+      - CALLS_PER_ROTATION=100
+      - DAILY_LIMIT_PRO_MODELS=75
+      - DAILY_LIMIT_TOTAL=600
     volumes:
       - ./data/creds:/app/creds
       - ./var/data/creds/apilog.csv:/app/apilog.csv

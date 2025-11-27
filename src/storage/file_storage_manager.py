@@ -13,6 +13,7 @@ import toml
 
 from log import log
 from .cache_manager import UnifiedCacheManager, CacheBackend
+from config import get_daily_limit_pro_models, get_daily_limit_total
 
 
 class FileCacheBackend(CacheBackend):
@@ -83,8 +84,8 @@ class FileStorageManager:
         "gemini_2_5_pro_calls": 0,
         "total_calls": 0,
         "next_reset_time": None,
-        "daily_limit_gemini_2_5_pro": 50,
-        "daily_limit_total": 1000,
+        "daily_limit_gemini_2_5_pro": 75,
+        "daily_limit_total": 600,
         # None 表示不做限制，允许所有当前支持的模型
         "allowed_base_models": None,
     }
@@ -509,8 +510,8 @@ class FileStorageManager:
                     "pro_model_calls": 0,
                     "total_calls": 0,
                     "next_reset_time": None,
-                    "daily_limit_pro_models": 50,
-                    "daily_limit_total": 1000,
+                    "daily_limit_pro_models": 75,
+                    "daily_limit_total": 600,
                 }
 
             section_data = all_data[filename]
@@ -537,8 +538,8 @@ class FileStorageManager:
                 "pro_model_calls": 0,
                 "total_calls": 0,
                 "next_reset_time": None,
-                "daily_limit_pro_models": 50,
-                "daily_limit_total": 1000,
+                "daily_limit_pro_models": 75,
+                "daily_limit_total": 600,
             }
     
     async def get_all_usage_stats(self) -> Dict[str, Dict[str, Any]]:
@@ -554,8 +555,8 @@ class FileStorageManager:
                 pro_calls = section_data.get("pro_model_calls", 0)
                 total_calls = section_data.get("total_calls", 0)
                 next_reset_time = section_data.get("next_reset_time")
-                daily_limit_pro = section_data.get("daily_limit_pro_models", 50)
-                daily_limit_total = section_data.get("daily_limit_total", 1000)
+                daily_limit_pro = section_data.get("daily_limit_pro_models", 75)
+                daily_limit_total = section_data.get("daily_limit_total", 600)
 
                 stats[filename] = {
                     "pro_model_calls": pro_calls,
