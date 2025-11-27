@@ -172,6 +172,10 @@ class ConfigSaveRequest(BaseModel):
     config: dict
 
 
+class TomlCredsImportRequest(BaseModel):
+    """从TOML文本导入凭证的请求体"""
+    content: str
+
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """验证认证令牌"""
@@ -631,6 +635,91 @@ async def upload_credentials(files: List[UploadFile] = File(...), token: str = D
         raise
     except Exception as e:
         log.error(f"批量上传失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/creds/import-toml")
+async def import_creds_from_toml(
+    request: TomlCredsImportRequest,
+    token: str = Depends(verify_token)
+):
+    """
+    从TOML文本批量导入凭证文件。
+
+    文本格式与 Docs/creds.toml 一致：
+    顶层表名为凭证文件名，表内为对应的凭证字段。
+    """
+    try:
+        try:
+            parsed = toml.loads(request.content)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"TOML解析失败: {str(e)}")
+
+        if not isinstance(parsed, dict) or not parsed:
+            raise HTTPException(status_code=400, detail="TOML内容为空或格式不正确")
+
+        # 只接受 { filename: { ...credential fields... } } 这样的结构
+        entries: Dict[str, Dict[str, Any]] = {}
+        for name, value in parsed.items():
+            if isinstance(value, dict):
+                entries[str(name)] = value
+
+        if not entries:
+            raise HTTPException(status_code=400, detail="未找到任何有效的凭证条目")
+
+        storage_adapter = await get_storage_adapter()
+
+        results = []
+        success_count = 0
+
+        # 数量通常不大，这里按顺序处理即可
+        for raw_name, cred_data in entries.items():
+            filename = os.path.basename(raw_name)
+
+            try:
+                if not isinstance(cred_data, dict):
+                    results.append({
+                        "filename": filename,
+                        "status": "error",
+                        "message": "凭证数据格式必须为表/对象"
+                    })
+                    continue
+
+                success = await storage_adapter.store_credential(filename, cred_data)
+                if success:
+                    success_count += 1
+                    results.append({
+                        "filename": filename,
+                        "status": "success",
+                        "message": "导入成功"
+                    })
+                else:
+                    results.append({
+                        "filename": filename,
+                        "status": "error",
+                        "message": "存储失败"
+                    })
+            except Exception as e:
+                results.append({
+                    "filename": filename,
+                    "status": "error",
+                    "message": f"处理失败: {str(e)}"
+                })
+
+        if success_count == 0:
+            raise HTTPException(status_code=400, detail="没有任何凭证导入成功")
+
+        return JSONResponse(content={
+            "imported_count": success_count,
+            "total_count": len(entries),
+            "results": results,
+            "message": f"导入完成: 成功 {success_count}/{len(entries)} 个凭证"
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"从TOML导入凭证失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
