@@ -159,7 +159,7 @@ function renderTable() {
         row.innerHTML = `
             <td>
                 <span class="timestamp" title="${item.timestamp}">
-                    ${formatDateTime(item.timestamp)}
+                    ${item.timestamp || ''}
                 </span>
             </td>
             <td>
