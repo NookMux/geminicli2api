@@ -33,6 +33,7 @@ from .auth import (
 from .credential_manager import CredentialManager
 from .usage_stats import get_usage_stats, get_aggregated_stats, get_usage_stats_instance
 from .storage_adapter import get_storage_adapter
+from .api_call_logger import get_api_log_file_path
 
 # 创建路由器
 router = APIRouter()
@@ -170,6 +171,10 @@ class CredModelsUpdateRequest(BaseModel):
 class ConfigSaveRequest(BaseModel):
     config: dict
 
+
+class TomlCredsImportRequest(BaseModel):
+    """从TOML文本导入凭证的请求体"""
+    content: str
 
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -630,6 +635,91 @@ async def upload_credentials(files: List[UploadFile] = File(...), token: str = D
         raise
     except Exception as e:
         log.error(f"批量上传失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/creds/import-toml")
+async def import_creds_from_toml(
+    request: TomlCredsImportRequest,
+    token: str = Depends(verify_token)
+):
+    """
+    从TOML文本批量导入凭证文件。
+
+    文本格式与 Docs/creds.toml 一致：
+    顶层表名为凭证文件名，表内为对应的凭证字段。
+    """
+    try:
+        try:
+            parsed = toml.loads(request.content)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"TOML解析失败: {str(e)}")
+
+        if not isinstance(parsed, dict) or not parsed:
+            raise HTTPException(status_code=400, detail="TOML内容为空或格式不正确")
+
+        # 只接受 { filename: { ...credential fields... } } 这样的结构
+        entries: Dict[str, Dict[str, Any]] = {}
+        for name, value in parsed.items():
+            if isinstance(value, dict):
+                entries[str(name)] = value
+
+        if not entries:
+            raise HTTPException(status_code=400, detail="未找到任何有效的凭证条目")
+
+        storage_adapter = await get_storage_adapter()
+
+        results = []
+        success_count = 0
+
+        # 数量通常不大，这里按顺序处理即可
+        for raw_name, cred_data in entries.items():
+            filename = os.path.basename(raw_name)
+
+            try:
+                if not isinstance(cred_data, dict):
+                    results.append({
+                        "filename": filename,
+                        "status": "error",
+                        "message": "凭证数据格式必须为表/对象"
+                    })
+                    continue
+
+                success = await storage_adapter.store_credential(filename, cred_data)
+                if success:
+                    success_count += 1
+                    results.append({
+                        "filename": filename,
+                        "status": "success",
+                        "message": "导入成功"
+                    })
+                else:
+                    results.append({
+                        "filename": filename,
+                        "status": "error",
+                        "message": "存储失败"
+                    })
+            except Exception as e:
+                results.append({
+                    "filename": filename,
+                    "status": "error",
+                    "message": f"处理失败: {str(e)}"
+                })
+
+        if success_count == 0:
+            raise HTTPException(status_code=400, detail="没有任何凭证导入成功")
+
+        return JSONResponse(content={
+            "imported_count": success_count,
+            "total_count": len(entries),
+            "results": results,
+            "message": f"导入完成: 成功 {success_count}/{len(entries)} 个凭证"
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"从TOML导入凭证失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1769,8 +1859,90 @@ async def websocket_logs(websocket: WebSocket):
 
 
 # =============================================================================
-# Usage Statistics API (使用统计API)
+# Usage Statistics & Simple Call Log API
 # =============================================================================
+
+@router.get("/usage/api-log")
+async def get_api_call_log(
+    limit: int = 200,
+    token: str = Depends(verify_token)
+):
+    """
+    获取简单调用日志（时间-凭证-模型-输入Token-输出Token）
+
+    Args:
+        limit: 可选，返回的最大记录条数，默认 200，最大 1000
+
+    Returns:
+        最近的调用日志列表，按时间顺序（文件内顺序）返回
+    """
+    try:
+        # 规范化 limit 范围，避免一次性读取过多数据
+        limit = max(1, min(limit, 1000))
+
+        log_file_path = get_api_log_file_path()
+        if not os.path.exists(log_file_path):
+            return JSONResponse(content={
+                "success": True,
+                "data": []
+            })
+
+        with open(log_file_path, "r", encoding="utf-8") as f:
+            lines = [line.strip() for line in f.readlines() if line.strip()]
+
+        if not lines:
+            return JSONResponse(content={
+                "success": True,
+                "data": []
+            })
+
+        # 跳过表头（如果存在）
+        header = lines[0]
+        if header.lower().startswith("timestamp,credential,model,input_tokens,output_tokens"):
+            data_lines = lines[1:]
+        else:
+            data_lines = lines
+
+        if not data_lines:
+            return JSONResponse(content={
+                "success": True,
+                "data": []
+            })
+
+        # 只取最后 limit 行，避免大文件一次性全读
+        data_lines = data_lines[-limit:]
+
+        def _to_int_or_none(value: str):
+            value = (value or "").strip()
+            if not value:
+                return None
+            try:
+                return int(value)
+            except ValueError:
+                return None
+
+        entries = []
+        for line in data_lines:
+            parts = line.split(",")
+            if len(parts) < 5:
+                continue
+            ts, cred, model, in_tokens, out_tokens = parts[:5]
+            entries.append({
+                "timestamp": ts.strip(),
+                "credential": cred.strip(),
+                "model": model.strip(),
+                "input_tokens": _to_int_or_none(in_tokens),
+                "output_tokens": _to_int_or_none(out_tokens),
+            })
+
+        return JSONResponse(content={
+            "success": True,
+            "data": entries
+        })
+    except Exception as e:
+        log.error(f"获取调用日志失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/usage/stats")
 async def get_usage_statistics(filename: Optional[str] = None, token: str = Depends(verify_token)):

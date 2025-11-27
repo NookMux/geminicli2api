@@ -323,6 +323,92 @@ select:focus {
     -webkit-backdrop-filter: blur(10px);
 }
 
+/* --- JSON导入专用样式 --- */
+.row {
+    margin-bottom: 1.5rem;
+}
+
+.label {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    display: block;
+}
+
+textarea {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    line-height: 1.4;
+    padding: 1rem;
+    border: 2px solid var(--border-color);
+    border-radius: var(--card-border-radius);
+    background-color: rgba(255, 255, 255, 0.8);
+    color: var(--text-primary);
+    resize: vertical;
+    min-height: 180px;
+    transition: all var(--transition-speed) ease;
+}
+
+textarea:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(226, 145, 216, 0.15);
+    transform: translateY(-2px);
+}
+
+textarea[readonly] {
+    background-color: rgba(250, 252, 255, 0.9);
+    border-color: var(--accent-color);
+}
+
+.import-result {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: var(--card-border-radius);
+    font-size: 0.9rem;
+}
+
+.import-result.success {
+    background-color: rgba(165, 216, 165, 0.2);
+    border: 1px solid var(--success-color);
+    color: #2d5a2d;
+}
+
+.import-result.error {
+    background-color: rgba(245, 163, 163, 0.2);
+    border: 1px solid var(--error-color);
+    color: #8b2a2a;
+}
+
+.import-result.info {
+    background-color: rgba(159, 145, 226, 0.2);
+    border: 1px solid var(--secondary-color);
+    color: #4a4570;
+}
+
+.import-result details {
+    margin-top: 0.5rem;
+}
+
+.import-result summary {
+    cursor: pointer;
+    font-weight: 600;
+    padding: 0.25rem 0;
+}
+
+.import-result pre {
+    background-color: rgba(0, 0, 0, 0.05);
+    padding: 0.5rem;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    overflow-x: auto;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
 /* --- 滚动条样式 --- */
 ::-webkit-scrollbar {
     width: 8px;

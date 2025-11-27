@@ -1,0 +1,22 @@
+version: '3.8'
+
+networks:
+  1panel-network:
+    external: true
+
+services:
+  gcli2api:
+    image: ghcr.io/zhongruan0522/geminicli2api:分支名
+    container_name: geminicli2api
+    restart: unless-stopped
+    networks:
+      - 1panel-network
+    environment:
+      - HOST=0.0.0.0
+      - PORT=7861
+      - API_PASSWORD=your_api_key
+      - PANEL_PASSWORD=your_password
+    volumes:
+      - ./data/creds:/app/creds
+      - ./var/data/creds/apilog.csv:/app/apilog.csv
+      - ./var/data/creds/call_trace.log:/app/call_trace.log

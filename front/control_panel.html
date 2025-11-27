@@ -10,7 +10,9 @@
     <link rel="stylesheet" href="/static/css/manage.css">
     <link rel="stylesheet" href="/static/css/usage.css">
     <link rel="stylesheet" href="/static/css/config.css">
+    <link rel="stylesheet" href="/static/css/apilog.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
@@ -51,6 +53,12 @@
                 </button>
                 <button class="tab" onclick="switchTab(event, 'usage')">
                     <i class="fas fa-chart-line"></i> 使用统计
+                </button>
+                <button class="tab" onclick="switchTab(event, 'apilog')">
+                    <i class="fas fa-list-alt"></i> 调用日志
+                </button>
+                <button class="tab" onclick="switchTab(event, 'import')">
+                    <i class="fas fa-file-import"></i> JSON导入
                 </button>
                 <button class="tab" onclick="switchTab(event, 'config')">
                     <i class="fas fa-cog"></i> 配置管理
@@ -290,6 +298,183 @@
                 </div>
             </div>
 
+            <!-- 调用日志标签页 -->
+            <div id="apilogTab" class="tab-content">
+                <h3><i class="fas fa-list-alt"></i> 调用日志</h3>
+                <p>查看详细的API调用记录，包含Token使用统计</p>
+
+                <div class="stats-container" id="apiLogStatsContainer">
+                    <div class="stat-item total">
+                        <span class="stat-number" id="totalLogEntries">0</span>
+                        <span class="stat-label">总记录数</span>
+                    </div>
+                </div>
+
+                <div class="manage-actions">
+                    <button class="refresh-btn" onclick="refreshApiLog()">
+                        <i class="fas fa-sync-alt"></i> 刷新日志
+                    </button>
+                    <button class="btn" onclick="exportApiLog()">
+                        <i class="fas fa-download"></i> 导出CSV
+                    </button>
+                </div>
+
+                <!-- 筛选控件 -->
+                <div class="filter-container">
+                    <div class="filter-row">
+                        <div class="filter-item">
+                            <label for="credentialFilter" class="filter-label"><i class="fas fa-file-alt"></i> 凭证筛选</label>
+                            <select id="credentialFilter" class="filter-select" onchange="applyLogFilters()">
+                                <option value="all">全部凭证</option>
+                            </select>
+                        </div>
+                        <div class="filter-item">
+                            <label for="modelFilter" class="filter-label"><i class="fas fa-robot"></i> 模型筛选</label>
+                            <select id="modelFilter" class="filter-select" onchange="applyLogFilters()">
+                                <option value="all">全部模型</option>
+                            </select>
+                        </div>
+                        <div class="filter-item">
+                            <label for="logPageSizeSelect" class="filter-label"><i class="fas fa-list"></i> 每页显示</label>
+                            <select id="logPageSizeSelect" class="filter-select" onchange="changeLogPageSize()">
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                                <option value="200">200</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 调用日志表格 -->
+                <div id="apiLogSection">
+                    <div class="loading" id="apiLogLoading">正在加载调用日志...</div>
+                    <div id="apiLogTableContainer" class="hidden">
+                        <div class="table-wrapper">
+                            <table class="api-log-table">
+                                <thead>
+                                    <tr>
+                                        <th onclick="sortLogTable('timestamp')">
+                                            <i class="fas fa-clock"></i> 时间
+                                            <i class="fas fa-sort sort-icon" id="timestamp-sort"></i>
+                                        </th>
+                                        <th onclick="sortLogTable('credential')">
+                                            <i class="fas fa-file-alt"></i> 凭证
+                                            <i class="fas fa-sort sort-icon" id="credential-sort"></i>
+                                        </th>
+                                        <th onclick="sortLogTable('model')">
+                                            <i class="fas fa-robot"></i> 模型
+                                            <i class="fas fa-sort sort-icon" id="model-sort"></i>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody id="apiLogTableBody">
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- 分页控件 -->
+                        <div class="pagination-container" id="logPaginationContainer">
+                            <button class="pagination-btn" id="logPrevPageBtn" onclick="changeLogPage(-1)">上一页</button>
+                            <div class="pagination-info" id="logPaginationInfo">第 1 页，共 1 页</div>
+                            <button class="pagination-btn" id="logNextPageBtn" onclick="changeLogPage(1)">下一页</button>
+                        </div>
+                    </div>
+
+                    <!-- 图表统计区域 -->
+                    <div id="apiLogChartsContainer" class="charts-container hidden">
+                        <div class="chart-grid">
+                            <div class="chart-item">
+                                <h4><i class="fas fa-chart-line"></i> 调用次数趋势</h4>
+                                <canvas id="tokenTrendChart"></canvas>
+                            </div>
+                            <div class="chart-item">
+                                <h4><i class="fas fa-chart-pie"></i> 模型使用分布</h4>
+                                <canvas id="modelDistributionChart"></canvas>
+                            </div>
+                            <div class="chart-item">
+                                <h4><i class="fas fa-chart-bar"></i> 凭证调用统计</h4>
+                                <canvas id="credentialUsageChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 使用说明 -->
+                <div class="config-group">
+                    <h4><i class="fas fa-question-circle"></i> 使用说明</h4>
+                    <div class="config-info">
+                        <strong>数据说明：</strong>
+                        <ul>
+                            <li><strong>时间范围：</strong>显示最近的API调用记录，按时间倒序排列</li>
+                            <li><strong>Token统计：</strong>输入/输出Token数来自Google API返回的usageMetadata</li>
+                            <li><strong>数据来源：</strong>基于apilog.csv文件，可通过Docker挂卷持久化存储</li>
+                            <li><strong>图表分析：</strong>支持Token趋势、模型分布、凭证使用等多维度分析</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- JSON导入标签页 -->
+            <div id="importTab" class="tab-content">
+                <h3><i class="fas fa-file-import"></i> JSON导入TOML</h3>
+                <p>将JSON格式的凭证数组转换为TOML格式并导入到系统中</p>
+
+                <div class="row">
+                    <div class="label">输入 JSON 数组（支持格式：直接对象、数组、或 {"creds": {...}} 结构）：</div>
+                    <textarea id="jsonInput" placeholder="粘贴凭证的 JSON 数组或对象到这里&#10;例如: [{&quot;filename&quot;: &quot;creds1.json&quot;, &quot;content&quot;: {...}}]"></textarea>
+                </div>
+
+                <div class="row">
+                    <button class="btn secondary" id="convertBtn" onclick="convertJsonToToml()">
+                        <i class="fas fa-exchange-alt"></i> 转换为 TOML
+                    </button>
+                    <button class="btn secondary" id="clearBtn" onclick="clearImportForm()">
+                        <i class="fas fa-trash-alt"></i> 清空
+                    </button>
+                    <button class="btn secondary" id="copyBtn" onclick="copyTomlOutput()">
+                        <i class="fas fa-copy"></i> 复制TOML
+                    </button>
+                    <div id="importStatus"></div>
+                </div>
+
+                <div class="row">
+                    <div class="label">转换后的 TOML 内容预览：</div>
+                    <textarea id="tomlOutput" readonly placeholder="转换结果会出现在这里"></textarea>
+                </div>
+
+                <div class="row">
+                    <button class="btn" id="importBtn" onclick="importTomlToSystem()" disabled>
+                        <i class="fas fa-upload"></i> 导入到系统
+                    </button>
+                    <div id="importResult" class="import-result"></div>
+                </div>
+
+                <div class="config-group">
+                    <h4><i class="fas fa-question-circle"></i> 使用说明</h4>
+                    <div class="config-info">
+                        <strong>导入流程：</strong>
+                        <ol>
+                            <li>将凭证的JSON数组粘贴到上方输入框（支持多种JSON格式）</li>
+                            <li>点击"转换为TOML"按钮进行转换</li>
+                            <li>检查转换后的TOML内容</li>
+                            <li>点击"导入到系统"将凭证导入到系统中</li>
+                        </ol>
+                        <strong>支持的JSON格式：</strong>
+                        <ul>
+                            <li>数组格式：<code>[{filename: "...", content: {...}}]</code></li>
+                            <li>对象格式：<code>{creds1.json: {content: {...}, ...}}</code></li>
+                            <li>嵌套格式：<code>{creds: {filename1: {...}, filename2: {...}}}</code></li>
+                        </ul>
+                        <strong>注意事项：</strong>
+                        <ul>
+                            <li>系统会自动提取关键字段：project_id, client_id, client_secret, token, refresh_token, access_token</li>
+                            <li>导入时会自动与现有凭证状态合并，避免破坏原有统计数据</li>
+                            <li>敏感信息仅在本地处理，不会长期存储在前端</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
             <!-- 配置管理标签页 -->
             <div id="configTab" class="tab-content">
                 <h3><i class="fas fa-cog"></i> 配置管理</h3>
@@ -342,6 +527,7 @@
     <!-- JavaScript 模块 -->
     <script src="/static/js/model_permissions.js"></script>
     <script src="/static/js/control_panel.js"></script>
+    <script src="/static/js/apilog.js"></script>
 </body>
 
 </html>
