@@ -107,10 +107,13 @@ function generateModelCheckboxes(allowedModels) {
 }
 
 function handlePermissionTypeChange() {
-    const selectedType = document.querySelector('input[name="permissionType"]:checked').value;
+    const selectedType = document.querySelector('input[name="permissionType"]:checked');
+    if (!selectedType) return;
+
+    const selectedValue = selectedType.value;
     const customSelection = document.getElementById('customModelSelection');
 
-    if (selectedType === 'custom') {
+    if (selectedValue === 'custom') {
         customSelection.style.display = 'block';
     } else {
         customSelection.style.display = 'none';

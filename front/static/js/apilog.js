@@ -3,8 +3,8 @@
 // 全局变量
 let apiLogData = [];
 let filteredApiLogData = [];
-let currentPage = 1;
-let pageSize = 50;
+let apiLogCurrentPage = 1;
+let apiLogPageSize = 50;
 let sortField = 'timestamp';
 let sortDirection = 'desc';
 let charts = {};
@@ -110,7 +110,7 @@ function applyLogFilters() {
         return credentialMatch && modelMatch;
     });
 
-    currentPage = 1;
+    apiLogCurrentPage = 1;
     updateStats();
     renderTable();
     updateCharts();
@@ -136,8 +136,8 @@ function renderTable() {
     }
 
     // 计算分页
-    const startIndex = (currentPage - 1) * pageSize;
-    const endIndex = startIndex + pageSize;
+    const startIndex = (apiLogCurrentPage - 1) * apiLogPageSize;
+    const endIndex = startIndex + apiLogPageSize;
     const pageData = filteredApiLogData.slice(startIndex, endIndex);
 
     // 渲染每一行
@@ -186,24 +186,24 @@ function renderTable() {
 
 // 更新分页信息
 function updatePagination() {
-    const totalPages = Math.ceil(filteredApiLogData.length / pageSize);
+    const totalPages = Math.ceil(filteredApiLogData.length / apiLogPageSize);
     const paginationInfo = document.getElementById('logPaginationInfo');
     const prevBtn = document.getElementById('logPrevPageBtn');
     const nextBtn = document.getElementById('logNextPageBtn');
 
-    paginationInfo.textContent = `第 ${currentPage} 页，共 ${totalPages} 页 (${filteredApiLogData.length} 条记录)`;
+    paginationInfo.textContent = `第 ${apiLogCurrentPage} 页，共 ${totalPages} 页 (${filteredApiLogData.length} 条记录)`;
 
-    prevBtn.disabled = currentPage === 1;
-    nextBtn.disabled = currentPage >= totalPages;
+    prevBtn.disabled = apiLogCurrentPage === 1;
+    nextBtn.disabled = apiLogCurrentPage >= totalPages;
 }
 
 // 翻页
 function changeLogPage(direction) {
-    const totalPages = Math.ceil(filteredApiLogData.length / pageSize);
-    const newPage = currentPage + direction;
+    const totalPages = Math.ceil(filteredApiLogData.length / apiLogPageSize);
+    const newPage = apiLogCurrentPage + direction;
 
     if (newPage >= 1 && newPage <= totalPages) {
-        currentPage = newPage;
+        apiLogCurrentPage = newPage;
         renderTable();
     }
 }
@@ -211,8 +211,8 @@ function changeLogPage(direction) {
 // 改变页面大小
 function changeLogPageSize() {
     const select = document.getElementById('logPageSizeSelect');
-    pageSize = parseInt(select.value);
-    currentPage = 1;
+    apiLogPageSize = parseInt(select.value);
+    apiLogCurrentPage = 1;
     renderTable();
 }
 
