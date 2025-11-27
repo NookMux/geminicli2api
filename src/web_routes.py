@@ -183,57 +183,34 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
         raise HTTPException(status_code=401, detail="无效的认证令牌")
     return credentials.credentials
 
-def is_mobile_user_agent(user_agent: str) -> bool:
-    """检测是否为移动设备用户代理"""
-    if not user_agent:
-        return False
-    
-    user_agent_lower = user_agent.lower()
-    mobile_keywords = [
-        'mobile', 'android', 'iphone', 'ipad', 'ipod', 
-        'blackberry', 'windows phone', 'samsung', 'htc',
-        'motorola', 'nokia', 'palm', 'webos', 'opera mini',
-        'opera mobi', 'fennec', 'minimo', 'symbian', 'psp',
-        'nintendo', 'tablet'
-    ]
-    
-    return any(keyword in user_agent_lower for keyword in mobile_keywords)
-
 @router.get("/", response_class=HTMLResponse)
 @router.get("/v1", response_class=HTMLResponse)
 @router.get("/auth", response_class=HTMLResponse)
 async def serve_control_panel(request: Request):
-    """提供统一控制面板（包含认证、文件管理、配置等功能）"""
+    """
+    提供统一控制面板或登录页面：
+    - 如果 auth_token cookie 有效，则返回控制面板页面
+    - 否则返回登录页面
+    """
     try:
-        # 获取用户代理并判断是否为移动设备
-        user_agent = request.headers.get("user-agent", "")
-        is_mobile = is_mobile_user_agent(user_agent)
-        
-        # 根据设备类型选择相应的HTML文件
-        if is_mobile:
-            html_file_path = "front/control_panel_mobile.html"
-            log.info(f"Serving mobile control panel to user-agent: {user_agent}")
-        else:
+        auth_token = request.cookies.get("auth_token")
+        is_authenticated = bool(auth_token and verify_auth_token(auth_token))
+
+        if is_authenticated:
             html_file_path = "front/control_panel.html"
-            log.info(f"Serving desktop control panel to user-agent: {user_agent}")
-        
+            log.info("Serving control panel for authenticated user")
+        else:
+            html_file_path = "front/login.html"
+            log.info("User not authenticated, serving login page")
+
         with open(html_file_path, "r", encoding="utf-8") as f:
             html_content = f.read()
         return HTMLResponse(content=html_content)
     except FileNotFoundError:
-        log.error(f"控制面板页面文件不存在: {html_file_path}")
-        # 如果移动端文件不存在，回退到桌面版
-        if is_mobile:
-            try:
-                with open("front/control_panel.html", "r", encoding="utf-8") as f:
-                    html_content = f.read()
-                return HTMLResponse(content=html_content)
-            except FileNotFoundError:
-                raise HTTPException(status_code=404, detail="控制面板页面不存在")
-        else:
-            raise HTTPException(status_code=404, detail="控制面板页面不存在")
+        log.error(f"前端页面文件不存在: {html_file_path}")
+        raise HTTPException(status_code=404, detail="页面不存在")
     except Exception as e:
-        log.error(f"加载控制面板页面失败: {e}")
+        log.error(f"加载前端页面失败: {e}")
         raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
@@ -243,7 +220,15 @@ async def login(request: LoginRequest):
     try:
         if await verify_password(request.password):
             token = generate_auth_token()
-            return JSONResponse(content={"token": token, "message": "登录成功"})
+            # 设置cookie并返回成功响应
+            response = JSONResponse(content={"token": token, "message": "登录成功"})
+            response.set_cookie(
+                key="auth_token",
+                value=token,
+                max_age=86400,  # 24小时
+                path="/"
+            )
+            return response
         else:
             raise HTTPException(status_code=401, detail="密码错误")
     except HTTPException:

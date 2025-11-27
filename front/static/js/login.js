@@ -25,12 +25,12 @@ async function handleLogin() {
         const data = await response.json();
 
         if (response.ok) {
-            // 保存token到cookie
-            document.cookie = `auth_token=${data.token}; path=/; max-age=86400`; // 24小时
-            // 保存到全局变量以便其他页面使用
+            // 将 token 存到窗口级存储（关闭标签页即清空）
+            window.sessionStorage.setItem('authToken', data.token);
+            // 同步到全局变量，方便后续脚本直接访问
             window.authToken = data.token;
 
-            // 登录成功，重新加载页面获取控制面板
+            // 登录成功，重新加载页面获取控制面板（后端会通过 Set-Cookie 维护登录态）
             window.location.reload();
         } else {
             showError(data.detail || '登录失败');
