@@ -11,12 +11,20 @@
 }
 
 #apiLogStatsContainer .stat-item.normal {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--secondary-color) 0%, var(--accent-color) 100%);
+    color: white;
+}
+
+#apiLogStatsContainer .stat-item.normal .stat-number {
     color: white;
 }
 
 #apiLogStatsContainer .stat-item.disabled {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    background: linear-gradient(135deg, var(--warning-color) 0%, #f7c873 100%);
+    color: white;
+}
+
+#apiLogStatsContainer .stat-item.disabled .stat-number {
     color: white;
 }
 
