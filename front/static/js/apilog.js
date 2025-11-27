@@ -12,7 +12,7 @@ let charts = {};
 // 页面加载时初始化
 document.addEventListener('DOMContentLoaded', function() {
     // 检查是否在调用日志标签页
-    if (document.getElementById('apilogTab')) {
+    if (document.getElementById('apilogTab') && typeof authToken !== 'undefined' && authToken) {
         refreshApiLog();
     }
 });
@@ -30,7 +30,7 @@ async function refreshApiLog() {
 
         const result = await response.json();
 
-        if (!result.success) {
+        if (!response.ok || !result.success) {
             throw new Error(result.detail || '加载调用日志失败');
         }
 
@@ -42,13 +42,25 @@ async function refreshApiLog() {
         renderTable();
         initCharts();
 
+        // 如果之前有错误提示，这里移除
+        const section = document.getElementById('apiLogSection');
+        if (section) {
+            const errorState = section.querySelector('.error-state');
+            if (errorState) {
+                errorState.remove();
+            }
+        }
+
         hideLoading('apiLogLoading');
-        document.getElementById('apiLogTableContainer').classList.remove('hidden');
+        const tableContainer = document.getElementById('apiLogTableContainer');
+        if (tableContainer) {
+            tableContainer.classList.remove('hidden');
+        }
 
     } catch (error) {
         console.error('刷新调用日志失败:', error);
-        showError('apiLogSection', error.message);
         hideLoading('apiLogLoading');
+        showError('apiLogSection', error.message);
     }
 }
 
@@ -549,23 +561,48 @@ function truncateText(text, maxLength) {
 }
 
 function showLoading(loadingId) {
-    document.getElementById(loadingId).classList.remove('hidden');
+    const el = document.getElementById(loadingId);
+    if (el) {
+        el.classList.remove('hidden');
+    }
 }
 
 function hideLoading(loadingId) {
-    document.getElementById(loadingId).classList.add('hidden');
+    const el = document.getElementById(loadingId);
+    if (el) {
+        el.classList.add('hidden');
+    }
 }
 
 function showError(containerId, message) {
     const container = document.getElementById(containerId);
-    container.innerHTML = `
-        <div class="error-state">
-            <i class="fas fa-exclamation-triangle"></i>
-            <h3>加载失败</h3>
-            <p>${message}</p>
-            <button class="btn" onclick="refreshApiLog()">
-                <i class="fas fa-sync-alt"></i> 重试
-            </button>
-        </div>
+    if (!container) {
+        return;
+    }
+
+    // 隐藏表格和图表区域，避免展示旧数据
+    const tableContainer = document.getElementById('apiLogTableContainer');
+    if (tableContainer) {
+        tableContainer.classList.add('hidden');
+    }
+    const chartsContainer = document.getElementById('apiLogChartsContainer');
+    if (chartsContainer) {
+        chartsContainer.classList.add('hidden');
+    }
+
+    let errorContainer = container.querySelector('.error-state');
+    if (!errorContainer) {
+        errorContainer = document.createElement('div');
+        errorContainer.className = 'error-state';
+        container.appendChild(errorContainer);
+    }
+
+    errorContainer.innerHTML = `
+        <i class="fas fa-exclamation-triangle"></i>
+        <h3>加载失败</h3>
+        <p>${message}</p>
+        <button class="btn" onclick="refreshApiLog()">
+            <i class="fas fa-sync-alt"></i> 重试
+        </button>
     `;
 }
