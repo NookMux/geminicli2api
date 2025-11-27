@@ -110,6 +110,9 @@ function switchTab(event, tabName) {
     if (tabName === 'usage') {
         refreshUsageStats();
     }
+    if (tabName === 'apilog') {
+        refreshApiLog();
+    }
     if (tabName === 'config') {
         loadConfig();
     }
