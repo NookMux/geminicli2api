@@ -11,20 +11,9 @@
 ## 🚀 快速开始
 
 **Docker Compose 部署**
-```yaml
-version: '3.8'
-
-services:
-  gcli2api:
-    image: ghcr.io/zhongruan0522/geminicli2api:分支名
-    container_name: gcli2api
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      - PORT=7861
-    volumes:
-      - ./data/creds:/app/creds
-```
+~~~text
+下载这个文件到合适的位置：docker-compose.yml
+~~~
 
 启动服务：
 ```bash
