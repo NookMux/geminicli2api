@@ -57,6 +57,9 @@
                 <button class="tab" onclick="switchTab(event, 'apilog')">
                     <i class="fas fa-list-alt"></i> 调用日志
                 </button>
+                <button class="tab" onclick="switchTab(event, 'import')">
+                    <i class="fas fa-file-import"></i> JSON导入
+                </button>
                 <button class="tab" onclick="switchTab(event, 'config')">
                     <i class="fas fa-cog"></i> 配置管理
                 </button>
@@ -406,6 +409,67 @@
                             <li><strong>Token统计：</strong>输入/输出Token数来自Google API返回的usageMetadata</li>
                             <li><strong>数据来源：</strong>基于apilog.csv文件，可通过Docker挂卷持久化存储</li>
                             <li><strong>图表分析：</strong>支持Token趋势、模型分布、凭证使用等多维度分析</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- JSON导入标签页 -->
+            <div id="importTab" class="tab-content">
+                <h3><i class="fas fa-file-import"></i> JSON导入TOML</h3>
+                <p>将JSON格式的凭证数组转换为TOML格式并导入到系统中</p>
+
+                <div class="row">
+                    <div class="label">输入 JSON 数组（支持格式：直接对象、数组、或 {"creds": {...}} 结构）：</div>
+                    <textarea id="jsonInput" placeholder="粘贴凭证的 JSON 数组或对象到这里&#10;例如: [{&quot;filename&quot;: &quot;creds1.json&quot;, &quot;content&quot;: {...}}]"></textarea>
+                </div>
+
+                <div class="row">
+                    <button class="btn secondary" id="convertBtn" onclick="convertJsonToToml()">
+                        <i class="fas fa-exchange-alt"></i> 转换为 TOML
+                    </button>
+                    <button class="btn secondary" id="clearBtn" onclick="clearImportForm()">
+                        <i class="fas fa-trash-alt"></i> 清空
+                    </button>
+                    <button class="btn secondary" id="copyBtn" onclick="copyTomlOutput()">
+                        <i class="fas fa-copy"></i> 复制TOML
+                    </button>
+                    <div id="importStatus"></div>
+                </div>
+
+                <div class="row">
+                    <div class="label">转换后的 TOML 内容预览：</div>
+                    <textarea id="tomlOutput" readonly placeholder="转换结果会出现在这里"></textarea>
+                </div>
+
+                <div class="row">
+                    <button class="btn" id="importBtn" onclick="importTomlToSystem()" disabled>
+                        <i class="fas fa-upload"></i> 导入到系统
+                    </button>
+                    <div id="importResult" class="import-result"></div>
+                </div>
+
+                <div class="config-group">
+                    <h4><i class="fas fa-question-circle"></i> 使用说明</h4>
+                    <div class="config-info">
+                        <strong>导入流程：</strong>
+                        <ol>
+                            <li>将凭证的JSON数组粘贴到上方输入框（支持多种JSON格式）</li>
+                            <li>点击"转换为TOML"按钮进行转换</li>
+                            <li>检查转换后的TOML内容</li>
+                            <li>点击"导入到系统"将凭证导入到系统中</li>
+                        </ol>
+                        <strong>支持的JSON格式：</strong>
+                        <ul>
+                            <li>数组格式：<code>[{filename: "...", content: {...}}]</code></li>
+                            <li>对象格式：<code>{creds1.json: {content: {...}, ...}}</code></li>
+                            <li>嵌套格式：<code>{creds: {filename1: {...}, filename2: {...}}}</code></li>
+                        </ul>
+                        <strong>注意事项：</strong>
+                        <ul>
+                            <li>系统会自动提取关键字段：project_id, client_id, client_secret, token, refresh_token, access_token</li>
+                            <li>导入时会自动与现有凭证状态合并，避免破坏原有统计数据</li>
+                            <li>敏感信息仅在本地处理，不会长期存储在前端</li>
                         </ul>
                     </div>
                 </div>
