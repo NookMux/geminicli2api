@@ -30,8 +30,12 @@ async function refreshApiLog() {
 
         const result = await response.json();
 
+        if (response.status === 401) {
+            throw new Error('未登录或登录已过期，请先在上方输入密码登录后再查看调用日志');
+        }
+
         if (!response.ok || !result.success) {
-            throw new Error(result.detail || '加载调用日志失败');
+            throw new Error(result.detail || `加载调用日志失败（HTTP ${response.status}）`);
         }
 
         apiLogData = result.data || [];
