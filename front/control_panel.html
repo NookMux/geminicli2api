@@ -305,14 +305,6 @@
                         <span class="stat-number" id="totalLogEntries">0</span>
                         <span class="stat-label">总记录数</span>
                     </div>
-                    <div class="stat-item normal">
-                        <span class="stat-number" id="totalInputTokens">0</span>
-                        <span class="stat-label">输入Token</span>
-                    </div>
-                    <div class="stat-item disabled">
-                        <span class="stat-number" id="totalOutputTokens">0</span>
-                        <span class="stat-label">输出Token</span>
-                    </div>
                 </div>
 
                 <div class="manage-actions">
@@ -370,18 +362,6 @@
                                             <i class="fas fa-robot"></i> 模型
                                             <i class="fas fa-sort sort-icon" id="model-sort"></i>
                                         </th>
-                                        <th onclick="sortLogTable('input_tokens')">
-                                            <i class="fas fa-arrow-right"></i> 输入Token
-                                            <i class="fas fa-sort sort-icon" id="input_tokens-sort"></i>
-                                        </th>
-                                        <th onclick="sortLogTable('output_tokens')">
-                                            <i class="fas fa-arrow-left"></i> 输出Token
-                                            <i class="fas fa-sort sort-icon" id="output_tokens-sort"></i>
-                                        </th>
-                                        <th onclick="sortLogTable('total_tokens')">
-                                            <i class="fas fa-calculator"></i> 总Token
-                                            <i class="fas fa-sort sort-icon" id="total_tokens-sort"></i>
-                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody id="apiLogTableBody">
@@ -401,7 +381,7 @@
                     <div id="apiLogChartsContainer" class="charts-container hidden">
                         <div class="chart-grid">
                             <div class="chart-item">
-                                <h4><i class="fas fa-chart-line"></i> Token使用趋势</h4>
+                                <h4><i class="fas fa-chart-line"></i> 调用次数趋势</h4>
                                 <canvas id="tokenTrendChart"></canvas>
                             </div>
                             <div class="chart-item">
@@ -409,7 +389,7 @@
                                 <canvas id="modelDistributionChart"></canvas>
                             </div>
                             <div class="chart-item">
-                                <h4><i class="fas fa-chart-bar"></i> 凭证使用统计</h4>
+                                <h4><i class="fas fa-chart-bar"></i> 凭证调用统计</h4>
                                 <canvas id="credentialUsageChart"></canvas>
                             </div>
                         </div>

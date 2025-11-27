@@ -107,12 +107,7 @@ function updateFilters() {
 // 更新统计信息
 function updateStats() {
     const totalEntries = filteredApiLogData.length;
-    const totalInputTokens = filteredApiLogData.reduce((sum, item) => sum + (item.input_tokens || 0), 0);
-    const totalOutputTokens = filteredApiLogData.reduce((sum, item) => sum + (item.output_tokens || 0), 0);
-
     document.getElementById('totalLogEntries').textContent = totalEntries.toLocaleString();
-    document.getElementById('totalInputTokens').textContent = totalInputTokens.toLocaleString();
-    document.getElementById('totalOutputTokens').textContent = totalOutputTokens.toLocaleString();
 }
 
 // 应用筛选
@@ -161,8 +156,6 @@ function renderTable() {
         const row = document.createElement('tr');
         row.style.animationDelay = `${index * 0.05}s`;
 
-        const totalTokens = (item.input_tokens || 0) + (item.output_tokens || 0);
-
         row.innerHTML = `
             <td>
                 <span class="timestamp" title="${item.timestamp}">
@@ -176,21 +169,6 @@ function renderTable() {
             </td>
             <td>
                 <span class="model">${item.model}</span>
-            </td>
-            <td>
-                <span class="token-count input-tokens">
-                    ${formatNumber(item.input_tokens || 0)}
-                </span>
-            </td>
-            <td>
-                <span class="token-count output-tokens">
-                    ${formatNumber(item.output_tokens || 0)}
-                </span>
-            </td>
-            <td>
-                <span class="token-count total-tokens">
-                    ${formatNumber(totalTokens)}
-                </span>
             </td>
         `;
 
@@ -277,17 +255,12 @@ function sortLogTable(field) {
     renderTable();
 }
 
-// 初始化图表
+// 初始化图表（Token 统计已废弃，这里仅保持兼容，不再绘制图表）
 function initCharts() {
-    // 如果还没有显示图表容器，先显示它
     const chartsContainer = document.getElementById('apiLogChartsContainer');
-    if (chartsContainer.classList.contains('hidden')) {
-        chartsContainer.classList.remove('hidden');
+    if (chartsContainer) {
+        chartsContainer.classList.add('hidden');
     }
-
-    initTokenTrendChart();
-    initModelDistributionChart();
-    initCredentialUsageChart();
 }
 
 // 初始化Token使用趋势图表
@@ -436,88 +409,22 @@ function initCredentialUsageChart() {
     });
 }
 
-// 更新图表
+// 更新图表（兼容旧调用，当前不再展示图表）
 function updateCharts() {
-    initCharts();
+    // no-op
 }
 
-// 按日期聚合Token数据
-function aggregateTokensByDate() {
-    const dailyMap = {};
-
-    filteredApiLogData.forEach(item => {
-        const date = item.timestamp.split(' ')[0];
-        if (!dailyMap[date]) {
-            dailyMap[date] = { inputTokens: 0, outputTokens: 0 };
-        }
-        dailyMap[date].inputTokens += item.input_tokens || 0;
-        dailyMap[date].outputTokens += item.output_tokens || 0;
-    });
-
-    const sortedDates = Object.keys(dailyMap).sort();
-
-    return {
-        labels: sortedDates,
-        inputTokens: sortedDates.map(date => dailyMap[date].inputTokens),
-        outputTokens: sortedDates.map(date => dailyMap[date].outputTokens)
-    };
-}
-
-// 按模型聚合数据
-function aggregateByModel() {
-    const modelMap = {};
-
-    filteredApiLogData.forEach(item => {
-        if (!modelMap[item.model]) {
-            modelMap[item.model] = 0;
-        }
-        modelMap[item.model]++;
-    });
-
-    const sortedModels = Object.keys(modelMap).sort((a, b) => modelMap[b] - modelMap[a]);
-
-    return {
-        labels: sortedModels,
-        counts: sortedModels.map(model => modelMap[model])
-    };
-}
-
-// 按凭证聚合数据
-function aggregateByCredential() {
-    const credentialMap = {};
-
-    filteredApiLogData.forEach(item => {
-        const cred = item.credential;
-        if (!credentialMap[cred]) {
-            credentialMap[cred] = 0;
-        }
-        const totalTokens = (item.input_tokens || 0) + (item.output_tokens || 0);
-        credentialMap[cred] += totalTokens;
-    });
-
-    const sortedCredentials = Object.keys(credentialMap).sort((a, b) => credentialMap[b] - credentialMap[a]);
-
-    // 限制显示前10个凭证
-    const topCredentials = sortedCredentials.slice(0, 10);
-    const credentialLabels = topCredentials.map(cred => truncateText(cred, 20));
-
-    return {
-        labels: credentialLabels,
-        tokens: topCredentials.map(cred => credentialMap[cred])
-    };
-}
-
-// 导出CSV
+// 导出CSV（仅导出时间/凭证/模型三列）
 function exportApiLog() {
     if (filteredApiLogData.length === 0) {
         alert('没有可导出的数据');
         return;
     }
 
-    let csv = 'timestamp,credential,model,input_tokens,output_tokens\\n';
+    let csv = 'timestamp,credential,model\\n';
 
     filteredApiLogData.forEach(item => {
-        csv += `"${item.timestamp}","${item.credential}","${item.model}",${item.input_tokens || ''},${item.output_tokens || ''}\\n`;
+        csv += `"${item.timestamp}","${item.credential}","${item.model}"\\n`;
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
