@@ -70,12 +70,6 @@ async function login() {
 
         if (response.ok) {
             authToken = data.token;
-
-            // 设置 model_permissions.js 的认证token
-            if (typeof setAuthToken === 'function') {
-                setAuthToken(authToken);
-            }
-
             document.getElementById('loginSection').classList.add('hidden');
             document.getElementById('mainSection').classList.remove('hidden');
             showStatus('登录成功', 'success');
@@ -109,13 +103,6 @@ function switchTab(event, tabName) {
     }
     if (tabName === 'usage') {
         refreshUsageStats();
-    }
-    if (tabName === 'apilog') {
-        refreshApiLog();
-    }
-    if (tabName === 'import') {
-        // 初始化导入标签页
-        clearImportForm();
     }
     if (tabName === 'config') {
         loadConfig();
@@ -496,7 +483,6 @@ function createCredCard(fullPath, credInfo) {
 
     actionButtons += `
                 <button class="cred-btn email" onclick="fetchUserEmail('${filename}')">获取邮箱</button>
-                <button class="cred-btn models" onclick="openModelPermissionModal('${filename}')">模型权限</button>
                 <button class="cred-btn delete" data-filename="${filename}" data-action="delete">删除</button>
             `;
 
@@ -793,8 +779,8 @@ function createUsageCard(filename, stats) {
     const div = document.createElement('div');
     div.className = 'usage-card';
 
-    const geminiPercent = Math.min((stats.pro_model_calls || 0) / (stats.daily_limit_pro_models || 75) * 100, 100);
-    const totalPercent = Math.min((stats.total_calls || 0) / (stats.daily_limit_total || 600) * 100, 100);
+    const geminiPercent = Math.min((stats.pro_model_calls || 0) / (stats.daily_limit_pro_models || 100) * 100, 100);
+    const totalPercent = Math.min((stats.total_calls || 0) / (stats.daily_limit_total || 1000) * 100, 100);
 
     function getProgressClass(percent) {
         if (percent >= 90) return 'danger';
@@ -826,7 +812,7 @@ function createUsageCard(filename, stats) {
         <div class="usage-progress">
             <div class="usage-progress-label">
                 <span>Pro Models</span>
-                <span>${stats.pro_model_calls || 0}/${stats.daily_limit_pro_models || 75} (${geminiPercent.toFixed(1)}%)</span>
+                <span>${stats.pro_model_calls || 0}/${stats.daily_limit_pro_models || 100} (${geminiPercent.toFixed(1)}%)</span>
             </div>
             <div class="usage-progress-bar">
                 <div class="usage-progress-fill ${getProgressClass(geminiPercent)}" style="width: ${geminiPercent}%"></div>
@@ -836,7 +822,7 @@ function createUsageCard(filename, stats) {
         <div class="usage-progress">
             <div class="usage-progress-label">
                 <span>所有模型</span>
-                <span>${stats.total_calls || 0}/${stats.daily_limit_total || 600} (${totalPercent.toFixed(1)}%)</span>
+                <span>${stats.total_calls || 0}/${stats.daily_limit_total || 1000} (${totalPercent.toFixed(1)}%)</span>
             </div>
             <div class="usage-progress-bar">
                 <div class="usage-progress-fill ${getTotalProgressClass(totalPercent)}" style="width: ${totalPercent}%"></div>
@@ -947,8 +933,6 @@ async function loadConfig() {
 function populateConfigForm() {
     setConfigField('configApiPassword', currentConfig.api_password || '');
     setConfigField('configPanelPassword', currentConfig.panel_password || '');
-    setConfigField('configDailyLimitProModels', currentConfig.daily_limit_pro_models || '');
-    setConfigField('configDailyLimitTotal', currentConfig.daily_limit_total || '');
 }
 
 function setConfigField(fieldId, value) {
@@ -973,8 +957,6 @@ async function saveConfig() {
             ...currentConfig, // Preserve existing settings
             api_password: document.getElementById('configApiPassword').value.trim(),
             panel_password: document.getElementById('configPanelPassword').value.trim(),
-            daily_limit_pro_models: parseInt(document.getElementById('configDailyLimitProModels').value) || 75,
-            daily_limit_total: parseInt(document.getElementById('configDailyLimitTotal').value) || 600,
         };
 
         const response = await fetch('/config/save', {
@@ -1015,234 +997,3 @@ async function saveConfig() {
 window.onload = function () {
     showStatus('请输入密码登录', 'info');
 };
-
-// ===========================
-// JSON导入TOML功能
-// ===========================
-
-function tomlEscapeString(str) {
-    return String(str)
-        .replace(/\\/g, "\\\\")
-        .replace(/"/g, '\\"')
-        .replace(/\r/g, "\\r")
-        .replace(/\n/g, "\\n");
-}
-
-function toTomlValue(value) {
-    if (value === null || value === undefined) {
-        return null;
-    }
-    const t = typeof value;
-    if (t === "string") {
-        return '"' + tomlEscapeString(value) + '"';
-    }
-    if (t === "number") {
-        return String(value);
-    }
-    if (t === "boolean") {
-        return value ? "true" : "false";
-    }
-    if (Array.isArray(value)) {
-        const arr = value
-            .map(function (v) { return toTomlValue(v); })
-            .filter(function (v) { return v !== null; });
-        return "[" + arr.join(", ") + "]";
-    }
-    // 对象类型（嵌套）在这里忽略，避免生成不符合预期的 TOML
-    return null;
-}
-
-function processEntry(filename, entry, lines) {
-    if (!entry || typeof entry !== "object") {
-        return;
-    }
-
-    // 只提取指定的关键字段
-    var targetFields = ["project_id", "client_id", "client_secret", "token", "refresh_token", "access_token"];
-    var combined = {};
-
-    // 从 content 中提取目标字段
-    var content = entry.content && typeof entry.content === "object" ? entry.content : {};
-    targetFields.forEach(function (field) {
-        if (content[field] !== undefined && content[field] !== null) {
-            combined[field] = content[field];
-        }
-    });
-
-    // 如果没有任何目标字段，就跳过这个条目
-    if (Object.keys(combined).length === 0) {
-        return;
-    }
-
-    lines.push('');
-    lines.push('["' + String(filename) + '"]');
-
-    Object.keys(combined).forEach(function (key) {
-        var val = combined[key];
-        var tomlVal = toTomlValue(val);
-        if (tomlVal === null) return;
-        lines.push(key + " = " + tomlVal);
-    });
-}
-
-function convertJsonToToml() {
-    const input = document.getElementById('jsonInput').value.trim();
-    const output = document.getElementById('tomlOutput');
-    const statusEl = document.getElementById('importStatus');
-    const importBtn = document.getElementById('importBtn');
-
-    statusEl.textContent = "";
-    statusEl.className = "";
-
-    if (!input) {
-        statusEl.textContent = "请输入 JSON 内容。";
-        statusEl.className = "error";
-        return;
-    }
-
-    try {
-        var data = JSON.parse(input);
-        var lines = [];
-
-        // 处理新的结构 {"creds": {...}}
-        if (data && typeof data === "object") {
-            // 首先检查是否有 creds 字段
-            if (data.creds && typeof data.creds === "object") {
-                Object.keys(data.creds).forEach(function (key) {
-                    var entry = data.creds[key];
-                    if (!entry || typeof entry !== "object") return;
-                    var filename = entry.filename || key;
-                    processEntry(filename, entry, lines);
-                });
-            } else {
-                // 处理原始的数组或直接对象结构
-                if (Array.isArray(data)) {
-                    data.forEach(function (entry, idx) {
-                        if (!entry || typeof entry !== "object") return;
-                        var filename = entry.filename || entry.name || ("credential_" + (idx + 1));
-                        processEntry(filename, entry, lines);
-                    });
-                } else {
-                    Object.keys(data).forEach(function (key) {
-                        var entry = data[key];
-                        if (!entry || typeof entry !== "object") return;
-                        var filename = entry.filename || key;
-                        processEntry(filename, entry, lines);
-                    });
-                }
-            }
-        } else {
-            throw new Error("不支持的 JSON 结构：顶层应为对象或数组");
-        }
-
-        var toml = lines.join("\n").replace(/^\n+/, "");
-        output.value = toml;
-        importBtn.disabled = false;
-        statusEl.textContent = "转换成功。请检查TOML内容，然后点击'导入到系统'。";
-        statusEl.className = "success";
-    } catch (e) {
-        output.value = "";
-        importBtn.disabled = true;
-        statusEl.textContent = "转换失败：" + e.message;
-        statusEl.className = "error";
-    }
-}
-
-function clearImportForm() {
-    document.getElementById('jsonInput').value = "";
-    document.getElementById('tomlOutput').value = "";
-    document.getElementById('importStatus').textContent = "";
-    document.getElementById('importStatus').className = "";
-    document.getElementById('importResult').textContent = "";
-    document.getElementById('importResult').className = "";
-    document.getElementById('importBtn').disabled = true;
-}
-
-function copyTomlOutput() {
-    const output = document.getElementById('tomlOutput');
-    const statusEl = document.getElementById('importStatus');
-
-    if (!output.value) {
-        statusEl.textContent = "没有可复制的输出。";
-        statusEl.className = "error";
-        return;
-    }
-
-    output.select();
-    try {
-        var ok = document.execCommand("copy");
-        if (ok) {
-            statusEl.textContent = "已复制到剪贴板（请妥善处理其中的敏感信息）。";
-            statusEl.className = "success";
-        } else {
-            statusEl.textContent = "复制失败，请手动选择后复制。";
-            statusEl.className = "error";
-        }
-    } catch (e) {
-        statusEl.textContent = "复制失败，请手动选择后复制。";
-        statusEl.className = "error";
-    }
-}
-
-async function importTomlToSystem() {
-    const tomlContent = document.getElementById('tomlOutput').value.trim();
-    const resultEl = document.getElementById('importResult');
-
-    if (!tomlContent) {
-        showStatus('没有可导入的TOML内容', 'error');
-        return;
-    }
-
-    if (!confirm('确定要将这些凭证导入到系统中吗？这可能会创建新的凭证文件或覆盖现有文件。')) {
-        return;
-    }
-
-    try {
-        resultEl.textContent = '正在导入凭证...';
-        resultEl.className = 'info';
-
-        const response = await fetch('/creds/import-toml', {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify({ content: tomlContent })
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-            resultEl.innerHTML = `
-                <div class="import-success">
-                    <strong>导入完成！</strong><br>
-                    成功导入: ${data.imported_count}/${data.total_count} 个凭证<br>
-                    <details>
-                        <summary>详细结果</summary>
-                        <pre>${JSON.stringify(data.results, null, 2)}</pre>
-                    </details>
-                </div>
-            `;
-            resultEl.className = 'success';
-            showStatus(`凭证导入成功：${data.imported_count}/${data.total_count} 个`, 'success');
-
-            // 清空表单
-            clearImportForm();
-        } else {
-            resultEl.innerHTML = `
-                <div class="import-error">
-                    <strong>导入失败！</strong><br>
-                    错误信息: ${data.detail || data.error || '未知错误'}
-                </div>
-            `;
-            resultEl.className = 'error';
-            showStatus(`导入失败: ${data.detail || data.error || '未知错误'}`, 'error');
-        }
-    } catch (error) {
-        resultEl.innerHTML = `
-            <div class="import-error">
-                <strong>网络错误！</strong><br>
-                错误信息: ${error.message}
-            </div>
-        `;
-        resultEl.className = 'error';
-        showStatus(`导入网络错误: ${error.message}`, 'error');
-    }
-}
