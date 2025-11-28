@@ -1,16 +1,297 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gemini-Cli-2API</title>
+    <title>GCLI-2API 控制面板</title>
+    <link rel="stylesheet" href="/static/css/control_panel.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-
 <body>
+    <!-- 登录状态检查中遮罩 -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <span>检查登录状态...</span>
+        </div>
+    </div>
 
+    <!-- 登录页面 -->
+    <div id="loginPage" class="login-page" style="display: none;">
+        <div class="login-container">
+            <div class="left-section">
+                <img src="/static/images/promo-image.png" alt="Gemini-Cli-2API" onerror="this.style.display='none'">
+            </div>
+            <div class="right-section">
+                <h1 class="login-title">·欢迎使用Gemini-Cli-2API·</h1>
+                <input type="password" class="password-input" id="passwordInput" placeholder="请输入密码" onkeypress="handleKeyPress(event)">
+                <button class="login-button" id="loginButton" onclick="handleLogin()">登录</button>
+                <div class="error-message" id="errorMessage"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 控制面板页面 -->
+    <div id="controlPanel" style="display: none;">
+    <!-- 顶部导航栏 -->
+    <header class="top-nav">
+        <div class="nav-left">
+            <h1 class="app-title">GCLI-2API</h1>
+        </div>
+        <div class="nav-right">
+            <!-- 子选项卡将动态生成 -->
+            <div class="sub-tabs" id="subTabs">
+                <!-- 默认OAuth认证的子选项卡 -->
+                <button class="sub-tab active" data-tab="single-login">单项目登录</button>
+                <button class="sub-tab" data-tab="all-login">全部项目登录</button>
+                <button class="sub-tab" data-tab="token-mgmt">令牌管理</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <!-- 左侧导航栏 -->
+        <nav class="sidebar">
+            <button class="nav-item active" data-module="oauth">
+                <i class="fas fa-key"></i>
+                <span>OAuth认证</span>
+            </button>
+            <button class="nav-item" data-module="credentials">
+                <i class="fas fa-shield-alt"></i>
+                <span>凭证管理</span>
+            </button>
+            <button class="nav-item" data-module="statistics">
+                <i class="fas fa-chart-bar"></i>
+                <span>使用统计</span>
+            </button>
+            <button class="nav-item" data-module="logs">
+                <i class="fas fa-list-alt"></i>
+                <span>调用日志</span>
+            </button>
+            <button class="nav-item" data-module="config">
+                <i class="fas fa-cog"></i>
+                <span>配置管理</span>
+            </button>
+        </nav>
+
+        <!-- 右侧内容区域 -->
+        <main class="content">
+            <!-- OAuth认证 - 单项目登录 -->
+            <div class="content-panel active" id="single-login">
+                <div class="panel-header">
+                    <h2>单项目登录</h2>
+                    <p>管理单个项目的OAuth认证设置</p>
+                </div>
+                <div class="panel-content">
+                    <div class="form-group">
+                        <label>项目ID</label>
+                        <input type="text" placeholder="请输入项目ID" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label>客户端ID</label>
+                        <input type="text" placeholder="请输入客户端ID" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label>客户端密钥</label>
+                        <input type="password" placeholder="请输入客户端密钥" class="form-input">
+                    </div>
+                    <button class="btn-primary">保存配置</button>
+                </div>
+            </div>
+
+            <!-- OAuth认证 - 全部项目登录 -->
+            <div class="content-panel" id="all-login">
+                <div class="panel-header">
+                    <h2>全部项目登录</h2>
+                    <p>管理所有项目的全局OAuth认证设置</p>
+                </div>
+                <div class="panel-content">
+                    <div class="form-group">
+                        <label>全局客户端ID</label>
+                        <input type="text" placeholder="请输入全局客户端ID" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label>全局客户端密钥</label>
+                        <input type="password" placeholder="请输入全局客户端密钥" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label>重定向URI</label>
+                        <input type="url" placeholder="https://your-domain.com/callback" class="form-input">
+                    </div>
+                    <button class="btn-primary">保存全局配置</button>
+                </div>
+            </div>
+
+            <!-- OAuth认证 - 令牌管理 -->
+            <div class="content-panel" id="token-mgmt">
+                <div class="panel-header">
+                    <h2>令牌管理</h2>
+                    <p>查看和管理OAuth令牌</p>
+                </div>
+                <div class="panel-content">
+                    <div class="token-list">
+                        <div class="token-item">
+                            <div class="token-info">
+                                <span class="token-name">访问令牌</span>
+                                <span class="token-expiry">有效期: 2024-12-31</span>
+                            </div>
+                            <button class="btn-secondary">撤销</button>
+                        </div>
+                        <div class="token-item">
+                            <div class="token-info">
+                                <span class="token-name">刷新令牌</span>
+                                <span class="token-expiry">有效期: 2025-12-31</span>
+                            </div>
+                            <button class="btn-secondary">撤销</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 其他模块占位内容 -->
+            <div class="content-panel" id="api-keys">
+                <div class="panel-header">
+                    <h2>API密钥</h2>
+                    <p>管理API访问密钥</p>
+                </div>
+                <div class="panel-content">
+                    <p>API密钥管理功能开发中...</p>
+                </div>
+            </div>
+
+            <div class="content-panel" id="access-tokens">
+                <div class="panel-header">
+                    <h2>访问令牌</h2>
+                    <p>管理访问令牌</p>
+                </div>
+                <div class="panel-content">
+                    <p>访问令牌管理功能开发中...</p>
+                </div>
+            </div>
+
+            <div class="content-panel" id="permissions">
+                <div class="panel-header">
+                    <h2>权限配置</h2>
+                    <p>配置用户权限</p>
+                </div>
+                <div class="panel-content">
+                    <p>权限配置功能开发中...</p>
+                </div>
+            </div>
+
+            <div class="content-panel" id="today-stats">
+                <div class="panel-header">
+                    <h2>今日统计</h2>
+                    <p>查看今日使用统计</p>
+                </div>
+                <div class="panel-content">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-number">1,234</div>
+                            <div class="stat-label">API调用次数</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">567</div>
+                            <div class="stat-label">成功次数</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">89%</div>
+                            <div class="stat-label">成功率</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="content-panel" id="month-stats">
+                <div class="panel-header">
+                    <h2>本月统计</h2>
+                    <p>查看本月使用统计</p>
+                </div>
+                <div class="panel-content">
+                    <canvas id="monthlyChart"></canvas>
+                </div>
+            </div>
+
+            <div class="content-panel" id="custom-stats">
+                <div class="panel-header">
+                    <h2>自定义时段</h2>
+                    <p>查看自定义时段统计</p>
+                </div>
+                <div class="panel-content">
+                    <p>自定义统计功能开发中...</p>
+                </div>
+            </div>
+
+            <div class="content-panel" id="success-logs">
+                <div class="panel-header">
+                    <h2>成功日志</h2>
+                    <p>查看成功的调用日志</p>
+                </div>
+                <div class="panel-content">
+                    <p>成功日志功能开发中...</p>
+                </div>
+            </div>
+
+            <div class="content-panel" id="error-logs">
+                <div class="panel-header">
+                    <h2>失败日志</h2>
+                    <p>查看失败的调用日志</p>
+                </div>
+                <div class="panel-content">
+                    <p>失败日志功能开发中...</p>
+                </div>
+            </div>
+
+            <div class="content-panel" id="all-logs">
+                <div class="panel-header">
+                    <h2>全部日志</h2>
+                    <p>查看所有调用日志</p>
+                </div>
+                <div class="panel-content">
+                    <p>全部日志功能开发中...</p>
+                </div>
+            </div>
+
+            <div class="content-panel" id="basic-config">
+                <div class="panel-header">
+                    <h2>基础配置</h2>
+                    <p>管理系统基础配置</p>
+                </div>
+                <div class="panel-content">
+                    <p>基础配置功能开发中...</p>
+                </div>
+            </div>
+
+            <div class="content-panel" id="advanced-config">
+                <div class="panel-header">
+                    <h2>高级配置</h2>
+                    <p>管理系统高级配置</p>
+                </div>
+                <div class="panel-content">
+                    <p>高级配置功能开发中...</p>
+                </div>
+            </div>
+
+            <div class="content-panel" id="system-settings">
+                <div class="panel-header">
+                    <h2>系统设置</h2>
+                    <p>系统级设置管理</p>
+                </div>
+                <div class="panel-content">
+                    <p>系统设置功能开发中...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 移动端菜单按钮 -->
+    <button class="mobile-menu-btn" id="mobileMenuBtn">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/login.js"></script>
+    <script src="/static/js/control_panel.js"></script>
 </body>
-
 </html>
