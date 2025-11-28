@@ -76,7 +76,7 @@ class FileStorageManager:
         "allowed_base_models",
     }
     
-    # 默认状态数据模板（不包含动态值）
+    # 默认状态数据模板（不包含动态值和可选覆盖）
     _DEFAULT_STATE_TEMPLATE = {
         "error_codes": [],
         "disabled": False,
@@ -86,8 +86,7 @@ class FileStorageManager:
         "next_reset_time": None,
         "daily_limit_gemini_2_5_pro": 75,
         "daily_limit_total": 600,
-        # None 表示不做限制，允许所有当前支持的模型
-        "allowed_base_models": None,
+        # 不在这里包含 allowed_base_models，避免为新凭证写入不必要的 null 字段
     }
     
     @classmethod
@@ -369,23 +368,35 @@ class FileStorageManager:
     # ============ 状态管理 ============
     
     async def update_credential_state(self, filename: str, state_updates: Dict[str, Any]) -> bool:
-        """更新凭证状态"""
+        """更新凭证状态（支持 None 值删除覆盖）"""
         self._ensure_initialized()
-        
+
         try:
             filename = self._normalize_filename(filename)
             all_data = await self._credentials_cache_manager.get_all()
-            
+
             if filename not in all_data:
                 all_data[filename] = self.get_default_state()
-            
-            # 更新状态
-            all_data[filename].update(state_updates)
-            
+
+            # 更新状态，支持 None 值删除覆盖字段
+            for key, value in state_updates.items():
+                if key == "allowed_base_models" and value is None:
+                    # 删除模型限制覆盖
+                    all_data[filename].pop("allowed_base_models", None)
+                    log.debug(f"Removed allowed_base_models override for {filename}")
+                    continue
+                elif key in ("daily_limit_pro_models", "daily_limit_total") and value is None:
+                    # 删除限额覆盖
+                    all_data[filename].pop(key, None)
+                    log.debug(f"Removed {key} override for {filename}")
+                    continue
+                else:
+                    all_data[filename][key] = value
+
             success = await self._credentials_cache_manager.update_multi({filename: all_data[filename]})
             log.debug(f"Updated credential state in unified cache: {filename}")
             return success
-            
+
         except Exception as e:
             log.error(f"Error updating credential state {filename}: {e}")
             return False
@@ -477,21 +488,27 @@ class FileStorageManager:
     async def update_usage_stats(self, filename: str, stats_updates: Dict[str, Any]) -> bool:
         """更新使用统计"""
         self._ensure_initialized()
-        
+
         try:
             filename = self._normalize_filename(filename)
             all_data = await self._credentials_cache_manager.get_all()
-            
+
             if filename not in all_data:
-                all_data[filename] = self.get_default_state()
-            
+                # 为新凭证创建默认状态，但只包含基础字段
+                all_data[filename] = {
+                    "error_codes": [],
+                    "disabled": False,
+                    "user_email": None,
+                    "last_success": time.time()
+                }
+
             # 更新统计数据
             all_data[filename].update(stats_updates)
-            
+
             success = await self._credentials_cache_manager.update_multi({filename: all_data[filename]})
             log.debug(f"Updated usage stats in unified cache: {filename}")
             return success
-            
+
         except Exception as e:
             log.error(f"Error updating usage stats {filename}: {e}")
             return False
@@ -510,18 +527,22 @@ class FileStorageManager:
                     "pro_model_calls": 0,
                     "total_calls": 0,
                     "next_reset_time": None,
-                    "daily_limit_pro_models": 75,
-                    "daily_limit_total": 600,
+                    "daily_limit_pro_models": await self._get_default_pro_limit(),
+                    "daily_limit_total": await self._get_default_total_limit(),
                 }
 
             section_data = all_data[filename]
 
-            # 直接使用新版字段名；不存在就用安全默认值
+            # 获取动态默认值
+            default_pro_limit = await self._get_default_pro_limit()
+            default_total_limit = await self._get_default_total_limit()
+
+            # 直接使用存储中的值，缺失时使用动态默认值
             pro_calls = section_data.get("pro_model_calls", 0)
             total_calls = section_data.get("total_calls", 0)
             next_reset_time = section_data.get("next_reset_time")
-            daily_limit_pro = section_data.get("daily_limit_pro_models", 50)
-            daily_limit_total = section_data.get("daily_limit_total", 1000)
+            daily_limit_pro = section_data.get("daily_limit_pro_models", default_pro_limit)
+            daily_limit_total = section_data.get("daily_limit_total", default_total_limit)
 
             return {
                 "pro_model_calls": pro_calls,
@@ -538,9 +559,23 @@ class FileStorageManager:
                 "pro_model_calls": 0,
                 "total_calls": 0,
                 "next_reset_time": None,
-                "daily_limit_pro_models": 75,
-                "daily_limit_total": 600,
+                "daily_limit_pro_models": await self._get_default_pro_limit(),
+                "daily_limit_total": await self._get_default_total_limit(),
             }
+
+    async def _get_default_pro_limit(self) -> int:
+        """获取默认Pro模型限额"""
+        try:
+            return await get_daily_limit_pro_models()
+        except:
+            return 75
+
+    async def _get_default_total_limit(self) -> int:
+        """获取默认总限额"""
+        try:
+            return await get_daily_limit_total()
+        except:
+            return 600
     
     async def get_all_usage_stats(self) -> Dict[str, Dict[str, Any]]:
         """从统一缓存获取所有使用统计（返回新版字段名）"""
@@ -549,14 +584,18 @@ class FileStorageManager:
         try:
             all_data = await self._credentials_cache_manager.get_all()
 
+            # 获取动态默认值
+            default_pro_limit = await self._get_default_pro_limit()
+            default_total_limit = await self._get_default_total_limit()
+
             stats: Dict[str, Dict[str, Any]] = {}
 
             for filename, section_data in all_data.items():
                 pro_calls = section_data.get("pro_model_calls", 0)
                 total_calls = section_data.get("total_calls", 0)
                 next_reset_time = section_data.get("next_reset_time")
-                daily_limit_pro = section_data.get("daily_limit_pro_models", 75)
-                daily_limit_total = section_data.get("daily_limit_total", 600)
+                daily_limit_pro = section_data.get("daily_limit_pro_models", default_pro_limit)
+                daily_limit_total = section_data.get("daily_limit_total", default_total_limit)
 
                 stats[filename] = {
                     "pro_model_calls": pro_calls,
