@@ -184,8 +184,38 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     return credentials.credentials
 
 @router.get("/", response_class=HTMLResponse)
+async def serve_login_page(request: Request):
+    """
+    登录页入口挂在根路径 /
+    - 已登录：302 重定向到 /root 控制面板
+    - 未登录：返回登录页面 HTML
+    """
+    try:
+        auth_token = request.cookies.get("auth_token")
+        is_authenticated = bool(auth_token and verify_auth_token(auth_token))
+
+        if is_authenticated:
+            # 已登录直接跳控制面板
+            return HTMLResponse(
+                status_code=302,
+                headers={"Location": "/root"}
+            )
+
+        html_file_path = "front/login.html"
+        with open(html_file_path, "r", encoding="utf-8") as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content)
+    except FileNotFoundError:
+        log.error("鍓嶇椤甸潰鏂囦欢涓嶅瓨鍦? front/login.html")
+        raise HTTPException(status_code=404, detail="椤甸潰涓嶅瓨鍦?)
+    except Exception as e:
+        log.error(f"鍔犺浇鐧诲綍椤甸潰澶辫触: {e}")
+        raise HTTPException(status_code=500, detail="鏈嶅姟鍣ㄥ唴閮ㄩ敊璇?)
+
+
 @router.get("/v1", response_class=HTMLResponse)
 @router.get("/auth", response_class=HTMLResponse)
+@router.get("/root", response_class=HTMLResponse)
 async def serve_control_panel(request: Request):
     """
     提供统一控制面板或登录页面：
@@ -196,13 +226,14 @@ async def serve_control_panel(request: Request):
         auth_token = request.cookies.get("auth_token")
         is_authenticated = bool(auth_token and verify_auth_token(auth_token))
 
-        if is_authenticated:
-            html_file_path = "front/control_panel.html"
-            log.info("Serving control panel for authenticated user")
-        else:
-            html_file_path = "front/login.html"
-            log.info("User not authenticated, serving login page")
+        if not is_authenticated:
+            # 未登录用户统一跳回登录页
+            return HTMLResponse(
+                status_code=302,
+                headers={"Location": "/"}
+            )
 
+        html_file_path = "front/control_panel.html"
         with open(html_file_path, "r", encoding="utf-8") as f:
             html_content = f.read()
         return HTMLResponse(content=html_content)
@@ -236,6 +267,22 @@ async def login(request: LoginRequest):
     except Exception as e:
         log.error(f"登录失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/auth/validate")
+async def validate_auth(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """
+    校验前端带来的 Bearer token 是否仍然有效。
+    返回 JSON: {"valid": true/false}
+    """
+    try:
+        token = credentials.credentials
+        is_valid = bool(verify_auth_token(token))
+        return JSONResponse(content={"valid": is_valid})
+    except Exception as e:
+        # 出现异常时一律视为无效，但不要抛 500 给前端页面
+        log.error(f"验证登录 token 失败: {e}")
+        return JSONResponse(content={"valid": False})
 
 
 @router.post("/auth/start")
