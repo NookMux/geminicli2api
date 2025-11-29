@@ -4,8 +4,7 @@ const moduleConfig = {
         name: 'OAuth认证',
         subTabs: [
             { id: 'single-login', name: '单项目登录' },
-            { id: 'all-login', name: '全部项目登录' },
-            { id: 'token-mgmt', name: '令牌管理' }
+            { id: 'all-login', name: '全部项目登录' }
         ]
     },
     credentials: {
@@ -422,6 +421,38 @@ if (!document.querySelector('#notification-animations')) {
         }
     `;
     document.head.appendChild(style);
+}
+
+// 显示认证状态消息
+function showAuthStatus(message, type) {
+    const statusElement = document.getElementById('authStatus');
+    statusElement.textContent = message;
+    statusElement.className = `status-message status-${type}`;
+    statusElement.style.display = 'block';
+
+    // 成功消息3秒后自动隐藏，错误和警告消息需要手动关闭
+    if (type === 'success') {
+        setTimeout(() => {
+            statusElement.style.display = 'none';
+        }, 3000);
+    } else if (type === 'error' || type === 'warning') {
+        // 为错误和警告消息添加关闭按钮
+        if (!statusElement.querySelector('.close-btn')) {
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'close-btn';
+            closeBtn.innerHTML = '<i class="fas fa-times"></i>';
+            closeBtn.onclick = () => {
+                statusElement.style.display = 'none';
+            };
+            statusElement.appendChild(closeBtn);
+        }
+    }
+}
+
+// 获取认证token（从localStorage或其他地方）
+function getAuthToken() {
+    // 这里应该从安全的地方获取token，比如localStorage
+    return localStorage.getItem('auth_token') || '';
 }
 
 // 导出全局函数供HTML使用

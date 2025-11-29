@@ -45,7 +45,6 @@
                 <!-- 默认OAuth认证的子选项卡 -->
                 <button class="sub-tab active" data-tab="single-login">单项目登录</button>
                 <button class="sub-tab" data-tab="all-login">全部项目登录</button>
-                <button class="sub-tab" data-tab="token-mgmt">令牌管理</button>
             </div>
         </div>
     </header>
@@ -81,22 +80,87 @@
             <div class="content-panel active" id="single-login">
                 <div class="panel-header">
                     <h2>单项目登录</h2>
-                    <p>管理单个项目的OAuth认证设置</p>
+                    <p>为单个项目获取Google OAuth凭证</p>
                 </div>
                 <div class="panel-content">
-                    <div class="form-group">
-                        <label>项目ID</label>
-                        <input type="text" placeholder="请输入项目ID" class="form-input">
+                    <!-- 基础配置 -->
+                    <div class="auth-section">
+                        <h3><i class="fas fa-cog"></i> 基础配置</h3>
+                        <div class="form-group">
+                            <label for="projectId">项目ID</label>
+                            <input type="text" id="projectId" placeholder="留空自动检测项目ID" class="form-input">
+                            <small class="form-help">可选填写，不填写将自动检测</small>
+                        </div>
+
+                        <!-- 高级选项 -->
+                        <div class="advanced-options">
+                            <div class="options-header" onclick="toggleAdvancedOptions()">
+                                <i class="fas fa-chevron-right"></i>
+                                <span>高级选项</span>
+                            </div>
+                            <div class="options-content" id="advancedOptionsContent" style="display: none;">
+                                <div class="form-group">
+                                    <label for="manualProjectId">手动指定项目ID</label>
+                                    <input type="text" id="manualProjectId" placeholder="当自动检测失败时使用" class="form-input">
+                                    <small class="form-help">仅在自动检测失败且系统提示时填写</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button class="btn-primary" onclick="startSingleAuth()">
+                            <i class="fas fa-link"></i> 生成认证链接
+                        </button>
                     </div>
-                    <div class="form-group">
-                        <label>客户端ID</label>
-                        <input type="text" placeholder="请输入客户端ID" class="form-input">
+
+                    <!-- 认证链接显示 -->
+                    <div class="auth-section" id="authUrlSection" style="display: none;">
+                        <h3><i class="fas fa-external-link-alt"></i> OAuth认证链接</h3>
+                        <div class="url-display">
+                            <div class="url-container">
+                                <input type="text" id="authUrl" readonly class="form-input url-input">
+                                <button class="btn-copy" onclick="copyAuthUrl()" title="复制链接">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                            </div>
+                            <div class="url-actions">
+                                <button class="btn-secondary" onclick="openAuthUrl()">
+                                    <i class="fas fa-external-link-alt"></i> 在浏览器中打开
+                                </button>
+                            </div>
+                        </div>
+                        <div class="auth-tips">
+                            <p><i class="fas fa-info-circle"></i> 请点击上方链接或在浏览器中打开，完成Google OAuth授权</p>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>客户端密钥</label>
-                        <input type="password" placeholder="请输入客户端密钥" class="form-input">
+
+                    <!-- 回调处理 -->
+                    <div class="auth-section" id="callbackSection" style="display: none;">
+                        <h3><i class="fas fa-reply"></i> 处理回调</h3>
+                        <div class="form-group">
+                            <label for="callbackUrl">回调URL</label>
+                            <textarea id="callbackUrl" placeholder="请将授权后的完整回调URL粘贴到这里" class="form-textarea" rows="3"></textarea>
+                            <small class="form-help">示例：http://localhost:8080/?code=...&state=...</small>
+                        </div>
+                        <button class="btn-primary" onclick="handleCallback()">
+                            <i class="fas fa-check"></i> 获取凭证
+                        </button>
                     </div>
-                    <button class="btn-primary">保存配置</button>
+
+                    <!-- 凭证显示 -->
+                    <div class="auth-section" id="credentialsSection" style="display: none;">
+                        <h3><i class="fas fa-key"></i> OAuth凭证</h3>
+                        <div class="credentials-display">
+                            <pre id="credentialsContent" class="credentials-json"></pre>
+                        </div>
+                        <div class="credentials-actions">
+                            <button class="btn-success" onclick="downloadCredentials()">
+                                <i class="fas fa-download"></i> 下载凭证文件
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 状态消息 -->
+                    <div id="authStatus" class="status-message" style="display: none;"></div>
                 </div>
             </div>
 
@@ -104,48 +168,87 @@
             <div class="content-panel" id="all-login">
                 <div class="panel-header">
                     <h2>全部项目登录</h2>
-                    <p>管理所有项目的全局OAuth认证设置</p>
+                    <p>为当前账号下所有可访问项目批量获取OAuth凭证</p>
                 </div>
                 <div class="panel-content">
-                    <div class="form-group">
-                        <label>全局客户端ID</label>
-                        <input type="text" placeholder="请输入全局客户端ID" class="form-input">
-                    </div>
-                    <div class="form-group">
-                        <label>全局客户端密钥</label>
-                        <input type="password" placeholder="请输入全局客户端密钥" class="form-input">
-                    </div>
-                    <div class="form-group">
-                        <label>重定向URI</label>
-                        <input type="url" placeholder="https://your-domain.com/callback" class="form-input">
-                    </div>
-                    <button class="btn-primary">保存全局配置</button>
-                </div>
-            </div>
+                    <!-- 批量模式配置 -->
+                    <div class="auth-section">
+                        <h3><i class="fas fa-layer-group"></i> 批量认证配置</h3>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="batchModeCheckbox" checked>
+                                启用批量模式（为所有项目获取凭证）
+                            </label>
+                            <small class="form-help">批量模式会一次性为您的账号下所有可访问的项目获取OAuth凭证</small>
+                        </div>
 
-            <!-- OAuth认证 - 令牌管理 -->
-            <div class="content-panel" id="token-mgmt">
-                <div class="panel-header">
-                    <h2>令牌管理</h2>
-                    <p>查看和管理OAuth令牌</p>
-                </div>
-                <div class="panel-content">
-                    <div class="token-list">
-                        <div class="token-item">
-                            <div class="token-info">
-                                <span class="token-name">访问令牌</span>
-                                <span class="token-expiry">有效期: 2024-12-31</span>
+                        <!-- 批量认证选项 -->
+                        <div class="batch-options">
+                            <div class="form-group">
+                                <label for="batchProjectId">指定项目（可选）</label>
+                                <input type="text" id="batchProjectId" placeholder="如需指定特定项目请填写项目ID" class="form-input">
+                                <small class="form-help">留空将自动处理所有可访问项目</small>
                             </div>
-                            <button class="btn-secondary">撤销</button>
                         </div>
-                        <div class="token-item">
-                            <div class="token-info">
-                                <span class="token-name">刷新令牌</span>
-                                <span class="token-expiry">有效期: 2025-12-31</span>
+
+                        <button class="btn-primary" onclick="startBatchAuth()">
+                            <i class="fas fa-rocket"></i> 开始批量认证
+                        </button>
+                    </div>
+
+                    <!-- 批量认证链接显示 -->
+                    <div class="auth-section" id="batchAuthUrlSection" style="display: none;">
+                        <h3><i class="fas fa-external-link-alt"></i> 批量OAuth认证链接</h3>
+                        <div class="url-display">
+                            <div class="url-container">
+                                <input type="text" id="batchAuthUrl" readonly class="form-input url-input">
+                                <button class="btn-copy" onclick="copyBatchAuthUrl()" title="复制链接">
+                                    <i class="fas fa-copy"></i>
+                                </button>
                             </div>
-                            <button class="btn-secondary">撤销</button>
+                            <div class="url-actions">
+                                <button class="btn-secondary" onclick="openBatchAuthUrl()">
+                                    <i class="fas fa-external-link-alt"></i> 在浏览器中打开
+                                </button>
+                            </div>
+                        </div>
+                        <div class="auth-tips">
+                            <p><i class="fas fa-info-circle"></i> 请点击上方链接完成Google OAuth授权，系统将自动为所有项目获取凭证</p>
                         </div>
                     </div>
+
+                    <!-- 批量回调处理 -->
+                    <div class="auth-section" id="batchCallbackSection" style="display: none;">
+                        <h3><i class="fas fa-reply"></i> 处理批量回调</h3>
+                        <div class="form-group">
+                            <label for="batchCallbackUrl">回调URL</label>
+                            <textarea id="batchCallbackUrl" placeholder="请将授权后的完整回调URL粘贴到这里" class="form-textarea" rows="3"></textarea>
+                            <small class="form-help">示例：http://localhost:8080/?code=...&state=...</small>
+                        </div>
+                        <button class="btn-primary" onclick="handleBatchCallback()">
+                            <i class="fas fa-check"></i> 批量获取凭证
+                        </button>
+                    </div>
+
+                    <!-- 批量结果显示 -->
+                    <div class="auth-section" id="batchResultsSection" style="display: none;">
+                        <h3><i class="fas fa-list"></i> 批量认证结果</h3>
+                        <div class="batch-results">
+                            <div class="batch-summary" id="batchSummary"></div>
+                            <div class="batch-details" id="batchDetails"></div>
+                        </div>
+                        <div class="batch-actions">
+                            <button class="btn-success" onclick="downloadAllCredentials()">
+                                <i class="fas fa-download"></i> 下载所有凭证
+                            </button>
+                            <button class="btn-secondary" onclick="retryFailedProjects()">
+                                <i class="fas fa-redo"></i> 重试失败项目
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 状态消息 -->
+                    <div id="batchAuthStatus" class="status-message" style="display: none;"></div>
                 </div>
             </div>
 
@@ -292,6 +395,7 @@
 
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/login.js"></script>
+    <script src="/static/js/oauth.js"></script>
     <script src="/static/js/control_panel.js"></script>
 </body>
 </html>

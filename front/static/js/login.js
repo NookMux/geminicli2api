@@ -31,7 +31,7 @@ async function handleLogin() {
             window.authToken = data.token;
 
             // 登录成功，重新加载页面获取控制面板（后端会通过 Set-Cookie 维护登录态）
-            window.location.reload();
+            window.location.href = '/root';
         } else {
             showError(data.detail || '登录失败');
         }
