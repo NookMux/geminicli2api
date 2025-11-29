@@ -583,10 +583,17 @@ function showBatchAuthStatus(message, type) {
 
 // 获取认证token
 function getAuthToken() {
-    // 首先检查全局变量，然后检查sessionStorage，最后检查localStorage
-    return window.authToken ||
-           window.sessionStorage.getItem('authToken') ||
-           localStorage.getItem('auth_token') || '';
+    // 统一从sessionStorage获取token，保持与auth.js一致
+    const token = window.sessionStorage.getItem('authToken') || window.authToken;
+
+    // 如果token不存在，重定向到登录页
+    if (!token) {
+        console.warn('未找到认证token，重定向到登录页');
+        window.location.href = '/';
+        return null;
+    }
+
+    return token;
 }
 
 // 导出OAuth相关函数供HTML使用

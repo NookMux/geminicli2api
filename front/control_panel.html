@@ -252,34 +252,178 @@
                 </div>
             </div>
 
-            <!-- 其他模块占位内容 -->
-            <div class="content-panel" id="api-keys">
+            <!-- 凭证管理模块 -->
+            <div class="content-panel" id="existing-credentials">
                 <div class="panel-header">
-                    <h2>API密钥</h2>
-                    <p>管理API访问密钥</p>
+                    <h2>已有凭证</h2>
+                    <p>查看和管理系统中已有的OAuth凭证</p>
                 </div>
                 <div class="panel-content">
-                    <p>API密钥管理功能开发中...</p>
+                    <!-- 统计卡片区域 -->
+                    <div class="stats-section">
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-number" id="totalCount">0</div>
+                                <div class="stat-label">总数</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number" id="enabledCount">0</div>
+                                <div class="stat-label">启用</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number" id="disabledCount">0</div>
+                                <div class="stat-label">禁用</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 批量操作区域 -->
+                    <div class="bulk-actions">
+                        <div class="bulk-actions-header">
+                            <h3><i class="fas fa-tasks"></i> 批量操作</h3>
+                        </div>
+                        <div class="bulk-actions-content">
+                            <button class="btn-danger" onclick="bulkDelete()" disabled>
+                                <i class="fas fa-trash"></i> 删除
+                            </button>
+                            <button class="btn-primary" onclick="bulkGetEmails()" disabled>
+                                <i class="fas fa-envelope"></i> 批量获取邮箱
+                            </button>
+                            <button class="btn-success" onclick="bulkEnable()" disabled>
+                                <i class="fas fa-check-circle"></i> 批量启用
+                            </button>
+                            <button class="btn-warning" onclick="bulkDisable()" disabled>
+                                <i class="fas fa-ban"></i> 批量禁用
+                            </button>
+                            <button class="btn-secondary" onclick="refreshCredentials()">
+                                <i class="fas fa-sync"></i> 刷新
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 筛选和分页控制区域 -->
+                    <div class="filter-section">
+                        <div class="filter-controls">
+                            <div class="filter-group">
+                                <label for="statusFilter">状态筛选</label>
+                                <select id="statusFilter" class="form-select">
+                                    <option value="">全部</option>
+                                    <option value="enabled">启用</option>
+                                    <option value="disabled">禁用</option>
+                                    <option value="error">错误</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label for="errorCodeFilter">错误码筛选</label>
+                                <select id="errorCodeFilter" class="form-select">
+                                    <option value="">全部</option>
+                                    <option value="invalid_token">无效令牌</option>
+                                    <option value="expired">已过期</option>
+                                    <option value="network">网络错误</option>
+                                    <option value="rate_limit">频率限制</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label for="pageSize">每页显示</label>
+                                <select id="pageSize" class="form-select">
+                                    <option value="10">10条</option>
+                                    <option value="20">20条</option>
+                                    <option value="50">50条</option>
+                                    <option value="100">100条</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 凭证显示列表区域 -->
+                    <div class="credentials-list-section">
+                        <div class="list-header">
+                            <div class="select-all">
+                                <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+                                <label for="selectAll">全选</label>
+                            </div>
+                            <div class="list-info">
+                                <span id="selectedCount">已选择 0 项</span>
+                            </div>
+                        </div>
+                        <div class="credentials-list" id="credentialsList">
+                            <!-- 凭证列表将在这里动态生成 -->
+                        </div>
+                        <div class="empty-state" id="emptyState" style="display: none;">
+                            <i class="fas fa-inbox"></i>
+                            <p>暂无凭证数据</p>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div class="content-panel" id="access-tokens">
+            <div class="content-panel" id="json-import">
                 <div class="panel-header">
-                    <h2>访问令牌</h2>
-                    <p>管理访问令牌</p>
+                    <h2>JSON导入</h2>
+                    <p>从JSON文件导入OAuth凭证到系统</p>
                 </div>
                 <div class="panel-content">
-                    <p>访问令牌管理功能开发中...</p>
+                    <!-- JSON输入区域 -->
+                    <div class="auth-section">
+                        <h3><i class="fas fa-file-import"></i> JSON数据输入</h3>
+                        <div class="form-group">
+                            <label for="jsonInput">JSON凭证数据</label>
+                            <textarea id="jsonInput" placeholder="请粘贴JSON格式的凭证数据，支持数组、对象或包含creds字段的对象" class="form-textarea" rows="10"></textarea>
+                            <small class="form-help">
+                                支持的格式：<br>
+                                1. 数组格式：[{"project_id": "xxx", "credentials": {...}}, ...]<br>
+                                2. 对象格式：{"project1": {"credentials": {...}}, "project2": {...}}<br>
+                                3. 包含creds字段：{"creds": {"project1": {...}, "project2": {...}}}
+                            </small>
+                        </div>
+
+                        <div class="button-group">
+                            <button class="btn-primary" onclick="convertJsonToToml()">
+                                <i class="fas fa-exchange-alt"></i> 转换为TOML预览
+                            </button>
+                            <button class="btn-secondary" onclick="clearJsonInput()">
+                                <i class="fas fa-eraser"></i> 清空
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- TOML预览区域 -->
+                    <div class="auth-section" id="tomlPreviewSection" style="display: none;">
+                        <h3><i class="fas fa-eye"></i> TOML格式预览</h3>
+                        <div class="toml-preview">
+                            <pre id="tomlPreview" class="toml-content"></pre>
+                        </div>
+                        <div class="preview-actions">
+                            <button class="btn-success" onclick="importTomlToSystem()">
+                                <i class="fas fa-download"></i> 导入到系统
+                            </button>
+                            <button class="btn-secondary" onclick="copyTomlToClipboard()">
+                                <i class="fas fa-copy"></i> 复制TOML
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 导入结果区域 -->
+                    <div class="auth-section" id="importResultsSection" style="display: none;">
+                        <h3><i class="fas fa-list-check"></i> 导入结果</h3>
+                        <div class="import-results">
+                            <div class="result-summary" id="resultSummary"></div>
+                            <div class="result-details" id="resultDetails"></div>
+                        </div>
+                    </div>
+
+                    <!-- 状态消息 -->
+                    <div id="jsonImportStatus" class="status-message" style="display: none;"></div>
                 </div>
             </div>
 
-            <div class="content-panel" id="permissions">
+            <div class="content-panel" id="backup">
                 <div class="panel-header">
-                    <h2>权限配置</h2>
-                    <p>配置用户权限</p>
+                    <h2>备份</h2>
+                    <p>备份和恢复系统中的OAuth凭证</p>
                 </div>
                 <div class="panel-content">
-                    <p>权限配置功能开发中...</p>
+                    <!-- 内容将在后续实现 -->
                 </div>
             </div>
 
@@ -397,5 +541,8 @@
     <script src="/static/js/login.js"></script>
     <script src="/static/js/oauth.js"></script>
     <script src="/static/js/control_panel.js"></script>
+    <script src="/static/js/credentials.js"></script>
+    <script src="/static/js/json_import.js"></script>
+    <script src="/static/js/model_permissions.js"></script>
 </body>
 </html>

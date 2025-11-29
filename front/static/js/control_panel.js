@@ -10,9 +10,9 @@ const moduleConfig = {
     credentials: {
         name: '凭证管理',
         subTabs: [
-            { id: 'api-keys', name: 'API密钥' },
-            { id: 'access-tokens', name: '访问令牌' },
-            { id: 'permissions', name: '权限配置' }
+            { id: 'existing-credentials', name: '已有凭证' },
+            { id: 'json-import', name: 'JSON导入' },
+            { id: 'backup', name: '备份' }
         ]
     },
     statistics: {
