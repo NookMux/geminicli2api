@@ -423,7 +423,23 @@
                     <p>备份和恢复系统中的OAuth凭证</p>
                 </div>
                 <div class="panel-content">
-                    <!-- 内容将在后续实现 -->
+                    <div class="backup-controls">
+                        <div class="button-group">
+                            <button id="uploadBackupBtn" class="btn btn-primary">
+                                <i class="fas fa-upload"></i> 立即上传备份
+                            </button>
+                            <button id="downloadBackupBtn" class="btn btn-secondary">
+                                <i class="fas fa-download"></i> 立即恢复备份
+                            </button>
+                        </div>
+                        <div id="backupStatus" class="status-message" style="display: none;"></div>
+                        <div id="backupConfig" class="backup-config" style="margin-top: 20px;">
+                            <h4>当前备份配置</h4>
+                            <div id="backupConfigInfo" class="config-info">
+                                <p>加载中...</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -544,5 +560,6 @@
     <script src="/static/js/credentials.js"></script>
     <script src="/static/js/json_import.js"></script>
     <script src="/static/js/model_permissions.js"></script>
+    <script src="/static/js/backup.js"></script>
 </body>
 </html>
