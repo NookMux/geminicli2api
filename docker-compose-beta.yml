@@ -1,0 +1,32 @@
+version: '3.8'
+
+networks:
+  1panel-network:
+    external: true
+
+services:
+  geminicli2api-beta:
+    image: ghcr.io/zhongruan0522/geminicli2api:beta
+    container_name: geminicli2api-vpn
+    restart: unless-stopped
+    networks:
+      - 1panel-network
+    ports:
+      - "7863:7861"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=7861
+      - API_PASSWORD=geminicli2api-beta
+      - PANEL_PASSWORD=geminicli2api-beta
+      - CALLS_PER_ROTATION=100
+      - DAILY_LIMIT_PRO_MODELS=75
+      - DAILY_LIMIT_TOTAL=600
+      - OAUTH_PROXY_URL=https://gcli-api.sukaka.top/oauth2
+      - GOOGLEAPIS_PROXY_URL=https://gcli-api.sukaka.top/googleapis
+      - RESOURCE_MANAGER_API_URL=https://gcli-api.sukaka.top/cloudresourcemanager
+      - SERVICE_USAGE_API_URL=https://gcli-api.sukaka.top/serviceusage
+      - CODE_ASSIST_ENDPOINT=https://gcli-api.sukaka.top/cloudcode-pa
+    volumes:
+      - ./a3/data/creds:/app/creds
+      - ./a3/data/creds/apilog.csv:/app/apilog.csv
+      - ./a3/data/creds/call_trace.log:/app/call_trace.log
