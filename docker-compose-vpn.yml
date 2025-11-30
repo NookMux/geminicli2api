@@ -30,7 +30,7 @@ services:
       - GOOGLEAPIS_PROXY_URL=https://gcli-api.sukaka.top/googleapis
       - RESOURCE_MANAGER_API_URL=https://gcli-api.sukaka.top/cloudresourcemanager
       - SERVICE_USAGE_API_URL=https://gcli-api.sukaka.top/serviceusage
-      - CODE_ASSIST_ENDPOINT=https://google-proxy.ai6.me/code
+      - CODE_ASSIST_ENDPOINT=https://gcli-api.sukaka.top/cloudcode-pa
     volumes:
       - ./data/creds:/app/creds
       - ./var/data/creds/apilog.csv:/app/apilog.csv
