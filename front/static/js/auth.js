@@ -1,17 +1,49 @@
-// 检查登录状态
-function checkAuthStatus() {
-    const token = window.sessionStorage.getItem('authToken') || window.authToken;
+// 鉴权工具：统一获取和使用登录 Token
+function getPanelAuthToken() {
+    return window.sessionStorage.getItem('authToken') || window.authToken || '';
+}
 
-    // 如果有token，验证token是否有效
-    if (token) {
-        validateToken(token);
-    } else {
-        // 没有token，重定向到登录页
-        redirectToLogin();
+function getPanelAuthHeaders(extra = {}) {
+    const token = getPanelAuthToken();
+    const baseHeaders = { 'Content-Type': 'application/json', ...extra };
+    if (!token) {
+        return baseHeaders;
+    }
+    return {
+        ...baseHeaders,
+        'Authorization': `Bearer ${token}`
+    };
+}
+
+// 登录状态检查遮罩
+function showLoadingOverlay() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        overlay.style.display = 'flex';
     }
 }
 
-// 验证token有效性
+function hideLoadingOverlay() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+}
+
+// 检查登录状态
+function checkAuthStatus() {
+    const token = window.sessionStorage.getItem('authToken') || window.authToken;
+    showLoadingOverlay();
+
+    if (token) {
+        validateToken(token);
+    } else {
+        redirectToLogin();
+        hideLoadingOverlay();
+    }
+}
+
+// 校验 token 是否有效
 async function validateToken(token) {
     try {
         const response = await fetch('/auth/validate', {
@@ -25,21 +57,20 @@ async function validateToken(token) {
         if (response.ok) {
             const data = await response.json();
             if (data.valid) {
-                // token有效，显示控制面板
                 showControlPanel();
             } else {
-                // token无效，清除并重定向到登录页
                 clearAuth();
                 redirectToLogin();
             }
         } else {
-            // 请求失败，可能需要登录
             redirectToLogin();
         }
     } catch (error) {
         console.error('Token validation error:', error);
-        // 网络错误时尝试显示控制面板，让后续API请求处理
+        // 网络错误时默认展示控制面板，交给后续请求自行处理 401
         showControlPanel();
+    } finally {
+        hideLoadingOverlay();
     }
 }
 
@@ -56,19 +87,16 @@ function showControlPanel() {
         loginPage.style.display = 'none';
     }
 
-    // 控制面板显示后初始化
     if (typeof initializeApp === 'function') {
         initializeApp();
     }
 }
 
-// 重定向到登录页
+// 跳转到登录页
 function redirectToLogin() {
-    // 如果当前不是登录页，重定向
     if (window.location.pathname !== '/') {
         window.location.href = '/';
     } else {
-        // 已经在登录页，显示登录表单
         const controlPanel = document.getElementById('controlPanel');
         const loginPage = document.getElementById('loginPage');
 
@@ -82,13 +110,13 @@ function redirectToLogin() {
     }
 }
 
-// 清除认证信息
+// 清除登录信息
 function clearAuth() {
     window.sessionStorage.removeItem('authToken');
     window.authToken = null;
 }
 
-// 检查登录状态
+// 页面加载后检查登录状态
 document.addEventListener('DOMContentLoaded', function() {
     checkAuthStatus();
 });

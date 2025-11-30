@@ -1,8 +1,8 @@
 // 备份功能模块
 class BackupManager {
     constructor() {
-        this.token = getAuthToken();
-        this.apiBase = '/api';
+        // 后端 Web 路由在 web_routes.py 中加载，前面无需 /api 前缀
+        this.apiBase = '';
         this.init();
     }
 
@@ -12,19 +12,28 @@ class BackupManager {
     }
 
     bindEvents() {
-        document.getElementById('uploadBackupBtn').addEventListener('click', () => {
-            this.triggerBackup('upload');
-        });
+        const uploadBtn = document.getElementById('uploadBackupBtn');
+        const downloadBtn = document.getElementById('downloadBackupBtn');
 
-        document.getElementById('downloadBackupBtn').addEventListener('click', () => {
-            this.triggerBackup('download');
-        });
+        if (uploadBtn) {
+            uploadBtn.addEventListener('click', () => {
+                this.triggerBackup('upload');
+            });
+        }
+
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', () => {
+                this.triggerBackup('download');
+            });
+        }
     }
 
     async triggerBackup(direction) {
         const statusElement = document.getElementById('backupStatus');
         const uploadBtn = document.getElementById('uploadBackupBtn');
         const downloadBtn = document.getElementById('downloadBackupBtn');
+
+        if (!uploadBtn || !downloadBtn) return;
 
         // 禁用按钮，显示加载状态
         uploadBtn.disabled = true;
@@ -35,13 +44,8 @@ class BackupManager {
         try {
             const response = await fetch(`${this.apiBase}/backup/sync`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.token}`
-                },
-                body: JSON.stringify({
-                    direction: direction
-                })
+                headers: getPanelAuthHeaders(),
+                body: JSON.stringify({ direction })
             });
 
             const result = await response.json();
@@ -69,9 +73,7 @@ class BackupManager {
         try {
             const response = await fetch(`${this.apiBase}/config/get`, {
                 method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${this.token}`
-                }
+                headers: getPanelAuthHeaders({})
             });
 
             if (response.ok) {
@@ -91,6 +93,7 @@ class BackupManager {
 
     displayBackupConfig(config) {
         const configInfo = document.getElementById('backupConfigInfo');
+        if (!configInfo) return;
 
         if (!config || !config.enabled) {
             configInfo.innerHTML = `
@@ -128,6 +131,8 @@ class BackupManager {
 
     showBackupStatus(message, type) {
         const statusElement = document.getElementById('backupStatus');
+        if (!statusElement) return;
+
         statusElement.textContent = message;
         statusElement.className = `status-message status-${type}`;
         statusElement.style.display = 'block';
@@ -157,18 +162,12 @@ class BackupManager {
     }
 }
 
-// 获取认证token
-function getAuthToken() {
-    return localStorage.getItem('auth_token') || '';
-}
-
-// 当DOM加载完成后初始化备份管理器
+// 页面加载完成后初始化备份管理器
 document.addEventListener('DOMContentLoaded', () => {
-    // 只在备份标签页下初始化
     if (document.getElementById('backup')) {
         new BackupManager();
     }
 });
 
-// 导出供外部使用
+// 供外部使用
 window.BackupManager = BackupManager;

@@ -289,6 +289,9 @@
                             <button class="btn-primary" onclick="bulkGetEmails()" disabled>
                                 <i class="fas fa-envelope"></i> 批量获取邮箱
                             </button>
+                            <button class="btn-info" onclick="credentialsManager && credentialsManager.refreshAllEmails()">
+                                <i class="fas fa-sync-alt"></i> 刷新所有邮箱
+                            </button>
                             <button class="btn-success" onclick="bulkEnable()" disabled>
                                 <i class="fas fa-check-circle"></i> 批量启用
                             </button>

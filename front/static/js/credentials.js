@@ -310,8 +310,28 @@ class CredentialsManager {
             }
 
             // 错误码筛选
-            if (this.filters.errorCode && !cred.error_codes.includes(parseInt(this.filters.errorCode))) {
-                return false;
+            if (this.filters.errorCode) {
+                const raw = this.filters.errorCode;
+                let filterCodes = [];
+
+                if (/^\d+$/.test(raw)) {
+                    // 直接用数字 HTTP code，比如以后你想改成 401 / 429 这类
+                    filterCodes = [parseInt(raw, 10)];
+                } else {
+                    // 语义标签映射到错误码集合
+                    const ERROR_CODE_MAP = {
+                        invalid_token: [401, 403],
+                        expired: [401],
+                        network: [502, 503, 504],
+                        rate_limit: [429]
+                    };
+                    filterCodes = ERROR_CODE_MAP[raw] || [];
+                }
+
+                if (filterCodes.length > 0 &&
+                    !cred.error_codes.some(code => filterCodes.includes(code))) {
+                    return false;
+                }
             }
 
             return true;

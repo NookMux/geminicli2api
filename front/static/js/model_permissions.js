@@ -1,6 +1,6 @@
 /**
- * 模型权限管理 JavaScript
- * 处理凭证的模型权限配置弹窗和相关操作
+ * 妯″瀷鏉冮檺绠＄悊 JavaScript
+ * 澶勭悊鍑瘉鐨勬ā鍨嬫潈闄愰厤缃脊绐楀拰鐩稿叧鎿嶄綔
  */
 
 class ModelPermissionsManager {
@@ -23,104 +23,104 @@ class ModelPermissionsManager {
         try {
             const response = await fetch('/config/supported-models', {
                 method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${this.getAuthToken()}`,
-                    'Content-Type': 'application/json'
-                }
+                headers: getPanelAuthHeaders()
             });
 
             if (!response.ok) {
-                throw new Error(`加载支持的模型失败: HTTP ${response.status}`);
+                throw new Error(`鍔犺浇鏀寔鐨勬ā鍨嬪け璐?: HTTP ${response.status}`);
             }
 
             const data = await response.json();
             this.supportedModels = data.models || this.getDefaultModels();
-
         } catch (error) {
-            console.error('加载支持的模型失败:', error);
-            // 使用默认模型列表作为fallback
+            console.error('鍔犺浇鏀寔鐨勬ā鍨嬪け璐?:', error);
             this.supportedModels = this.getDefaultModels();
         }
     }
 
     getDefaultModels() {
         return [
-            "gemini-2.5-pro",
-            "gemini-2.5-flash",
-            "gemini-3-pro-preview",
-            "gemini-2.5-flash-image",
-            "gemini-2.5-flash-image-preview"
+            'gemini-2.5-pro',
+            'gemini-2.5-flash',
+            'gemini-3-pro-preview',
+            'gemini-2.5-flash-image',
+            'gemini-2.5-flash-image-preview'
         ];
     }
 
     async loadCredentialModels(filename) {
         try {
-            // 从credentialsManager中获取当前凭证的allowed_base_models
             if (window.credentialsManager) {
                 const credential = window.credentialsManager.credentials.find(c => c.filename === filename);
-                this.allowedBaseModels = credential ? credential.allowed_base_models : null;
+                if (credential && Object.prototype.hasOwnProperty.call(credential, 'allowed_base_models')) {
+                    this.allowedBaseModels = credential.allowed_base_models;
+                } else {
+                    this.allowedBaseModels = null;
+                }
             } else {
                 this.allowedBaseModels = null;
             }
         } catch (error) {
-            console.error('获取凭证模型权限失败:', error);
+            console.error('鑾峰彇鍑瘉妯″瀷鏉冮檺澶辫触:', error);
             this.allowedBaseModels = null;
         }
     }
 
     createModal() {
-        // 如果已存在modal，先移除
         const existingModal = document.getElementById('modelPermissionModal');
         if (existingModal) {
             existingModal.remove();
         }
 
+        const isNull = this.allowedBaseModels === null || typeof this.allowedBaseModels === 'undefined';
+        const isEmptyArray = Array.isArray(this.allowedBaseModels) && this.allowedBaseModels.length === 0;
+        const isCustom = Array.isArray(this.allowedBaseModels) && this.allowedBaseModels.length > 0;
+
         const modalHtml = `
             <div id="modelPermissionModal" class="modal-overlay">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h3><i class="fas fa-sliders-h"></i> 模型权限配置</h3>
+                        <h3><i class="fas fa-sliders-h"></i> 妯″瀷鏉冮檺閰嶇疆</h3>
                         <button class="modal-close" onclick="closeModelPermissionModal()">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
                     <div class="modal-body">
                         <div class="form-group">
-                            <label>凭证文件: <strong>${this.currentFilename}</strong></label>
+                            <label>鍑瘉鏂囦欢: <strong>${this.currentFilename}</strong></label>
                         </div>
 
                         <div class="form-group">
                             <label>
                                 <input type="radio" name="modelPermission" value="null"
-                                       ${this.allowedBaseModels === null ? 'checked' : ''}
+                                       ${isNull ? 'checked' : ''}
                                        onchange="modelPermissionsManager.onPermissionTypeChange('null')">
-                                不限制模型（使用默认行为）
+                                涓嶉檺鍒舵ā鍨嬶紙浣跨敤榛樿琛屼负锛?
                             </label>
                         </div>
 
                         <div class="form-group">
                             <label>
                                 <input type="radio" name="modelPermission" value="empty"
-                                       ${this.allowedBaseModels === [] ? 'checked' : ''}
+                                       ${isEmptyArray ? 'checked' : ''}
                                        onchange="modelPermissionsManager.onPermissionTypeChange('empty')">
-                                禁用所有模型（软禁用此凭证）
+                                绂佺敤鎵€鏈夋ā鍨嬶紙杞鐢ㄦ鍑瘉锛?
                             </label>
                         </div>
 
                         <div class="form-group">
                             <label>
                                 <input type="radio" name="modelPermission" value="custom"
-                                       ${Array.isArray(this.allowedBaseModels) && this.allowedBaseModels.length > 0 ? 'checked' : ''}
+                                       ${isCustom ? 'checked' : ''}
                                        onchange="modelPermissionsManager.onPermissionTypeChange('custom')">
-                                自定义允许的模型:
+                                鑷畾涔夊厑璁哥殑妯″瀷:
                             </label>
                             <div id="customModelsContainer" class="checkbox-group"
-                                 style="display: ${Array.isArray(this.allowedBaseModels) && this.allowedBaseModels.length > 0 ? 'block' : 'none'}">
+                                 style="display: ${isCustom ? 'block' : 'none'}">
                                 ${this.supportedModels.map(model => `
                                     <label class="checkbox-item">
-                                        <input type="checkbox" value="${model}"
-                                               ${this.allowedBaseModels?.includes(model) ? 'checked' : ''}
-                                               name="allowedModels">
+                                        <input type="checkbox" name="allowedModels" value="${model}"
+                                               ${Array.isArray(this.allowedBaseModels) && this.allowedBaseModels.includes(model) ? 'checked' : ''}>
                                         <span>${model}</span>
                                     </label>
                                 `).join('')}
@@ -128,41 +128,41 @@ class ModelPermissionsManager {
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button class="btn-secondary" onclick="closeModelPermissionModal()">
-                            <i class="fas fa-times"></i> 取消
-                        </button>
-                        <button class="btn-primary" onclick="modelPermissionsManager.savePermissions()">
-                            <i class="fas fa-save"></i> 保存配置
+                        <button class="btn btn-secondary" onclick="closeModelPermissionModal()">鍙栨秷</button>
+                        <button class="btn btn-primary" onclick="modelPermissionsManager.savePermissions()">
+                            <i class="fas fa-save"></i> 淇濆瓨
                         </button>
                     </div>
                 </div>
             </div>
         `;
 
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
-        this.modal = document.getElementById('modelPermissionModal');
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = modalHtml.trim();
+        this.modal = wrapper.firstChild;
+        document.body.appendChild(this.modal);
 
-        // 绑定事件监听器
         this.bindModalEvents();
     }
 
     bindModalEvents() {
-        // 点击遮罩层关闭弹窗
+        if (!this.modal) return;
+
         this.modal.addEventListener('click', (e) => {
             if (e.target === this.modal) {
                 this.closeModal();
             }
         });
 
-        // ESC键关闭弹窗
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && this.modal) {
                 this.closeModal();
             }
-        });
+        }, { once: true });
     }
 
     showModal() {
+        if (!this.modal) return;
         this.modal.style.display = 'flex';
         document.body.style.overflow = 'hidden';
     }
@@ -178,6 +178,7 @@ class ModelPermissionsManager {
 
     onPermissionTypeChange(type) {
         const customContainer = document.getElementById('customModelsContainer');
+        if (!customContainer) return;
 
         switch (type) {
             case 'null':
@@ -192,7 +193,13 @@ class ModelPermissionsManager {
 
     async savePermissions() {
         try {
-            const selectedType = document.querySelector('input[name="modelPermission"]:checked').value;
+            const selectedTypeInput = document.querySelector('input[name="modelPermission"]:checked');
+            if (!selectedTypeInput) {
+                alert('璇疯嚦灏戜笉灏戦€夋嫨涓€绉嶆ā鍨嬫潈闄愯繃婊ゅ璞℃柟妗?);
+                return;
+            }
+
+            const selectedType = selectedTypeInput.value;
             let allowedBaseModels;
 
             switch (selectedType) {
@@ -202,22 +209,22 @@ class ModelPermissionsManager {
                 case 'empty':
                     allowedBaseModels = [];
                     break;
-                case 'custom':
+                case 'custom': {
                     const checkedBoxes = document.querySelectorAll('input[name="allowedModels"]:checked');
                     allowedBaseModels = Array.from(checkedBoxes).map(cb => cb.value);
-                    if (allowedBaseModels.length === 0) {
-                        alert('请至少选择一个模型');
+                    if (!allowedBaseModels.length) {
+                        alert('璇疯嚦灏戜笉灏戦€夋嫨涓€涓ā鍨嬶紝鎴戜滑鎴戠殑鍑瘉鏉冮檺鍙互鏆傛椂涓嶄紶锛?);
                         return;
                     }
                     break;
+                }
+                default:
+                    allowedBaseModels = null;
             }
 
             const response = await fetch('/creds/update-models', {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.getAuthToken()}`,
-                    'Content-Type': 'application/json'
-                },
+                headers: getPanelAuthHeaders(),
                 body: JSON.stringify({
                     filename: this.currentFilename,
                     allowed_base_models: allowedBaseModels
@@ -225,43 +232,27 @@ class ModelPermissionsManager {
             });
 
             if (!response.ok) {
-                throw new Error(`保存模型权限配置失败: HTTP ${response.status}`);
+                throw new Error(`淇濆瓨妯″瀷鏉冮檺閰嶇疆澶辫触: HTTP ${response.status}`);
             }
 
             const result = await response.json();
-            alert(result.message || '模型权限配置已保存');
+            alert(result.message || '妯″瀷鏉冮檺閰嶇疆宸蹭繚瀛?);
 
-            // 关闭弹窗并刷新列表
             this.closeModal();
             if (window.credentialsManager) {
                 window.credentialsManager.loadCredentials();
             }
-
         } catch (error) {
-            console.error('保存模型权限配置失败:', error);
-            alert(`保存失败: ${error.message}`);
+            console.error('淇濆瓨妯″瀷鏉冮檺閰嶇疆澶辫触:', error);
+            alert(`淇濆瓨澶辫触: ${error.message}`);
         }
-    }
-
-    getAuthToken() {
-        // 统一从sessionStorage获取token，保持与auth.js一致
-        const token = window.sessionStorage.getItem('authToken') || window.authToken;
-
-        // 如果token不存在，重定向到登录页
-        if (!token) {
-            console.warn('未找到认证token，重定向到登录页');
-            window.location.href = '/';
-            return null;
-        }
-
-        return token;
     }
 }
 
-// 全局实例
+// 鍏ㄥ眬瀹炰緥
 let modelPermissionsManager;
 
-// 全局函数供外部调用
+// 鍏ㄥ眬鍑芥暟渚涘閮ㄨ皟鐢?
 function openModelPermissionModal(filename) {
     if (!modelPermissionsManager) {
         modelPermissionsManager = new ModelPermissionsManager();
@@ -275,7 +266,8 @@ function closeModelPermissionModal() {
     }
 }
 
-// 页面加载时初始化
+// 椤甸潰鍔犺浇鏃跺垵濮嬪寲
 document.addEventListener('DOMContentLoaded', () => {
     modelPermissionsManager = new ModelPermissionsManager();
 });
+

@@ -1,15 +1,14 @@
 // OAuth认证相关功能模块
-// OAuth单项目认证相关变量
+// OAuth单项认证相关变量
 let currentAuthData = null;
 
 // 批量认证相关变量
 let currentBatchAuthData = null;
 let batchResults = null;
 
-// 开始单项目认证
+// 开始单项认证
 async function startSingleAuth() {
     const projectId = document.getElementById('projectId').value.trim();
-    const authStatus = document.getElementById('authStatus');
 
     // 显示加载状态
     showAuthStatus('正在生成认证链接...', 'loading');
@@ -17,10 +16,7 @@ async function startSingleAuth() {
     try {
         const response = await fetch('/auth/start', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${getAuthToken()}`
-            },
+            headers: getPanelAuthHeaders(),
             body: JSON.stringify({
                 project_id: projectId || undefined,
                 get_all_projects: false
@@ -28,6 +24,12 @@ async function startSingleAuth() {
         });
 
         if (!response.ok) {
+            if (response.status === 401) {
+                clearAuth();
+                showAuthStatus('认证已过期、未登录或未成功，请重新登录', 'error');
+                setTimeout(() => window.location.href = '/', 1000);
+                return;
+            }
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
 
@@ -46,7 +48,7 @@ async function startSingleAuth() {
         } else if (projectId) {
             message += ` 使用指定项目ID: ${projectId}`;
         } else {
-            message += ' 正在进行项目自动检测';
+            message += ' 正在进行项目自动检测...';
         }
 
         showAuthStatus(message, 'success');
@@ -71,7 +73,7 @@ async function handleCallback() {
         return;
     }
 
-    // 验证URL格式
+    // 确认URL格式
     if (!callbackUrl.includes('code=') || !callbackUrl.includes('state=')) {
         showAuthStatus('回调URL格式不正确，请确保包含code和state参数', 'error');
         return;
@@ -82,10 +84,7 @@ async function handleCallback() {
     try {
         const response = await fetch('/auth/callback-url', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${getAuthToken()}`
-            },
+            headers: getPanelAuthHeaders(),
             body: JSON.stringify({
                 callback_url: callbackUrl,
                 project_id: projectId || undefined,
@@ -94,6 +93,12 @@ async function handleCallback() {
         });
 
         if (!response.ok) {
+            if (response.status === 401) {
+                clearAuth();
+                showAuthStatus('认证已过期、未登录或未成功，请重新登录', 'error');
+                setTimeout(() => window.location.href = '/', 1000);
+                return;
+            }
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
 
@@ -102,8 +107,7 @@ async function handleCallback() {
         if (data.error) {
             // 处理需要手动输入项目ID的情况
             if (data.requires_manual_project_id) {
-                showAuthStatus('自动检测项目ID失败，请在高级选项中手动填写项目ID后重试', 'warning');
-                // 展开高级选项
+                showAuthStatus('自动检测项目ID失败，请在高级选项中手动输入项目ID后重试', 'warning');
                 const advancedContent = document.getElementById('advancedOptionsContent');
                 if (advancedContent) {
                     advancedContent.style.display = 'block';
@@ -129,14 +133,15 @@ async function handleCallback() {
     }
 }
 
-// 显示凭证
+// 显示凭证内容
 function displayCredentials(credentials, filePath) {
-    const credentialsContent = document.getElementById('credentialsContent');
     const credentialsSection = document.getElementById('credentialsSection');
+    const credentialsContent = document.getElementById('credentialsContent');
 
-    // 格式化JSON显示
-    credentialsContent.textContent = JSON.stringify(credentials, null, 2);
+    if (!credentialsSection || !credentialsContent) return;
+
     credentialsSection.style.display = 'block';
+    credentialsContent.textContent = JSON.stringify(credentials, null, 2);
 
     // 滚动到凭证区域
     credentialsSection.scrollIntoView({ behavior: 'smooth' });
@@ -148,6 +153,7 @@ function displayCredentials(credentials, filePath) {
 // 复制认证链接
 function copyAuthUrl() {
     const authUrlInput = document.getElementById('authUrl');
+    if (!authUrlInput) return;
     authUrlInput.select();
     document.execCommand('copy');
     showNotification('认证链接已复制到剪贴板', 'success');
@@ -161,18 +167,17 @@ function openAuthUrl() {
     }
 }
 
-// 下载凭证文件
+// 下载凭证文件，当前获取本地JSON内容
 async function downloadCredentials() {
     const credentialsSection = document.getElementById('credentialsSection');
-    const filePath = credentialsSection.dataset.filePath;
     const credentialsContent = document.getElementById('credentialsContent').textContent;
 
+    if (!credentialsSection || !credentialsContent) return;
+
     try {
-        // 创建Blob对象
         const blob = new Blob([credentialsContent], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
 
-        // 创建下载链接
         const a = document.createElement('a');
         a.href = url;
         a.download = `credentials_${new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')}.json`;
@@ -193,7 +198,9 @@ function toggleAdvancedOptions() {
     const content = document.getElementById('advancedOptionsContent');
     const chevron = document.querySelector('.options-header i');
 
-    if (content.style.display === 'none') {
+    if (!content || !chevron) return;
+
+    if (content.style.display === 'none' || !content.style.display) {
         content.style.display = 'block';
         chevron.classList.add('rotated');
     } else {
@@ -205,17 +212,17 @@ function toggleAdvancedOptions() {
 // 显示认证状态消息
 function showAuthStatus(message, type) {
     const statusElement = document.getElementById('authStatus');
+    if (!statusElement) return;
+
     statusElement.textContent = message;
     statusElement.className = `status-message status-${type}`;
     statusElement.style.display = 'block';
 
-    // 成功消息3秒后自动隐藏，错误和警告消息需要手动关闭
     if (type === 'success') {
         setTimeout(() => {
             statusElement.style.display = 'none';
         }, 3000);
     } else if (type === 'error' || type === 'warning') {
-        // 为错误和警告消息添加关闭按钮
         if (!statusElement.querySelector('.close-btn')) {
             const closeBtn = document.createElement('button');
             closeBtn.className = 'close-btn';
@@ -232,23 +239,18 @@ function showAuthStatus(message, type) {
 async function startBatchAuth() {
     const projectId = document.getElementById('batchProjectId').value.trim();
     const batchModeEnabled = document.getElementById('batchModeCheckbox').checked;
-    const authStatus = document.getElementById('batchAuthStatus');
 
     if (!batchModeEnabled) {
         showBatchAuthStatus('请启用批量模式', 'error');
         return;
     }
 
-    // 显示加载状态
     showBatchAuthStatus('正在生成批量认证链接...', 'loading');
 
     try {
         const response = await fetch('/auth/start', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${getAuthToken()}`
-            },
+            headers: getPanelAuthHeaders(),
             body: JSON.stringify({
                 project_id: projectId || undefined,
                 get_all_projects: true
@@ -256,13 +258,18 @@ async function startBatchAuth() {
         });
 
         if (!response.ok) {
+            if (response.status === 401) {
+                clearAuth();
+                showBatchAuthStatus('认证已过期、未登录或未成功，请重新登录', 'error');
+                setTimeout(() => window.location.href = '/', 1000);
+                return;
+            }
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
 
         const data = await response.json();
         currentBatchAuthData = data;
 
-        // 显示批量认证链接
         document.getElementById('batchAuthUrl').value = data.auth_url;
         document.getElementById('batchAuthUrlSection').style.display = 'block';
         document.getElementById('batchCallbackSection').style.display = 'block';
@@ -277,8 +284,6 @@ async function startBatchAuth() {
         }
 
         showBatchAuthStatus(message, 'success');
-
-        // 自动滚动到认证链接部分
         document.getElementById('batchAuthUrlSection').scrollIntoView({ behavior: 'smooth' });
 
     } catch (error) {
@@ -297,7 +302,6 @@ async function handleBatchCallback() {
         return;
     }
 
-    // 验证URL格式
     if (!callbackUrl.includes('code=') || !callbackUrl.includes('state=')) {
         showBatchAuthStatus('回调URL格式不正确，请确保包含code和state参数', 'error');
         return;
@@ -308,10 +312,7 @@ async function handleBatchCallback() {
     try {
         const response = await fetch('/auth/callback-url', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${getAuthToken()}`
-            },
+            headers: getPanelAuthHeaders(),
             body: JSON.stringify({
                 callback_url: callbackUrl,
                 project_id: projectId || undefined,
@@ -320,6 +321,12 @@ async function handleBatchCallback() {
         });
 
         if (!response.ok) {
+            if (response.status === 401) {
+                clearAuth();
+                showBatchAuthStatus('认证已过期、未登录或未成功，请重新登录', 'error');
+                setTimeout(() => window.location.href = '/', 1000);
+                return;
+            }
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
 
@@ -330,7 +337,6 @@ async function handleBatchCallback() {
             return;
         }
 
-        // 处理批量结果
         batchResults = data;
         displayBatchResults(data.multiple_credentials);
         showBatchAuthStatus('批量OAuth凭证获取完成！', 'success');
@@ -347,12 +353,13 @@ function displayBatchResults(multipleCredentials) {
     const batchSummary = document.getElementById('batchSummary');
     const batchDetails = document.getElementById('batchDetails');
 
+    if (!batchResultsSection || !batchSummary || !batchDetails) return;
+
     const { success, failed } = multipleCredentials;
     const totalCount = success.length + failed.length;
     const successCount = success.length;
     const failedCount = failed.length;
 
-    // 显示汇总信息
     batchSummary.innerHTML = `
         <div class="summary-stats">
             <div class="stat-item success">
@@ -368,21 +375,20 @@ function displayBatchResults(multipleCredentials) {
             <div class="stat-item total">
                 <i class="fas fa-layer-group"></i>
                 <span class="stat-number">${totalCount}</span>
-                <span class="stat-label">总计项目数</span>
+                <span class="stat-label">总项目数</span>
             </div>
         </div>
         <div class="summary-message">
-            批量并发认证完成，成功率: ${((successCount / totalCount) * 100).toFixed(1)}%
+            批量并发认证完成，成功率: ${totalCount > 0 ? ((successCount / totalCount) * 100).toFixed(1) : 0}%
         </div>
     `;
 
-    // 显示详细结果
     let detailsHtml = '';
 
     if (success.length > 0) {
         detailsHtml += `
             <div class="result-section">
-                <h4><i class="fas fa-check-circle text-success"></i> 成功获取凭证的项目 (${success.length}个)</h4>
+                <h4><i class="fas fa-check-circle text-success"></i> 成功获取凭证的项目(${success.length}个)</h4>
                 <div class="project-list">
         `;
 
@@ -412,7 +418,7 @@ function displayBatchResults(multipleCredentials) {
     if (failed.length > 0) {
         detailsHtml += `
             <div class="result-section">
-                <h4><i class="fas fa-times-circle text-error"></i> 获取失败的项目 (${failed.length}个)</h4>
+                <h4><i class="fas fa-times-circle text-error"></i> 获取失败的项目(${failed.length}个)</h4>
                 <div class="project-list">
         `;
 
@@ -441,14 +447,13 @@ function displayBatchResults(multipleCredentials) {
 
     batchDetails.innerHTML = detailsHtml;
     batchResultsSection.style.display = 'block';
-
-    // 滚动到结果区域
     batchResultsSection.scrollIntoView({ behavior: 'smooth' });
 }
 
 // 复制批量认证链接
 function copyBatchAuthUrl() {
     const batchAuthUrlInput = document.getElementById('batchAuthUrl');
+    if (!batchAuthUrlInput) return;
     batchAuthUrlInput.select();
     document.execCommand('copy');
     showNotification('批量认证链接已复制到剪贴板', 'success');
@@ -472,13 +477,11 @@ async function downloadAllCredentials() {
     const successProjects = batchResults.multiple_credentials.success;
 
     try {
-        // 创建一个包含所有凭证的ZIP文件（这里简化处理，分别下载每个文件）
         for (let i = 0; i < successProjects.length; i++) {
             const project = successProjects[i];
-            // 为每个项目创建下载链接
             setTimeout(() => {
                 downloadSingleProjectCredential(project.project_id, project.file_path);
-            }, i * 100); // 错开下载时间避免浏览器阻止
+            }, i * 100);
         }
 
         showNotification(`已开始下载 ${successProjects.length} 个项目的凭证文件`, 'success');
@@ -488,19 +491,29 @@ async function downloadAllCredentials() {
     }
 }
 
-// 下载单个项目凭证
+// 从filePath获取文件名
+function getFilenameFromPath(filePath) {
+    if (!filePath) return null;
+    const parts = filePath.split(/[\\/]/);
+    return parts[parts.length - 1] || null;
+}
+
+// 下载单个项目凭证：统一使用 /creds/download/{filename}
 async function downloadSingleProjectCredential(projectId, filePath) {
     try {
-        // 这里应该调用后端API获取凭证文件内容
-        // 暂时使用项目ID作为文件名
-        const response = await fetch(`/credentials/${projectId}`, {
-            headers: {
-                'Authorization': `Bearer ${getAuthToken()}`
-            }
+        const filename = getFilenameFromPath(filePath);
+        if (!filename) {
+            showNotification(`无法解析项目 ${projectId} 凭证文件名`, 'error');
+            return;
+        }
+
+        const response = await fetch(`/creds/download/${encodeURIComponent(filename)}`, {
+            method: 'GET',
+            headers: getPanelAuthHeaders({})
         });
 
         if (!response.ok) {
-            throw new Error(`获取凭证失败: ${response.statusText}`);
+            throw new Error(`获取凭证失败: ${response.status} ${response.statusText}`);
         }
 
         const blob = await response.blob();
@@ -508,7 +521,7 @@ async function downloadSingleProjectCredential(projectId, filePath) {
 
         const a = document.createElement('a');
         a.href = url;
-        a.download = `credentials_${projectId}.json`;
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -528,11 +541,8 @@ async function retryFailedProjects() {
         return;
     }
 
-    const failedProjects = batchResults.multiple_credentials.failed;
-
     showBatchAuthStatus('正在重试失败的项目...', 'loading');
 
-    // 这里可以实现重试逻辑，暂时显示提示
     setTimeout(() => {
         showBatchAuthStatus('重试功能开发中，请手动重新认证失败的项目', 'warning');
     }, 1000);
@@ -540,15 +550,10 @@ async function retryFailedProjects() {
 
 // 重试单个项目
 async function retrySingleProject(projectId) {
-    // 切换到单项目登录页面
     switchModule('oauth');
     setTimeout(() => {
         switchToTab('single-login');
-
-        // 填写项目ID
         document.getElementById('projectId').value = projectId;
-
-        // 自动开始认证
         setTimeout(() => {
             startSingleAuth();
         }, 500);
@@ -558,17 +563,17 @@ async function retrySingleProject(projectId) {
 // 显示批量认证状态消息
 function showBatchAuthStatus(message, type) {
     const statusElement = document.getElementById('batchAuthStatus');
+    if (!statusElement) return;
+
     statusElement.textContent = message;
     statusElement.className = `status-message status-${type}`;
     statusElement.style.display = 'block';
 
-    // 成功消息3秒后自动隐藏，错误和警告消息需要手动关闭
     if (type === 'success') {
         setTimeout(() => {
             statusElement.style.display = 'none';
         }, 3000);
     } else if (type === 'error' || type === 'warning') {
-        // 为错误和警告消息添加关闭按钮
         if (!statusElement.querySelector('.close-btn')) {
             const closeBtn = document.createElement('button');
             closeBtn.className = 'close-btn';
@@ -579,21 +584,6 @@ function showBatchAuthStatus(message, type) {
             statusElement.appendChild(closeBtn);
         }
     }
-}
-
-// 获取认证token
-function getAuthToken() {
-    // 统一从sessionStorage获取token，保持与auth.js一致
-    const token = window.sessionStorage.getItem('authToken') || window.authToken;
-
-    // 如果token不存在，重定向到登录页
-    if (!token) {
-        console.warn('未找到认证token，重定向到登录页');
-        window.location.href = '/';
-        return null;
-    }
-
-    return token;
 }
 
 // 导出OAuth相关函数供HTML使用
