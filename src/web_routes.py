@@ -34,6 +34,7 @@ from .credential_manager import CredentialManager
 from .usage_stats import get_usage_stats, get_aggregated_stats, get_usage_stats_instance
 from .storage_adapter import get_storage_adapter
 from .api_call_logger import get_api_log_file_path
+from .backup_manager import run_backup_once, load_backup_config
 
 # 创建路由器
 router = APIRouter()
@@ -172,6 +173,12 @@ class ConfigSaveRequest(BaseModel):
     config: dict
 
 
+class BackupSyncRequest(BaseModel):
+    """GitHub 凭证文件同步操作请求代码"""
+    # upload / download / None (None 则要依据当前配置中的backup.mode)
+    direction: Optional[str] = None
+
+
 class TomlCredsImportRequest(BaseModel):
     """从TOML文本导入凭证的请求体"""
     content: str
@@ -206,11 +213,11 @@ async def serve_login_page(request: Request):
             html_content = f.read()
         return HTMLResponse(content=html_content)
     except FileNotFoundError:
-        log.error("鍓嶇椤甸潰鏂囦欢涓嶅瓨鍦? front/login.html")
-        raise HTTPException(status_code=404, detail="椤甸潰涓嶅瓨鍦?)
+        log.error("前端页面文件不存在: front/login.html")
+        raise HTTPException(status_code=404, detail="页面不存在")
     except Exception as e:
-        log.error(f"鍔犺浇鐧诲綍椤甸潰澶辫触: {e}")
-        raise HTTPException(status_code=500, detail="鏈嶅姟鍣ㄥ唴閮ㄩ敊璇?)
+        log.error(f"加载登录页面失败: {e}")
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/v1", response_class=HTMLResponse)
@@ -1653,6 +1660,42 @@ async def save_config(request: ConfigSaveRequest, token: str = Depends(verify_to
         raise
     except Exception as e:
         log.error(f"保存配置失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/backup/sync")
+async def trigger_backup(request: BackupSyncRequest, token: str = Depends(verify_token)):
+    """
+    手动执行凭证文件同步操作
+
+    Args:
+        request.direction: 'upload' / 'download' / None (None 则要依据当前backup.mode)
+    """
+    try:
+        direction = None
+        if request.direction:
+            direction = request.direction.strip().lower()
+            if direction not in ("upload", "download"):
+                raise HTTPException(status_code=400, detail="direction 参数必须是空、upload 或是 download")
+
+        message = await run_backup_once(direction=direction)  # type: ignore[arg-type]
+
+        # 返回当前配置中的 backup 参数，起到提示后端解释状态是否及时
+        backup_cfg = await load_backup_config()
+
+        return JSONResponse(content={
+            "success": True,
+            "message": message,
+            "backup_config": {
+                "enabled": backup_cfg.enabled,
+                "github_repo": backup_cfg.github_repo,
+                "mode": backup_cfg.mode,
+                "interval_seconds": backup_cfg.interval_seconds,
+            },
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"手动同步备份出错: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
