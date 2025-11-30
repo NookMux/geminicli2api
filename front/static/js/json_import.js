@@ -112,7 +112,7 @@ class JsonImportManager {
         }
     }
 
-    // 将各种JSON格式转换为标准格式
+    // 将各种JSON格式转换为标准格式，并进行过滤
     transformToStandardFormat(jsonData) {
         let standardData = {};
 
@@ -144,7 +144,62 @@ class JsonImportManager {
             standardData = jsonData;
         }
 
-        return standardData;
+        // 过滤逻辑：只导入启用的凭证并对相同邮箱去重
+        return this.filterCredentials(standardData);
+    }
+
+    // 过滤凭证：只导入启用的凭证并对相同邮箱去重
+    filterCredentials(credentialsData) {
+        const filteredData = {};
+        const seenEmails = new Set();
+
+        Object.keys(credentialsData).forEach(key => {
+            const cred = credentialsData[key];
+
+            // 检查是否为启用状态
+            let isEnabled = true;
+
+            // 从status字段检查disabled状态
+            if (cred.status && cred.status.disabled === true) {
+                isEnabled = false;
+            }
+            // 从顶层检查disabled状态
+            else if (cred.disabled === true) {
+                isEnabled = false;
+            }
+
+            if (!isEnabled) {
+                console.log(`跳过已禁用的凭证: ${key}`);
+                return;
+            }
+
+            // 获取邮箱地址
+            let email = null;
+            if (cred.status && cred.status.user_email) {
+                email = cred.status.user_email;
+            } else if (cred.user_email) {
+                email = cred.user_email;
+            } else if (cred.credential_id && cred.credential_id.includes('@')) {
+                // 从credential_id中提取邮箱（如果适用）
+                email = cred.credential_id;
+            }
+
+            // 邮箱去重：如果邮箱已存在，跳过当前凭证
+            if (email && seenEmails.has(email)) {
+                console.log(`跳过重复邮箱的凭证: ${key} (邮箱: ${email})`);
+                return;
+            }
+
+            // 记录邮箱并添加到过滤结果
+            if (email) {
+                seenEmails.add(email);
+            }
+
+            filteredData[key] = cred;
+        });
+
+        console.log(`过滤结果: 原始 ${Object.keys(credentialsData).length} 个，过滤后 ${Object.keys(filteredData).length} 个`);
+        return filteredData;
     }
 
     // 转换为TOML格式（简化实现）
