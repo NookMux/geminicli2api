@@ -11,7 +11,7 @@
 选择合适的Yml文件下载
 - `docker-compose.yml`：适合直接部署
 - `docker-compose-vpn.yml`：适合有代理节点的时候部署
-
+- `docker-compose-cluster.yml`：适合集群部署，一个使用本机IP一个使用代理
 
 启动服务：
 ```bash
