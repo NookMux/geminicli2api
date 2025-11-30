@@ -1,12 +1,12 @@
 /**
- * JSON导入功能 JavaScript
- * 处理JSON到TOML的转换和导入操作
+ * JSON 导入功能前端逻辑
+ * 负责：校验 JSON → 统一结构 → 过滤禁用 / 邮箱去重 → 生成 TOML → 调用导入接口
  */
 
 class JsonImportManager {
     constructor() {
-        // 保存当前用户已以JSON转换出的TOML文本
-        this.currentTomlContent = null;
+        /** 当前预览中的 TOML 文本 */
+        this.currentTomlContent = '';
         this.init();
     }
 
@@ -14,18 +14,19 @@ class JsonImportManager {
         this.bindEvents();
     }
 
-    // 绑定输入监听，生成自动JSON提示
+    /** 绑定输入框等事件 */
     bindEvents() {
         const jsonInput = document.getElementById('jsonInput');
         if (jsonInput) {
-            jsonInput.addEventListener('input', this.debounce(() => {
-                this.validateJsonInput();
-            }, 500));
+            jsonInput.addEventListener(
+                'input',
+                this.debounce(() => this.validateJsonInput(), 400)
+            );
         }
     }
 
-    // 防抖
-    debounce(func, wait) {
+    /** 简单防抖封装 */
+    debounce(func, wait = 300) {
         let timeout;
         return (...args) => {
             const later = () => {
@@ -37,10 +38,10 @@ class JsonImportManager {
         };
     }
 
-    // 验证JSON格式
+    /** 校验 JSON 文本是否合法，同时控制按钮可用状态 */
     validateJsonInput() {
         const jsonInput = document.getElementById('jsonInput');
-        const convertBtn = document.querySelector('[onclick="convertJsonToToml()"]');
+        const convertBtn = document.querySelector('#convertBtn') || document.querySelector('[onclick="convertJsonToToml()"]');
         if (!jsonInput || !convertBtn) return;
 
         const value = jsonInput.value.trim();
@@ -54,13 +55,13 @@ class JsonImportManager {
             JSON.parse(value);
             convertBtn.disabled = false;
             this.clearErrorMessage();
-        } catch (error) {
+        } catch (err) {
             convertBtn.disabled = true;
-            this.showErrorMessage('JSON格式错误: ' + error.message);
+            this.showErrorMessage('JSON 格式错误：' + err.message);
         }
     }
 
-    // 显示错误消息
+    /** 在 JSON 文本框下方显示错误 */
     showErrorMessage(message) {
         let errorElement = document.getElementById('jsonImportError');
         if (!errorElement) {
@@ -68,9 +69,9 @@ class JsonImportManager {
             errorElement.id = 'jsonImportError';
             errorElement.className = 'status-message status-error';
             errorElement.style.marginTop = '8px';
-            const inputWrapper = document.getElementById('jsonInput')?.parentNode;
-            if (inputWrapper) {
-                inputWrapper.appendChild(errorElement);
+            const wrapper = document.getElementById('jsonInput')?.parentNode;
+            if (wrapper) {
+                wrapper.appendChild(errorElement);
             }
         }
         if (errorElement) {
@@ -86,79 +87,123 @@ class JsonImportManager {
         }
     }
 
-    // JSON -> TOML 预览
+    /** JSON → TOML 入口：解析 / 过滤 / 预览 */
     async convertJsonToToml() {
         const jsonArea = document.getElementById('jsonInput');
         if (!jsonArea) return;
 
         const jsonInput = jsonArea.value.trim();
         if (!jsonInput) {
-            this.showErrorMessage('请输入JSON数据');
+            this.showErrorMessage('请先粘贴 JSON 数据');
             return;
         }
 
         try {
             const jsonData = JSON.parse(jsonInput);
-            // 转换为标准格式，并必须要过滤不启用或重复邮箱
-            const standardData = this.transformToStandardFormat(jsonData);
-            // 转换为TOML文本
-            const tomlContent = this.convertToToml(standardData);
 
+            // 统一成 { filename_or_key: 纯凭证内容 }，并在这里做禁用过滤 + 邮箱去重
+            const standardData = this.transformToStandardFormat(jsonData);
+            const keys = Object.keys(standardData);
+            if (keys.length === 0) {
+                this.showErrorMessage('没有可导入的有效凭证（可能都被禁用或邮箱重复被过滤掉了）');
+                return;
+            }
+
+            const tomlContent = this.convertToToml(standardData);
             this.currentTomlContent = tomlContent;
             this.showTomlPreview(tomlContent);
-            this.showSuccessMessage('JSON转换为TOML格式成功！');
+            this.showSuccessMessage('JSON 转换为 TOML 成功，可检查后导入系统');
         } catch (error) {
-            console.error('JSON转换失败:', error);
-            this.showErrorMessage('转换失败: ' + error.message);
+            console.error('JSON 转 TOML 失败:', error);
+            this.showErrorMessage('转换失败：' + error.message);
         }
     }
 
-    // 将各种函数转换成 { key: credentials } 格式，然后用 key 作负号分隔文件名
+    /**
+     * 把各种 JSON 结构统一成：
+     * { key: credentialObject }
+     * 其中 key 将用于 TOML 的 ["key"] 段名
+     */
     transformToStandardFormat(jsonData) {
-        let standardData = {};
+        // 先拉平为 { key: 原始对象 }，保留 status / user_email 等信息用于过滤
+        const rawMap = {};
 
-        // 情况1: 数组格式 [{"project_id": "xxx", "credentials": {...}}, ...]
         if (Array.isArray(jsonData)) {
-            jsonData.forEach(item => {
-                if (item && item.project_id && item.credentials) {
-                    standardData[item.project_id] = item.credentials;
-                }
+            // 例如：[ { project_id, credentials, status, user_email }, ... ]
+            jsonData.forEach((item, idx) => {
+                if (!item || typeof item !== 'object') return;
+                const key =
+                    item.filename ||
+                    item.project_id ||
+                    item.project ||
+                    `item_${idx}`;
+                rawMap[key] = item;
             });
-        }
-        // 情况2: 对象格式 {"project1": {"credentials": {...}}, "project2": {...}}
-        else if (typeof jsonData === 'object' && jsonData && !jsonData.creds) {
-            Object.keys(jsonData).forEach(key => {
-                const value = jsonData[key];
-                if (!value) return;
-                if (value.credentials) {
-                    standardData[key] = value.credentials;
-                } else {
-                    standardData[key] = value;
-                }
-            });
-        }
-        // 情况3: 包含creds字段 {"creds": {"project1": {...}, "project2": {...}}}
-        else if (jsonData && jsonData.creds) {
-            standardData = jsonData.creds;
-        }
-        // 情况4: 直接是credentials对象
-        else if (typeof jsonData === 'object' && jsonData) {
-            standardData = jsonData;
+        } else if (jsonData && typeof jsonData === 'object') {
+            if (jsonData.creds && typeof jsonData.creds === 'object') {
+                // 典型 CLI 导出的结构：{ "creds": { "xxx.json": { status, content, ... }, ... } }
+                Object.keys(jsonData.creds).forEach((key) => {
+                    const value = jsonData.creds[key];
+                    if (value && typeof value === 'object') {
+                        rawMap[key] = value;
+                    }
+                });
+            } else {
+                // 普通对象：{ "xxx.json": {...}, "yyy": {...} }
+                Object.keys(jsonData).forEach((key) => {
+                    const value = jsonData[key];
+                    if (value && typeof value === 'object') {
+                        rawMap[key] = value;
+                    }
+                });
+            }
         }
 
-        return this.filterCredentials(standardData);
+        // 先在原始对象上做过滤（禁用 / 邮箱去重）
+        const filteredRaw = this.filterCredentials(rawMap);
+
+        // 再压平成真正需要写入 TOML 的凭证内容
+        const normalized = {};
+
+        Object.keys(filteredRaw).forEach((key) => {
+            const raw = filteredRaw[key] || {};
+
+            // 优先使用 content / credentials 字段承载的真实 OAuth 凭证
+            const baseContent = raw.content || raw.credentials || raw;
+            const credential = { ...baseContent };
+
+            // 尽量把邮箱信息放到 user_email 字段里，便于后端和后续统计
+            const email =
+                (raw.status && raw.status.user_email) ||
+                raw.user_email ||
+                baseContent.user_email ||
+                baseContent.email ||
+                null;
+
+            if (email && !credential.user_email) {
+                credential.user_email = email;
+            }
+
+            normalized[key] = credential;
+        });
+
+        return normalized;
     }
 
-    // 过滤启用凭证，删除同一邮箱的重复正权限
+    /**
+     * 过滤掉禁用凭证，并按邮箱去重：
+     * - 有 status.disabled === true 或 disabled === true 的视为禁用
+     * - 按 user_email / status.user_email / credential_id 中带 @ 的值去重
+     */
     filterCredentials(credentialsData) {
         const filteredData = {};
         const seenEmails = new Set();
 
-        Object.keys(credentialsData).forEach(key => {
+        Object.keys(credentialsData).forEach((key) => {
             const cred = credentialsData[key];
             if (!cred) return;
 
-            // 判断是否启用
+            // 是否禁用
             let isEnabled = true;
             if (cred.status && cred.status.disabled === true) {
                 isEnabled = false;
@@ -167,17 +212,23 @@ class JsonImportManager {
             }
 
             if (!isEnabled) {
-                console.log(`跳过已禁用的凭证: ${key}`);
+                console.log(`跳过已禁用凭证: ${key}`);
                 return;
             }
 
-            // 邮箱去重
+            // 邮箱抽取
             let email = null;
             if (cred.status && cred.status.user_email) {
                 email = cred.status.user_email;
             } else if (cred.user_email) {
                 email = cred.user_email;
-            } else if (cred.credential_id && typeof cred.credential_id === 'string' && cred.credential_id.includes('@')) {
+            } else if (cred.content && cred.content.user_email) {
+                email = cred.content.user_email;
+            } else if (
+                cred.credential_id &&
+                typeof cred.credential_id === 'string' &&
+                cred.credential_id.includes('@')
+            ) {
                 email = cred.credential_id;
             }
 
@@ -193,35 +244,57 @@ class JsonImportManager {
             filteredData[key] = cred;
         });
 
-        console.log(`过滤结果: 原有 ${Object.keys(credentialsData).length} 个，过滤后 ${Object.keys(filteredData).length} 个`);
+        console.log(
+            `过滤结果：原有 ${Object.keys(credentialsData).length} 条，过滤后 ${Object.keys(filteredData).length} 条`
+        );
         return filteredData;
     }
 
-    // 转换为TOML格式，使用 ["filename.json"] 表名，通过路径分隔文件名选择
+    /**
+     * 把 { filename: credential } 转成 TOML 文本：
+     * ["filename.json"]
+     * project_id = "xxx"
+     * ...
+     */
     convertToToml(data) {
         let toml = '';
 
-        Object.keys(data).forEach(projectKey => {
+        Object.keys(data).forEach((projectKey) => {
             const credentials = data[projectKey];
-            const filename = projectKey.endsWith('.json') ? projectKey : `${projectKey}.json`;
+            const filename = projectKey.endsWith('.json')
+                ? projectKey
+                : `${projectKey}.json`;
 
             toml += `["${filename}"]\n`;
 
-            Object.keys(credentials).forEach(key => {
+            Object.keys(credentials).forEach((key) => {
                 const value = credentials[key];
+
+                if (value === undefined) {
+                    return;
+                }
 
                 if (typeof value === 'string') {
                     if (value.includes('\n')) {
                         toml += `${key} = """\n${value}\n"""\n`;
                     } else {
-                        toml += `${key} = "${value}"\n`;
+                        // 简单转义一下双引号
+                        const escaped = value.replace(/"/g, '\\"');
+                        toml += `${key} = "${escaped}"\n`;
                     }
                 } else if (typeof value === 'boolean') {
                     toml += `${key} = ${value}\n`;
                 } else if (typeof value === 'number') {
                     toml += `${key} = ${value}\n`;
                 } else if (Array.isArray(value)) {
-                    toml += `${key} = [${value.map(v => `"${v}"`).join(', ')}]\n`;
+                    const arr = value
+                        .map((v) =>
+                            typeof v === 'string'
+                                ? `"${v.replace(/"/g, '\\"')}"`
+                                : `${v}`
+                        )
+                        .join(', ');
+                    toml += `${key} = [${arr}]\n`;
                 } else if (typeof value === 'object' && value !== null) {
                     toml += `${key} = ${JSON.stringify(value)}\n`;
                 }
@@ -233,7 +306,7 @@ class JsonImportManager {
         return toml.trim();
     }
 
-    // 显示TOML预览
+    /** 把生成的 TOML 显示到预览区 */
     showTomlPreview(tomlContent) {
         const previewSection = document.getElementById('tomlPreviewSection');
         const tomlPreview = document.getElementById('tomlPreview');
@@ -245,93 +318,113 @@ class JsonImportManager {
         previewSection.scrollIntoView({ behavior: 'smooth' });
     }
 
-    // 清空JSON输入
+    /** 清空 JSON 输入与预览/结果 */
     clearJsonInput() {
         const jsonInput = document.getElementById('jsonInput');
         if (jsonInput) {
             jsonInput.value = '';
         }
+
         const previewSection = document.getElementById('tomlPreviewSection');
         const resultsSection = document.getElementById('importResultsSection');
         if (previewSection) previewSection.style.display = 'none';
         if (resultsSection) resultsSection.style.display = 'none';
 
         this.clearErrorMessage();
-        this.currentTomlContent = null;
+        this.currentTomlContent = '';
 
-        const convertBtn = document.querySelector('[onclick="convertJsonToToml()"]');
+        const convertBtn =
+            document.querySelector('#convertBtn') ||
+            document.querySelector('[onclick="convertJsonToToml()"]');
         if (convertBtn) convertBtn.disabled = true;
     }
 
-    // 复制TOML到剪贴板
+    /** 复制 TOML 内容到剪贴板 */
     async copyTomlToClipboard() {
         const tomlPreview = document.getElementById('tomlPreview');
         if (!tomlPreview) return;
 
-        const tomlContent = tomlPreview.textContent;
+        const tomlContent = tomlPreview.textContent || '';
         if (!tomlContent) {
-            this.showErrorMessage('没有可复制的TOML内容');
+            this.showErrorMessage('没有可复制的 TOML 内容');
             return;
         }
 
         try {
             await navigator.clipboard.writeText(tomlContent);
-            this.showSuccessMessage('TOML内容已复制到剪贴板');
+            this.showSuccessMessage('TOML 内容已复制到剪贴板');
         } catch (error) {
-            const textarea = document.createElement('textarea');
-            textarea.value = tomlContent;
-            document.body.appendChild(textarea);
-            textarea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textarea);
-            this.showSuccessMessage('TOML内容已复制到剪贴板');
+            try {
+                const textarea = document.createElement('textarea');
+                textarea.value = tomlContent;
+                textarea.style.position = 'fixed';
+                textarea.style.left = '-9999px';
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                this.showSuccessMessage('TOML 内容已复制到剪贴板');
+            } catch (err) {
+                console.error('复制 TOML 失败:', err);
+                this.showErrorMessage('复制失败，请手动选择文本复制');
+            }
         }
     }
 
-    // 导入TOML到系统
+    /** 调用后端 /creds/import-toml 接口导入 */
     async importTomlToSystem() {
         if (!this.currentTomlContent) {
-            this.showErrorMessage('没有可导入的数据，请先转换JSON');
+            this.showErrorMessage('当前没有可导入的数据，请先完成 JSON → TOML 转换');
             return;
         }
 
-        if (!confirm('确定要导入这些凭证到系统吗？这将创建新的凭证文件。')) {
+        if (
+            !window.confirm(
+                '确定要将这些凭证导入系统吗？这会为每条凭证创建/覆盖对应的 creds.toml 条目。'
+            )
+        ) {
             return;
         }
 
         try {
-            showNotification('正在导入凭证到系统...', 'info');
+            if (typeof showNotification === 'function') {
+                showNotification('正在导入凭证到系统...', 'info');
+            }
 
             const response = await fetch('/creds/import-toml', {
                 method: 'POST',
-                headers: getPanelAuthHeaders(),
-                body: JSON.stringify({
-                    content: this.currentTomlContent
-                })
+                headers: typeof getPanelAuthHeaders === 'function'
+                    ? getPanelAuthHeaders()
+                    : { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: this.currentTomlContent })
             });
 
             if (!response.ok) {
-                throw new Error(`导入失败: HTTP ${response.status}`);
+                throw new Error(`导入失败：HTTP ${response.status}`);
             }
 
             const result = await response.json();
 
             this.showImportResults(result);
-            this.showSuccessMessage(`导入完成！成功导入${result.imported_count || 0}/${result.total_count || 0} 个凭证`);
+            this.showSuccessMessage(
+                `导入完成：成功 ${result.imported_count || 0} / ${
+                    result.total_count || 0
+                } 条`
+            );
 
-            if (window.credentialsManager) {
+            // 导入成功后，稍等一会儿刷新凭证列表
+            if (window.credentialsManager && typeof window.credentialsManager.loadCredentials === 'function') {
                 setTimeout(() => {
                     window.credentialsManager.loadCredentials();
                 }, 1000);
             }
-
         } catch (error) {
             console.error('导入失败:', error);
-            this.showErrorMessage('导入失败: ' + error.message);
+            this.showErrorMessage('导入失败：' + error.message);
         }
     }
 
-    // 显示导入结果
+    /** 在结果面板里展示导入统计与明细 */
     showImportResults(result) {
         const resultsSection = document.getElementById('importResultsSection');
         const resultSummary = document.getElementById('resultSummary');
@@ -341,10 +434,11 @@ class JsonImportManager {
 
         const successCount = result.imported_count || 0;
         const totalCount = result.total_count || 0;
-        const failCount = totalCount > successCount ? (totalCount - successCount) : 0;
+        const failCount =
+            totalCount > successCount ? totalCount - successCount : 0;
 
         resultSummary.innerHTML = `
-            <div class="summary-stats" style="display: flex; gap: 20px;">
+            <div class="summary-stats">
                 <div class="stat-item success">
                     <i class="fas fa-check-circle"></i>
                     <span class="stat-number">${successCount}</span>
@@ -362,23 +456,41 @@ class JsonImportManager {
                 </div>
             </div>
             <div class="summary-message" style="margin-top: 12px;">
-                导入完成，成功率: ${totalCount > 0 ? ((successCount / totalCount) * 100).toFixed(1) : 0}%
+                导入完成，成功率：${
+                    totalCount > 0
+                        ? ((successCount / totalCount) * 100).toFixed(1)
+                        : 0
+                }%
             </div>
         `;
 
         let detailsHtml = '';
 
-        if (result.results && Array.isArray(result.results)) {
-            result.results.forEach(item => {
+        if (Array.isArray(result.results)) {
+            result.results.forEach((item) => {
                 const isSuccess = item.status === 'success';
                 detailsHtml += `
                     <div class="result-item ${isSuccess ? 'success' : 'error'}">
                         <div class="result-item-info">
-                            <div class="result-item-name">${item.filename || item.project_id || ''}</div>
-                            <div class="result-item-path">${item.file_path || ''}</div>
-                            ${!isSuccess ? `<div class="result-item-error">${item.message || item.error || '未知错误'}</div>` : ''}
+                            <div class="result-item-name">
+                                ${item.filename || item.project_id || ''}
+                            </div>
+                            <div class="result-item-path">
+                                ${item.file_path || ''}
+                            </div>
+                            ${
+                                !isSuccess
+                                    ? `<div class="result-item-error">${
+                                          item.message ||
+                                          item.error ||
+                                          '未知错误'
+                                      }</div>`
+                                    : ''
+                            }
                         </div>
-                        <div class="result-item-status ${isSuccess ? 'success' : 'error'}">
+                        <div class="result-item-status ${
+                            isSuccess ? 'success' : 'error'
+                        }">
                             ${isSuccess ? '成功' : '失败'}
                         </div>
                     </div>
@@ -391,7 +503,7 @@ class JsonImportManager {
         resultsSection.scrollIntoView({ behavior: 'smooth' });
     }
 
-    // 显示成功消息
+    /** 统一的成功提示入口 */
     showSuccessMessage(message) {
         if (typeof showNotification === 'function') {
             showNotification(message, 'success');
@@ -400,9 +512,13 @@ class JsonImportManager {
         }
     }
 
-    // 获取认证token的获取工具类函数以统一
+    /** 预留：如需单独拿 token，可以从这里取 */
     getAuthToken() {
-        return window.sessionStorage.getItem('authToken') || window.authToken || '';
+        return (
+            window.sessionStorage.getItem('authToken') ||
+            window.authToken ||
+            ''
+        );
     }
 }
 
@@ -413,10 +529,11 @@ let jsonImportManager;
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
         jsonImportManager = new JsonImportManager();
+        window.jsonImportManager = jsonImportManager;
     }, 100);
 });
 
-// 导出全局函数供HTML使用
+// 暴露给 HTML 的全局函数
 window.convertJsonToToml = () => {
     if (jsonImportManager) {
         jsonImportManager.convertJsonToToml();
@@ -440,3 +557,4 @@ window.importTomlToSystem = () => {
         jsonImportManager.importTomlToSystem();
     }
 };
+

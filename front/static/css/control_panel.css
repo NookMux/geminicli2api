@@ -1730,34 +1730,199 @@ body {
 }
 
 /* JSON 导入功能样式 */
+.json-input-textarea {
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    background: #fafafa;
+}
+
+.json-input-textarea:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    background: white;
+    outline: none;
+}
+
+.json-format-help {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 12px;
+}
+
+.format-example {
+    display: flex;
+    align-items: center;
+    margin: 8px 0;
+    padding: 8px 12px;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #f1f5f9;
+}
+
+.format-label {
+    font-weight: 600;
+    color: #374151;
+    min-width: 100px;
+    margin-right: 12px;
+}
+
+.format-code {
+    background: #f3f4f6;
+    color: #1f2937;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    border: 1px solid #e5e7eb;
+    flex: 1;
+    word-break: break-all;
+}
+
+.json-actions {
+    margin-top: 16px;
+}
+
+.convert-btn {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    border: none;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.convert-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.convert-btn:disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.clear-btn {
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    color: #374151;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.clear-btn:hover {
+    background: #e5e7eb;
+    border-color: #9ca3af;
+}
+
 .button-group {
     display: flex;
     gap: 12px;
     flex-wrap: wrap;
 }
 
+.toml-preview-section {
+    border-left: 4px solid #3b82f6;
+    background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+}
+
+.toml-preview-container {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.toml-preview-header {
+    background: #f8fafc;
+    padding: 12px 16px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.preview-label {
+    font-weight: 600;
+    color: #374151;
+}
+
+.preview-actions-mini {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-icon {
+    background: transparent;
+    border: 1px solid #d1d5db;
+    color: #6b7280;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-icon:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+    color: #374151;
+}
+
 .toml-preview {
-    background: #1f2937;
-    border-radius: 8px;
-    padding: 16px;
     max-height: 400px;
     overflow-y: auto;
-    border: 1px solid #374151;
 }
 
 .toml-content {
-    color: #e5e7eb;
+    color: #1f2937;
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
     font-size: 13px;
     line-height: 1.5;
     white-space: pre-wrap;
     margin: 0;
+    padding: 20px;
+    background: #fafafa;
+}
+
+.import-results-section {
+    border-left: 4px solid #10b981;
+    background: linear-gradient(135deg, #f0fdf4, #ecfdf5);
 }
 
 .preview-actions {
     display: flex;
     gap: 12px;
     margin-top: 16px;
+}
+
+.import-btn {
+    background: linear-gradient(135deg, #10b981, #059669);
+    border: none;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.import-btn:hover {
+    background: linear-gradient(135deg, #059669, #047857);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
 }
 
 .import-results {
@@ -1767,38 +1932,109 @@ body {
 }
 
 .result-summary {
-    padding: 16px;
+    padding: 20px;
     background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
-    border-radius: 8px;
+    border-radius: 12px;
     border: 1px solid #0ea5e9;
     color: #0c4a6e;
 }
 
 .result-details {
-    background: #f8fafc;
-    border-radius: 8px;
-    padding: 16px;
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
     border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    max-height: 360px;
+    overflow-y: auto;
+}
+
+.summary-stats {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+    border-radius: 8px;
+    min-width: 100px;
+    transition: all 0.3s ease;
+}
+
+.stat-item.success {
+    background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+    border: 1px solid #22c55e;
+    color: #15803d;
+}
+
+.stat-item.error {
+    background: linear-gradient(135deg, #fee2e2, #fecaca);
+    border: 1px solid #ef4444;
+    color: #b91c1c;
+}
+
+.stat-item.total {
+    background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+    border: 1px solid #0ea5e9;
+    color: #0c4a6e;
+}
+
+.stat-number {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.stat-label {
+    font-size: 12px;
+    font-weight: 500;
+    opacity: 0.8;
+}
+
+.summary-message {
+    text-align: center;
+    font-weight: 600;
+    padding: 12px;
+    background: rgba(59, 130, 246, 0.1);
+    border-radius: 6px;
+    color: #1d4ed8;
 }
 
 .result-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 0;
+    padding: 12px 16px;
     border-bottom: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    background: #fafafa;
+    transition: all 0.3s ease;
+}
+
+.result-item:hover {
+    background: #f8fafc;
+    transform: translateX(4px);
 }
 
 .result-item:last-child {
     border-bottom: none;
+    margin-bottom: 0;
 }
 
 .result-item.success {
-    color: #059669;
+    border-left: 3px solid #22c55e;
+    color: #15803d;
 }
 
 .result-item.error {
-    color: #dc2626;
+    border-left: 3px solid #ef4444;
+    color: #b91c1c;
 }
 
 .result-item-info {
@@ -1836,26 +2072,86 @@ body {
 
 /* 响应式设计 */
 @media (max-width: 768px) {
-    .modal-content {
-        width: 95%;
-        max-height: 90vh;
-    }
-
-    .modal-header,
-    .modal-body,
-    .modal-footer {
-        padding: 16px;
-    }
-
-    .checkbox-group {
-        grid-template-columns: 1fr;
-    }
-
-    .modal-footer {
+    .json-actions {
         flex-direction: column;
     }
 
-    .modal-footer button {
+    .convert-btn, .clear-btn, .import-btn {
         width: 100%;
+        margin-bottom: 8px;
+    }
+
+    .format-example {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 12px;
+    }
+
+    .format-label {
+        min-width: auto;
+        margin-bottom: 8px;
+        margin-right: 0;
+    }
+
+    .format-code {
+        width: 100%;
+        font-size: 10px;
+    }
+
+    .preview-actions {
+        flex-direction: column;
+    }
+
+    .summary-stats {
+        gap: 12px;
+    }
+
+    .stat-item {
+        min-width: 80px;
+        padding: 12px;
+    }
+
+    .stat-number {
+        font-size: 20px;
+    }
+
+    .result-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .result-item-status {
+        align-self: flex-end;
+    }
+
+    .toml-preview-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .preview-actions-mini {
+        align-self: flex-end;
+    }
+}
+
+@media (max-width: 480px) {
+    .json-input-textarea {
+        font-size: 14px;
+    }
+
+    .format-code {
+        font-size: 9px;
+        padding: 3px 6px;
+    }
+
+    .stat-number {
+        font-size: 18px;
+    }
+
+    .toml-content {
+        font-size: 12px;
+        padding: 16px;
     }
 }
