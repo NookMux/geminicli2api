@@ -1126,9 +1126,18 @@ class TomlConverter {
             Object.keys(data.creds).forEach(key => {
                 const entry = data.creds[key];
                 if (!entry || typeof entry !== "object") return;
-                const filename = entry.filename || key;
-                const entryLines = this.processEntry(filename, entry);
-                if (entryLines) lines.push(...entryLines);
+
+                // 只处理启用了的凭证（status.disabled === true）且类型为cli的凭证
+                if (
+                    entry.status &&
+                    typeof entry.status === "object" &&
+                    entry.credential_type === "cli" &&
+                    entry.status.disabled !== true
+                ) {
+                    const filename = entry.filename || key;
+                    const entryLines = this.processEntry(filename, entry);
+                    if (entryLines) lines.push(...entryLines);
+                }
             });
         } else {
             // 处理原始的数组或直接对象结构
