@@ -34,7 +34,6 @@ from .credential_manager import CredentialManager
 from .usage_stats import get_usage_stats, get_aggregated_stats, get_usage_stats_instance
 from .storage_adapter import get_storage_adapter
 from .api_call_logger import get_api_log_file_path
-from .backup_manager import run_backup_once, load_backup_config
 
 # 创建路由器
 router = APIRouter()
@@ -173,12 +172,6 @@ class ConfigSaveRequest(BaseModel):
     config: dict
 
 
-class BackupSyncRequest(BaseModel):
-    """GitHub 凭证文件同步操作请求代码"""
-    # upload / download / None (None 则要依据当前配置中的backup.mode)
-    direction: Optional[str] = None
-
-
 class TomlCredsImportRequest(BaseModel):
     """从TOML文本导入凭证的请求体"""
     content: str
@@ -190,65 +183,57 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
         raise HTTPException(status_code=401, detail="无效的认证令牌")
     return credentials.credentials
 
+def is_mobile_user_agent(user_agent: str) -> bool:
+    """检测是否为移动设备用户代理"""
+    if not user_agent:
+        return False
+    
+    user_agent_lower = user_agent.lower()
+    mobile_keywords = [
+        'mobile', 'android', 'iphone', 'ipad', 'ipod', 
+        'blackberry', 'windows phone', 'samsung', 'htc',
+        'motorola', 'nokia', 'palm', 'webos', 'opera mini',
+        'opera mobi', 'fennec', 'minimo', 'symbian', 'psp',
+        'nintendo', 'tablet'
+    ]
+    
+    return any(keyword in user_agent_lower for keyword in mobile_keywords)
+
 @router.get("/", response_class=HTMLResponse)
-async def serve_login_page(request: Request):
-    """
-    登录页入口挂在根路径 /
-    - 已登录：302 重定向到 /root 控制面板
-    - 未登录：返回登录页面 HTML
-    """
-    try:
-        auth_token = request.cookies.get("auth_token")
-        is_authenticated = bool(auth_token and verify_auth_token(auth_token))
-
-        if is_authenticated:
-            # 已登录直接跳控制面板
-            return HTMLResponse(
-                status_code=302,
-                headers={"Location": "/root"}
-            )
-
-        html_file_path = "front/login.html"
-        with open(html_file_path, "r", encoding="utf-8") as f:
-            html_content = f.read()
-        return HTMLResponse(content=html_content)
-    except FileNotFoundError:
-        log.error("前端页面文件不存在: front/login.html")
-        raise HTTPException(status_code=404, detail="页面不存在")
-    except Exception as e:
-        log.error(f"加载登录页面失败: {e}")
-        raise HTTPException(status_code=500, detail="服务器内部错误")
-
-
 @router.get("/v1", response_class=HTMLResponse)
 @router.get("/auth", response_class=HTMLResponse)
-@router.get("/root", response_class=HTMLResponse)
 async def serve_control_panel(request: Request):
-    """
-    提供统一控制面板或登录页面：
-    - 如果 auth_token cookie 有效，则返回控制面板页面
-    - 否则返回登录页面
-    """
+    """提供统一控制面板（包含认证、文件管理、配置等功能）"""
     try:
-        auth_token = request.cookies.get("auth_token")
-        is_authenticated = bool(auth_token and verify_auth_token(auth_token))
-
-        if not is_authenticated:
-            # 未登录用户统一跳回登录页
-            return HTMLResponse(
-                status_code=302,
-                headers={"Location": "/"}
-            )
-
-        html_file_path = "front/control_panel.html"
+        # 获取用户代理并判断是否为移动设备
+        user_agent = request.headers.get("user-agent", "")
+        is_mobile = is_mobile_user_agent(user_agent)
+        
+        # 根据设备类型选择相应的HTML文件
+        if is_mobile:
+            html_file_path = "front/control_panel_mobile.html"
+            log.info(f"Serving mobile control panel to user-agent: {user_agent}")
+        else:
+            html_file_path = "front/control_panel.html"
+            log.info(f"Serving desktop control panel to user-agent: {user_agent}")
+        
         with open(html_file_path, "r", encoding="utf-8") as f:
             html_content = f.read()
         return HTMLResponse(content=html_content)
     except FileNotFoundError:
-        log.error(f"前端页面文件不存在: {html_file_path}")
-        raise HTTPException(status_code=404, detail="页面不存在")
+        log.error(f"控制面板页面文件不存在: {html_file_path}")
+        # 如果移动端文件不存在，回退到桌面版
+        if is_mobile:
+            try:
+                with open("front/control_panel.html", "r", encoding="utf-8") as f:
+                    html_content = f.read()
+                return HTMLResponse(content=html_content)
+            except FileNotFoundError:
+                raise HTTPException(status_code=404, detail="控制面板页面不存在")
+        else:
+            raise HTTPException(status_code=404, detail="控制面板页面不存在")
     except Exception as e:
-        log.error(f"加载前端页面失败: {e}")
+        log.error(f"加载控制面板页面失败: {e}")
         raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
@@ -258,15 +243,7 @@ async def login(request: LoginRequest):
     try:
         if await verify_password(request.password):
             token = generate_auth_token()
-            # 设置cookie并返回成功响应
-            response = JSONResponse(content={"token": token, "message": "登录成功"})
-            response.set_cookie(
-                key="auth_token",
-                value=token,
-                max_age=86400,  # 24小时
-                path="/"
-            )
-            return response
+            return JSONResponse(content={"token": token, "message": "登录成功"})
         else:
             raise HTTPException(status_code=401, detail="密码错误")
     except HTTPException:
@@ -274,22 +251,6 @@ async def login(request: LoginRequest):
     except Exception as e:
         log.error(f"登录失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/auth/validate")
-async def validate_auth(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """
-    校验前端带来的 Bearer token 是否仍然有效。
-    返回 JSON: {"valid": true/false}
-    """
-    try:
-        token = credentials.credentials
-        is_valid = bool(verify_auth_token(token))
-        return JSONResponse(content={"valid": is_valid})
-    except Exception as e:
-        # 出现异常时一律视为无效，但不要抛 500 给前端页面
-        log.error(f"验证登录 token 失败: {e}")
-        return JSONResponse(content={"valid": False})
 
 
 @router.post("/auth/start")
@@ -1660,42 +1621,6 @@ async def save_config(request: ConfigSaveRequest, token: str = Depends(verify_to
         raise
     except Exception as e:
         log.error(f"保存配置失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/backup/sync")
-async def trigger_backup(request: BackupSyncRequest, token: str = Depends(verify_token)):
-    """
-    手动执行凭证文件同步操作
-
-    Args:
-        request.direction: 'upload' / 'download' / None (None 则要依据当前backup.mode)
-    """
-    try:
-        direction = None
-        if request.direction:
-            direction = request.direction.strip().lower()
-            if direction not in ("upload", "download"):
-                raise HTTPException(status_code=400, detail="direction 参数必须是空、upload 或是 download")
-
-        message = await run_backup_once(direction=direction)  # type: ignore[arg-type]
-
-        # 返回当前配置中的 backup 参数，起到提示后端解释状态是否及时
-        backup_cfg = await load_backup_config()
-
-        return JSONResponse(content={
-            "success": True,
-            "message": message,
-            "backup_config": {
-                "enabled": backup_cfg.enabled,
-                "github_repo": backup_cfg.github_repo,
-                "mode": backup_cfg.mode,
-                "interval_seconds": backup_cfg.interval_seconds,
-            },
-        })
-    except HTTPException:
-        raise
-    except Exception as e:
-        log.error(f"手动同步备份出错: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

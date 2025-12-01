@@ -1,45 +1,86 @@
-/**
- * 妯″瀷鏉冮檺绠＄悊 JavaScript
- * 澶勭悊鍑瘉鐨勬ā鍨嬫潈闄愰厤缃脊绐楀拰鐩稿叧鎿嶄綔
- */
+// ===========================
+// 模型权限管理
+// ===========================
 
-class ModelPermissionsManager {
-    constructor() {
-        this.currentFilename = null;
-        this.supportedModels = [];
-        this.allowedBaseModels = null;
-        this.modal = null;
-    }
+let currentCredentialName = '';
+let allSupportedModels = [];
 
-    async openModal(filename) {
-        this.currentFilename = filename;
-        await this.loadSupportedModels();
-        await this.loadCredentialModels(filename);
-        this.createModal();
-        this.showModal();
-    }
+// 设置认证token
+function setAuthToken(token) {
+    authToken = token;
+}
 
-    async loadSupportedModels() {
-        try {
-            const response = await fetch('/config/supported-models', {
-                method: 'GET',
-                headers: getPanelAuthHeaders()
-            });
+async function openModelPermissionModal(filename) {
+    try {
+        currentCredentialName = filename;
 
-            if (!response.ok) {
-                throw new Error(`鍔犺浇鏀寔鐨勬ā鍨嬪け璐?: HTTP ${response.status}`);
-            }
+        // 获取支持的模型列表
+        await loadSupportedModels();
 
-            const data = await response.json();
-            this.supportedModels = data.models || this.getDefaultModels();
-        } catch (error) {
-            console.error('鍔犺浇鏀寔鐨勬ā鍨嬪け璐?:', error);
-            this.supportedModels = this.getDefaultModels();
+        // 直接从全局 credsData 中获取当前凭证信息，避免重复请求
+        const allCreds = (typeof credsData === 'object' && credsData) ? credsData : {};
+        const credInfo = Object.values(allCreds).find(cred => cred.filename === filename);
+
+        if (!credInfo) {
+            showStatus('未找到凭证信息', 'error');
+            return;
         }
-    }
 
-    getDefaultModels() {
-        return [
+        // 设置凭证名称
+        document.getElementById('modalCredentialName').value = filename;
+
+        // 清空之前的选项
+        document.querySelectorAll('input[name="permissionType"]').forEach(radio => {
+            radio.checked = false;
+        });
+
+        const allowedModels = credInfo.status?.allowed_base_models;
+
+        // 设置权限类型
+        if (!allowedModels || allowedModels === null) {
+            document.querySelector('input[name="permissionType"][value="all"]').checked = true;
+        } else if (allowedModels.length === 0) {
+            document.querySelector('input[name="permissionType"][value="none"]').checked = true;
+        } else {
+            document.querySelector('input[name="permissionType"][value="custom"]').checked = true;
+        }
+
+        // 生成模型复选框
+        generateModelCheckboxes(allowedModels || []);
+
+        // 显示弹窗
+        document.getElementById('modelPermissionModal').style.display = 'block';
+
+    } catch (error) {
+        console.error('打开模型权限设置弹窗时出错:', error);
+        showStatus(`打开权限设置失败: ${error.message}`, 'error');
+    }
+}
+
+async function loadSupportedModels() {
+    try {
+        const response = await fetch('/config/supported-models', {
+            method: 'GET',
+            headers: getAuthHeaders()
+        });
+
+        if (!response.ok) {
+            // 如果没有这个接口，使用默认模型列表
+            allSupportedModels = [
+                'gemini-2.5-pro',
+                'gemini-2.5-flash',
+                'gemini-3-pro-preview',
+                'gemini-2.5-flash-image',
+                'gemini-2.5-flash-image-preview'
+            ];
+            return;
+        }
+
+        const data = await response.json();
+        allSupportedModels = data.models || [];
+    } catch (error) {
+        // 使用默认模型列表
+        allSupportedModels = [
             'gemini-2.5-pro',
             'gemini-2.5-flash',
             'gemini-3-pro-preview',
@@ -47,227 +88,99 @@ class ModelPermissionsManager {
             'gemini-2.5-flash-image-preview'
         ];
     }
-
-    async loadCredentialModels(filename) {
-        try {
-            if (window.credentialsManager) {
-                const credential = window.credentialsManager.credentials.find(c => c.filename === filename);
-                if (credential && Object.prototype.hasOwnProperty.call(credential, 'allowed_base_models')) {
-                    this.allowedBaseModels = credential.allowed_base_models;
-                } else {
-                    this.allowedBaseModels = null;
-                }
-            } else {
-                this.allowedBaseModels = null;
-            }
-        } catch (error) {
-            console.error('鑾峰彇鍑瘉妯″瀷鏉冮檺澶辫触:', error);
-            this.allowedBaseModels = null;
-        }
-    }
-
-    createModal() {
-        const existingModal = document.getElementById('modelPermissionModal');
-        if (existingModal) {
-            existingModal.remove();
-        }
-
-        const isNull = this.allowedBaseModels === null || typeof this.allowedBaseModels === 'undefined';
-        const isEmptyArray = Array.isArray(this.allowedBaseModels) && this.allowedBaseModels.length === 0;
-        const isCustom = Array.isArray(this.allowedBaseModels) && this.allowedBaseModels.length > 0;
-
-        const modalHtml = `
-            <div id="modelPermissionModal" class="modal-overlay">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3><i class="fas fa-sliders-h"></i> 妯″瀷鏉冮檺閰嶇疆</h3>
-                        <button class="modal-close" onclick="closeModelPermissionModal()">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="form-group">
-                            <label>鍑瘉鏂囦欢: <strong>${this.currentFilename}</strong></label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="radio" name="modelPermission" value="null"
-                                       ${isNull ? 'checked' : ''}
-                                       onchange="modelPermissionsManager.onPermissionTypeChange('null')">
-                                涓嶉檺鍒舵ā鍨嬶紙浣跨敤榛樿琛屼负锛?
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="radio" name="modelPermission" value="empty"
-                                       ${isEmptyArray ? 'checked' : ''}
-                                       onchange="modelPermissionsManager.onPermissionTypeChange('empty')">
-                                绂佺敤鎵€鏈夋ā鍨嬶紙杞鐢ㄦ鍑瘉锛?
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="radio" name="modelPermission" value="custom"
-                                       ${isCustom ? 'checked' : ''}
-                                       onchange="modelPermissionsManager.onPermissionTypeChange('custom')">
-                                鑷畾涔夊厑璁哥殑妯″瀷:
-                            </label>
-                            <div id="customModelsContainer" class="checkbox-group"
-                                 style="display: ${isCustom ? 'block' : 'none'}">
-                                ${this.supportedModels.map(model => `
-                                    <label class="checkbox-item">
-                                        <input type="checkbox" name="allowedModels" value="${model}"
-                                               ${Array.isArray(this.allowedBaseModels) && this.allowedBaseModels.includes(model) ? 'checked' : ''}>
-                                        <span>${model}</span>
-                                    </label>
-                                `).join('')}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button class="btn btn-secondary" onclick="closeModelPermissionModal()">鍙栨秷</button>
-                        <button class="btn btn-primary" onclick="modelPermissionsManager.savePermissions()">
-                            <i class="fas fa-save"></i> 淇濆瓨
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        const wrapper = document.createElement('div');
-        wrapper.innerHTML = modalHtml.trim();
-        this.modal = wrapper.firstChild;
-        document.body.appendChild(this.modal);
-
-        this.bindModalEvents();
-    }
-
-    bindModalEvents() {
-        if (!this.modal) return;
-
-        this.modal.addEventListener('click', (e) => {
-            if (e.target === this.modal) {
-                this.closeModal();
-            }
-        });
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && this.modal) {
-                this.closeModal();
-            }
-        }, { once: true });
-    }
-
-    showModal() {
-        if (!this.modal) return;
-        this.modal.style.display = 'flex';
-        document.body.style.overflow = 'hidden';
-    }
-
-    closeModal() {
-        if (this.modal) {
-            this.modal.style.display = 'none';
-            document.body.style.overflow = 'auto';
-            this.modal.remove();
-            this.modal = null;
-        }
-    }
-
-    onPermissionTypeChange(type) {
-        const customContainer = document.getElementById('customModelsContainer');
-        if (!customContainer) return;
-
-        switch (type) {
-            case 'null':
-            case 'empty':
-                customContainer.style.display = 'none';
-                break;
-            case 'custom':
-                customContainer.style.display = 'block';
-                break;
-        }
-    }
-
-    async savePermissions() {
-        try {
-            const selectedTypeInput = document.querySelector('input[name="modelPermission"]:checked');
-            if (!selectedTypeInput) {
-                alert('璇疯嚦灏戜笉灏戦€夋嫨涓€绉嶆ā鍨嬫潈闄愯繃婊ゅ璞℃柟妗?);
-                return;
-            }
-
-            const selectedType = selectedTypeInput.value;
-            let allowedBaseModels;
-
-            switch (selectedType) {
-                case 'null':
-                    allowedBaseModels = null;
-                    break;
-                case 'empty':
-                    allowedBaseModels = [];
-                    break;
-                case 'custom': {
-                    const checkedBoxes = document.querySelectorAll('input[name="allowedModels"]:checked');
-                    allowedBaseModels = Array.from(checkedBoxes).map(cb => cb.value);
-                    if (!allowedBaseModels.length) {
-                        alert('璇疯嚦灏戜笉灏戦€夋嫨涓€涓ā鍨嬶紝鎴戜滑鎴戠殑鍑瘉鏉冮檺鍙互鏆傛椂涓嶄紶锛?);
-                        return;
-                    }
-                    break;
-                }
-                default:
-                    allowedBaseModels = null;
-            }
-
-            const response = await fetch('/creds/update-models', {
-                method: 'POST',
-                headers: getPanelAuthHeaders(),
-                body: JSON.stringify({
-                    filename: this.currentFilename,
-                    allowed_base_models: allowedBaseModels
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error(`淇濆瓨妯″瀷鏉冮檺閰嶇疆澶辫触: HTTP ${response.status}`);
-            }
-
-            const result = await response.json();
-            alert(result.message || '妯″瀷鏉冮檺閰嶇疆宸蹭繚瀛?);
-
-            this.closeModal();
-            if (window.credentialsManager) {
-                window.credentialsManager.loadCredentials();
-            }
-        } catch (error) {
-            console.error('淇濆瓨妯″瀷鏉冮檺閰嶇疆澶辫触:', error);
-            alert(`淇濆瓨澶辫触: ${error.message}`);
-        }
-    }
 }
 
-// 鍏ㄥ眬瀹炰緥
-let modelPermissionsManager;
+function generateModelCheckboxes(allowedModels) {
+    const container = document.getElementById('modelCheckboxes');
+    container.innerHTML = '';
 
-// 鍏ㄥ眬鍑芥暟渚涘閮ㄨ皟鐢?
-function openModelPermissionModal(filename) {
-    if (!modelPermissionsManager) {
-        modelPermissionsManager = new ModelPermissionsManager();
+    allSupportedModels.forEach(model => {
+        const isChecked = allowedModels.includes(model);
+        const div = document.createElement('div');
+        div.className = 'model-item';
+        div.innerHTML = `
+            <input type="checkbox" id="model_${model}" value="${model}" ${isChecked ? 'checked' : ''}>
+            <label for="model_${model}">${model}</label>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function handlePermissionTypeChange() {
+    const selectedType = document.querySelector('input[name="permissionType"]:checked');
+    if (!selectedType) return;
+
+    const selectedValue = selectedType.value;
+    const customSelection = document.getElementById('customModelSelection');
+
+    if (selectedValue === 'custom') {
+        customSelection.style.display = 'block';
+    } else {
+        customSelection.style.display = 'none';
     }
-    modelPermissionsManager.openModal(filename);
 }
 
 function closeModelPermissionModal() {
-    if (modelPermissionsManager) {
-        modelPermissionsManager.closeModal();
+    document.getElementById('modelPermissionModal').style.display = 'none';
+    currentCredentialName = '';
+}
+
+async function saveModelPermissions() {
+    try {
+        const selectedType = document.querySelector('input[name="permissionType"]:checked').value;
+        let allowedBaseModels = null;
+
+        if (selectedType === 'none') {
+            allowedBaseModels = [];
+        } else if (selectedType === 'custom') {
+            const selectedCheckboxes = document.querySelectorAll('#modelCheckboxes input[type="checkbox"]:checked');
+            allowedBaseModels = Array.from(selectedCheckboxes).map(cb => cb.value);
+        }
+        // selectedType === 'all' 时保持 null
+
+        const response = await fetch('/creds/update-models', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+                filename: currentCredentialName,
+                allowed_base_models: allowedBaseModels
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showStatus(`凭证 ${currentCredentialName} 的模型权限已更新`, 'success');
+            closeModelPermissionModal();
+            // 刷新凭证状态
+            if (typeof refreshCredsStatus === 'function') {
+                await refreshCredsStatus();
+            }
+        } else {
+            showStatus(`更新权限失败: ${data.detail || data.error || '未知错误'}`, 'error');
+        }
+
+    } catch (error) {
+        console.error('保存模型权限时出错:', error);
+        showStatus(`保存权限失败: ${error.message}`, 'error');
     }
 }
 
-// 椤甸潰鍔犺浇鏃跺垵濮嬪寲
-document.addEventListener('DOMContentLoaded', () => {
-    modelPermissionsManager = new ModelPermissionsManager();
-});
+// 点击弹窗外部关闭
+window.onclick = function(event) {
+    const modal = document.getElementById('modelPermissionModal');
+    if (event.target === modal) {
+        closeModelPermissionModal();
+    }
+}
 
+// 初始化：设置权限类型切换事件监听
+document.addEventListener('DOMContentLoaded', function() {
+    const permissionTypeRadios = document.querySelectorAll('input[name="permissionType"]');
+    permissionTypeRadios.forEach(radio => {
+        radio.addEventListener('change', handlePermissionTypeChange);
+    });
+
+    // 初始时隐藏自定义选择区域
+    handlePermissionTypeChange();
+});

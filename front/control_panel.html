@@ -1,587 +1,533 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GCLI-2API 控制面板</title>
-    <link rel="stylesheet" href="/static/css/control_panel.css">
+    <title>箱宝的GAPI小窝</title>
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/login.css">
+    <link rel="stylesheet" href="/static/css/manage.css">
+    <link rel="stylesheet" href="/static/css/usage.css">
+    <link rel="stylesheet" href="/static/css/config.css">
+    <link rel="stylesheet" href="/static/css/apilog.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
+
 <body>
-    <!-- 登录状态检查中遮罩 -->
-    <div id="loadingOverlay" class="loading-overlay">
-        <div class="loading-spinner">
-            <i class="fas fa-spinner fa-spin"></i>
-            <span>检查登录状态...</span>
-        </div>
-    </div>
+    <div class="container">
 
-    <!-- 登录页面 -->
-    <div id="loginPage" class="login-page" style="display: none;">
-        <div class="login-container">
-            <div class="left-section">
-                <img src="/static/images/promo-image.png" alt="Gemini-Cli-2API" onerror="this.style.display='none'">
+        <!-- 登录界面 -->
+        <div id="loginSection" class="login-form">
+            <div class="login-icon">
+                <i class="fas fa-heart"></i>
             </div>
-            <div class="right-section">
-                <h1 class="login-title">·欢迎使用Gemini-Cli-2API·</h1>
-                <input type="password" class="password-input" id="passwordInput" placeholder="请输入密码" onkeypress="handleKeyPress(event)">
-                <button class="login-button" id="loginButton" onclick="handleLogin()">登录</button>
-                <div class="error-message" id="errorMessage"></div>
+            <h1>GeminiCli2API</h1>
+            <p>请输入密码</p>
+            <div class="input-wrapper">
+                <i class="fas fa-lock input-icon"></i>
+                <input type="password" id="loginPassword" placeholder="输入密码" />
             </div>
+            <button class="btn" onclick="login()">
+                <i class="fas fa-sign-in-alt"></i> 进入
+            </button>
         </div>
-    </div>
 
-    <!-- 控制面板页面 -->
-    <div id="controlPanel" style="display: none;">
-    <!-- 顶部导航栏 -->
-    <header class="top-nav">
-        <div class="nav-left">
-            <h1 class="app-title">GCLI-2API</h1>
-        </div>
-        <div class="nav-right">
-            <!-- 子选项卡将动态生成 -->
-            <div class="sub-tabs" id="subTabs">
-                <!-- 默认OAuth认证的子选项卡 -->
-                <button class="sub-tab active" data-tab="single-login">单项目登录</button>
-                <button class="sub-tab" data-tab="all-login">全部项目登录</button>
+        <!-- 主界面 -->
+        <div id="mainSection" class="hidden">
+            <div class="header-decoration">
+                <i class="fas fa-sparkles"></i>
             </div>
-        </div>
-    </header>
+            <h1>GeminiCli2API</h1>
+            <div id="statusSection"></div>
 
-    <div class="main-container">
-        <!-- 左侧导航栏 -->
-        <nav class="sidebar">
-            <button class="nav-item active" data-module="oauth">
-                <i class="fas fa-key"></i>
-                <span>OAuth认证</span>
-            </button>
-            <button class="nav-item" data-module="credentials">
-                <i class="fas fa-shield-alt"></i>
-                <span>凭证管理</span>
-            </button>
-            <button class="nav-item" data-module="statistics">
-                <i class="fas fa-chart-bar"></i>
-                <span>使用统计</span>
-            </button>
-            <button class="nav-item" data-module="logs">
-                <i class="fas fa-list-alt"></i>
-                <span>调用日志</span>
-            </button>
-            <button class="nav-item" data-module="config">
-                <i class="fas fa-cog"></i>
-                <span>配置管理</span>
-            </button>
-        </nav>
-
-        <!-- 右侧内容区域 -->
-        <main class="content">
-            <!-- OAuth认证 - 单项目登录 -->
-            <div class="content-panel active" id="single-login">
-                <div class="panel-header">
-                    <h2>单项目登录</h2>
-                    <p>为单个项目获取Google OAuth凭证</p>
+            <!-- 标签页 -->
+            <!-- 标签页 -->
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'oauth')">
+                    <i class="fas fa-key"></i> OAuth认证
+                </button>
+                <button class="tab" onclick="switchTab(event, 'manage')">
+                    <i class="fas fa-folder-open"></i> 文件管理
+                </button>
+                <button class="tab" onclick="switchTab(event, 'usage')">
+                    <i class="fas fa-chart-line"></i> 使用统计
+                </button>
+                <button class="tab" onclick="switchTab(event, 'apilog')">
+                    <i class="fas fa-list-alt"></i> 调用日志
+                </button>
+                <button class="tab" onclick="switchTab(event, 'import')">
+                    <i class="fas fa-file-import"></i> JSON导入
+                </button>
+                <button class="tab" onclick="switchTab(event, 'config')">
+                    <i class="fas fa-cog"></i> 配置管理
+                </button>
+            </div>
+            <div id="oauthTab" class="tab-content active">
+                <div class="form-group">
+                    <label for="projectId">
+                        <i class="fas fa-project-diagram"></i> 项目ID (可选):
+                    </label>
+                    <input type="text" id="projectId" placeholder="留空将自动检测项目" />
                 </div>
-                <div class="panel-content">
-                    <!-- 基础配置 -->
-                    <div class="auth-section">
-                        <h3><i class="fas fa-cog"></i> 基础配置</h3>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="getAllProjectsCreds">
+                        <i class="fas fa-layer-group"></i> 获取当前账号的所有项目凭证
+                    </label>
+                </div>
+
+                <button class="btn" id="getAuthBtn" onclick="startAuth()">
+                    <i class="fas fa-link"></i> 获取认证链接
+                </button>
+
+                <div id="authUrlSection" class="hidden">
+                    <h3><i class="fas fa-external-link-alt"></i> 认证链接：</h3>
+                    <div class="auth-url">
+                        <a id="authUrl" href="#" target="_blank">
+                            <i class="fas fa-mouse-pointer"></i> 点击此链接进行认证
+                        </a>
+                    </div>
+                    <div class="callback-url-section">
                         <div class="form-group">
-                            <label for="projectId">项目ID</label>
-                            <input type="text" id="projectId" placeholder="留空自动检测项目ID" class="form-input">
-                            <small class="form-help">可选填写，不填写将自动检测</small>
+                            <input type="url" id="callbackUrlInput" placeholder="授权后，将跳转的URL粘贴于此" />
                         </div>
-
-                        <!-- 高级选项 -->
-                        <div class="advanced-options">
-                            <div class="options-header" onclick="toggleAdvancedOptions()">
-                                <i class="fas fa-chevron-right"></i>
-                                <span>高级选项</span>
-                            </div>
-                            <div class="options-content" id="advancedOptionsContent" style="display: none;">
-                                <div class="form-group">
-                                    <label for="manualProjectId">手动指定项目ID</label>
-                                    <input type="text" id="manualProjectId" placeholder="当自动检测失败时使用" class="form-input">
-                                    <small class="form-help">仅在自动检测失败且系统提示时填写</small>
-                                </div>
-                            </div>
-                        </div>
-
-                        <button class="btn-primary" onclick="startSingleAuth()">
-                            <i class="fas fa-link"></i> 生成认证链接
+                        <button class="btn secondary" onclick="processCallbackUrl()">
+                            <i class="fas fa-paper-plane"></i> 提交URL
                         </button>
                     </div>
+                </div>
 
-                    <!-- 认证链接显示 -->
-                    <div class="auth-section" id="authUrlSection" style="display: none;">
-                        <h3><i class="fas fa-external-link-alt"></i> OAuth认证链接</h3>
-                        <div class="url-display">
-                            <div class="url-container">
-                                <input type="text" id="authUrl" readonly class="form-input url-input">
-                                <button class="btn-copy" onclick="copyAuthUrl()" title="复制链接">
-                                    <i class="fas fa-copy"></i>
-                                </button>
-                            </div>
-                            <div class="url-actions">
-                                <button class="btn-secondary" onclick="openAuthUrl()">
-                                    <i class="fas fa-external-link-alt"></i> 在浏览器中打开
-                                </button>
-                            </div>
-                        </div>
-                        <div class="auth-tips">
-                            <p><i class="fas fa-info-circle"></i> 请点击上方链接或在浏览器中打开，完成Google OAuth授权</p>
-                        </div>
-                    </div>
-
-                    <!-- 回调处理 -->
-                    <div class="auth-section" id="callbackSection" style="display: none;">
-                        <h3><i class="fas fa-reply"></i> 处理回调</h3>
-                        <div class="form-group">
-                            <label for="callbackUrl">回调URL</label>
-                            <textarea id="callbackUrl" placeholder="请将授权后的完整回调URL粘贴到这里" class="form-textarea" rows="3"></textarea>
-                            <small class="form-help">示例：http://localhost:8080/?code=...&state=...</small>
-                        </div>
-                        <button class="btn-primary" onclick="handleCallback()">
-                            <i class="fas fa-check"></i> 获取凭证
-                        </button>
-                    </div>
-
-                    <!-- 凭证显示 -->
-                    <div class="auth-section" id="credentialsSection" style="display: none;">
-                        <h3><i class="fas fa-key"></i> OAuth凭证</h3>
-                        <div class="credentials-display">
-                            <pre id="credentialsContent" class="credentials-json"></pre>
-                        </div>
-                        <div class="credentials-actions">
-                            <button class="btn-success" onclick="downloadCredentials()">
-                                <i class="fas fa-download"></i> 下载凭证文件
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- 状态消息 -->
-                    <div id="authStatus" class="status-message" style="display: none;"></div>
+                <div id="credentialsSection" class="hidden">
+                    <h3><i class="fas fa-file-alt"></i> 认证文件内容：</h3>
+                    <div class="credentials" id="credentialsContent"></div>
                 </div>
             </div>
 
-            <!-- OAuth认证 - 全部项目登录 -->
-            <div class="content-panel" id="all-login">
-                <div class="panel-header">
-                    <h2>全部项目登录</h2>
-                    <p>为当前账号下所有可访问项目批量获取OAuth凭证</p>
+            <!-- 文件管理标签页 -->
+            <div id="manageTab" class="tab-content">
+                <h3><i class="fas fa-folder-open"></i> 凭证文件管理</h3>
+                <div class="stats-container" id="statsContainer">
+                    <div class="stat-item total">
+                        <span class="stat-number" id="statTotal">0</span>
+                        <span class="stat-label">总计</span>
+                    </div>
+                    <div class="stat-item normal">
+                        <span class="stat-number" id="statNormal">0</span>
+                        <span class="stat-label">正常</span>
+                    </div>
+                    <div class="stat-item disabled">
+                        <span class="stat-number" id="statDisabled">0</span>
+                        <span class="stat-label">禁用</span>
+                    </div>
                 </div>
-                <div class="panel-content">
-                    <!-- 批量模式配置 -->
-                    <div class="auth-section">
-                        <h3><i class="fas fa-layer-group"></i> 批量认证配置</h3>
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="batchModeCheckbox" checked>
-                                启用批量模式（为所有项目获取凭证）
-                            </label>
-                            <small class="form-help">批量模式会一次性为您的账号下所有可访问的项目获取OAuth凭证</small>
-                        </div>
 
-                        <!-- 批量认证选项 -->
-                        <div class="batch-options">
+                <div class="batch-controls">
+                    <h4><i class="fas fa-tasks"></i> 批量操作</h4>
+                    <div class="batch-selection">
+                        <div style="display: flex; align-items: center;">
+                            <input type="checkbox" id="selectAllCheckbox" class="select-all-checkbox"
+                                onchange="toggleSelectAll()">
+                            <label for="selectAllCheckbox">全选</label>
+                        </div>
+                        <span class="selected-count" id="selectedCount">已选择 0 项</span>
+                    </div>
+                    <div class="batch-actions">
+                        <button class="refresh-btn" onclick="refreshCredsStatus()">
+                            <i class="fas fa-sync-alt"></i> 刷新状态
+                        </button>
+                        <button class="download-all-btn" onclick="downloadAllCreds()">
+                            <i class="fas fa-download"></i> 打包下载所有文件
+                        </button>
+                        <button class="batch-btn batch-enable" id="batchEnableBtn" onclick="batchAction('enable')"
+                            disabled><i class="fas fa-check-circle"></i> 批量启用</button>
+                        <button class="batch-btn batch-disable" id="batchDisableBtn" onclick="batchAction('disable')"
+                            disabled><i class="fas fa-ban"></i> 批量禁用</button>
+                        <button class="batch-btn batch-delete" id="batchDeleteBtn" onclick="batchAction('delete')"
+                            disabled><i class="fas fa-trash-alt"></i> 批量删除</button>
+                        <button class="batch-btn batch-email" onclick="refreshAllEmails()">
+                            <i class="fas fa-envelope"></i> 刷新所有邮箱
+                        </button>
+                    </div>
+                </div>
+
+                <div class="filter-container">
+                    <div class="filter-row">
+                        <div class="filter-item">
+                            <label for="statusFilter" class="filter-label"><i class="fas fa-filter"></i> 状态筛选</label>
+                            <select id="statusFilter" class="filter-select" onchange="applyFilters()">
+                                <option value="all">全部</option>
+                                <option value="normal">正常</option>
+                                <option value="disabled">禁用</option>
+                            </select>
+                        </div>
+                        <div class="filter-item">
+                            <label for="errorCodeFilter" class="filter-label"><i
+                                    class="fas fa-exclamation-triangle"></i> 错误码筛选</label>
+                            <select id="errorCodeFilter" class="filter-select" onchange="applyFilters()">
+                                <option value="all">全部错误码</option>
+                                <option value="has-errors">有错误</option>
+                                <option value="401">错误码 401</option>
+                                <option value="403">错误码 403</option>
+                                <option value="429">错误码 429</option>
+                            </select>
+                        </div>
+                        <div class="filter-item">
+                            <label for="pageSizeSelect" class="filter-label"><i class="fas fa-list"></i> 每页显示</label>
+                            <select id="pageSizeSelect" class="filter-select" onchange="changePageSize()">
+                                <option value="20">20</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="filter-container">
+                    <div class="error-filter-container" id="errorFilterContainer">
+                        <span><i class="fas fa-bolt"></i> 快速筛选错误码：</span>
+                        <div id="errorCodeBadges"></div>
+                    </div>
+                </div>
+
+                <div id="credsListSection">
+                    <div class="loading" id="credsLoading">正在加载凭证文件...</div>
+                    <div id="credsList"></div>
+
+                    <div class="pagination-container" id="paginationContainer">
+                        <button class="pagination-btn" id="prevPageBtn" onclick="changePage(-1)">上一页</button>
+                        <div class="pagination-info" id="paginationInfo">第 1 页，共 1 页</div>
+                        <button class="pagination-btn" id="nextPageBtn" onclick="changePage(1)">下一页</button>
+                    </div>
+                </div>
+
+                <!-- 模型权限设置弹窗 -->
+                <div id="modelPermissionModal" class="modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3><i class="fas fa-shield-alt"></i> 模型权限设置</h3>
+                            <span class="close" onclick="closeModelPermissionModal()">&times;</span>
+                        </div>
+                        <div class="modal-body">
                             <div class="form-group">
-                                <label for="batchProjectId">指定项目（可选）</label>
-                                <input type="text" id="batchProjectId" placeholder="如需指定特定项目请填写项目ID" class="form-input">
-                                <small class="form-help">留空将自动处理所有可访问项目</small>
+                                <label for="modalCredentialName">
+                                    <i class="fas fa-file-alt"></i> 凭证文件:
+                                </label>
+                                <input type="text" id="modalCredentialName" readonly class="readonly-input">
                             </div>
-                        </div>
 
-                        <button class="btn-primary" onclick="startBatchAuth()">
-                            <i class="fas fa-rocket"></i> 开始批量认证
-                        </button>
-                    </div>
-
-                    <!-- 批量认证链接显示 -->
-                    <div class="auth-section" id="batchAuthUrlSection" style="display: none;">
-                        <h3><i class="fas fa-external-link-alt"></i> 批量OAuth认证链接</h3>
-                        <div class="url-display">
-                            <div class="url-container">
-                                <input type="text" id="batchAuthUrl" readonly class="form-input url-input">
-                                <button class="btn-copy" onclick="copyBatchAuthUrl()" title="复制链接">
-                                    <i class="fas fa-copy"></i>
-                                </button>
+                            <div class="form-group">
+                                <label>
+                                    <input type="radio" name="permissionType" value="all" onchange="handlePermissionTypeChange()">
+                                    <i class="fas fa-globe"></i> 允许所有模型（默认）
+                                </label>
                             </div>
-                            <div class="url-actions">
-                                <button class="btn-secondary" onclick="openBatchAuthUrl()">
-                                    <i class="fas fa-external-link-alt"></i> 在浏览器中打开
-                                </button>
+
+                            <div class="form-group">
+                                <label>
+                                    <input type="radio" name="permissionType" value="none" onchange="handlePermissionTypeChange()">
+                                    <i class="fas fa-ban"></i> 禁止所有模型（软禁用）
+                                </label>
                             </div>
-                        </div>
-                        <div class="auth-tips">
-                            <p><i class="fas fa-info-circle"></i> 请点击上方链接完成Google OAuth授权，系统将自动为所有项目获取凭证</p>
-                        </div>
-                    </div>
 
-                    <!-- 批量回调处理 -->
-                    <div class="auth-section" id="batchCallbackSection" style="display: none;">
-                        <h3><i class="fas fa-reply"></i> 处理批量回调</h3>
-                        <div class="form-group">
-                            <label for="batchCallbackUrl">回调URL</label>
-                            <textarea id="batchCallbackUrl" placeholder="请将授权后的完整回调URL粘贴到这里" class="form-textarea" rows="3"></textarea>
-                            <small class="form-help">示例：http://localhost:8080/?code=...&state=...</small>
-                        </div>
-                        <button class="btn-primary" onclick="handleBatchCallback()">
-                            <i class="fas fa-check"></i> 批量获取凭证
-                        </button>
-                    </div>
-
-                    <!-- 批量结果显示 -->
-                    <div class="auth-section" id="batchResultsSection" style="display: none;">
-                        <h3><i class="fas fa-list"></i> 批量认证结果</h3>
-                        <div class="batch-results">
-                            <div class="batch-summary" id="batchSummary"></div>
-                            <div class="batch-details" id="batchDetails"></div>
-                        </div>
-                        <div class="batch-actions">
-                            <button class="btn-success" onclick="downloadAllCredentials()">
-                                <i class="fas fa-download"></i> 下载所有凭证
-                            </button>
-                            <button class="btn-secondary" onclick="retryFailedProjects()">
-                                <i class="fas fa-redo"></i> 重试失败项目
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- 状态消息 -->
-                    <div id="batchAuthStatus" class="status-message" style="display: none;"></div>
-                </div>
-            </div>
-
-            <!-- 凭证管理模块 -->
-            <div class="content-panel" id="existing-credentials">
-                <div class="panel-header">
-                    <h2>已有凭证</h2>
-                    <p>查看和管理系统中已有的OAuth凭证</p>
-                </div>
-                <div class="panel-content">
-                    <!-- 统计卡片区域 -->
-                    <div class="stats-section">
-                        <div class="stats-grid">
-                            <div class="stat-card">
-                                <div class="stat-number" id="totalCount">0</div>
-                                <div class="stat-label">总数</div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="stat-number" id="enabledCount">0</div>
-                                <div class="stat-label">启用</div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="stat-number" id="disabledCount">0</div>
-                                <div class="stat-label">禁用</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 批量操作区域 -->
-                    <div class="bulk-actions">
-                        <div class="bulk-actions-header">
-                            <h3><i class="fas fa-tasks"></i> 批量操作</h3>
-                        </div>
-                        <div class="bulk-actions-content">
-                            <button class="btn-danger" onclick="bulkDelete()" disabled>
-                                <i class="fas fa-trash"></i> 删除
-                            </button>
-                            <button class="btn-primary" onclick="bulkGetEmails()" disabled>
-                                <i class="fas fa-envelope"></i> 批量获取邮箱
-                            </button>
-                            <button class="btn-info" onclick="credentialsManager && credentialsManager.refreshAllEmails()">
-                                <i class="fas fa-sync-alt"></i> 刷新所有邮箱
-                            </button>
-                            <button class="btn-success" onclick="bulkEnable()" disabled>
-                                <i class="fas fa-check-circle"></i> 批量启用
-                            </button>
-                            <button class="btn-warning" onclick="bulkDisable()" disabled>
-                                <i class="fas fa-ban"></i> 批量禁用
-                            </button>
-                            <button class="btn-secondary" onclick="refreshCredentials()">
-                                <i class="fas fa-sync"></i> 刷新
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- 筛选和分页控制区域 -->
-                    <div class="filter-section">
-                        <div class="filter-controls">
-                            <div class="filter-group">
-                                <label for="statusFilter">状态筛选</label>
-                                <select id="statusFilter" class="form-select">
-                                    <option value="">全部</option>
-                                    <option value="enabled">启用</option>
-                                    <option value="disabled">禁用</option>
-                                    <option value="error">错误</option>
-                                </select>
-                            </div>
-                            <div class="filter-group">
-                                <label for="errorCodeFilter">错误码筛选</label>
-                                <select id="errorCodeFilter" class="form-select">
-                                    <option value="">全部</option>
-                                    <option value="invalid_token">无效令牌</option>
-                                    <option value="expired">已过期</option>
-                                    <option value="network">网络错误</option>
-                                    <option value="rate_limit">频率限制</option>
-                                </select>
-                            </div>
-                            <div class="filter-group">
-                                <label for="pageSize">每页显示</label>
-                                <select id="pageSize" class="form-select">
-                                    <option value="10">10条</option>
-                                    <option value="20">20条</option>
-                                    <option value="50">50条</option>
-                                    <option value="100">100条</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 凭证显示列表区域 -->
-                    <div class="credentials-list-section">
-                        <div class="list-header">
-                            <div class="select-all">
-                                <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
-                                <label for="selectAll">全选</label>
-                            </div>
-                            <div class="list-info">
-                                <span id="selectedCount">已选择 0 项</span>
-                            </div>
-                        </div>
-                        <div class="credentials-list" id="credentialsList">
-                            <!-- 凭证列表将在这里动态生成 -->
-                        </div>
-                        <div class="empty-state" id="emptyState" style="display: none;">
-                            <i class="fas fa-inbox"></i>
-                            <p>暂无凭证数据</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="content-panel" id="json-import">
-                <div class="panel-header">
-                    <h2>JSON导入</h2>
-                    <p>从JSON文件导入OAuth凭证到系统</p>
-                </div>
-                <div class="panel-content">
-                    <!-- JSON输入区域 -->
-                    <div class="auth-section">
-                        <h3><i class="fas fa-file-upload"></i> JSON数据输入</h3>
-                        <div class="form-group">
-                            <label for="jsonInput">JSON凭证数据</label>
-                            <textarea id="jsonInput" placeholder="请粘贴JSON格式的凭证数据，支持数组、对象或包含creds字段的对象" class="form-textarea json-input-textarea" rows="10"></textarea>
-                            <small class="form-help json-format-help">
-                                <strong>支持的格式：</strong><br>
-                                <div class="format-example">
-                                    <span class="format-label">数组格式：</span>
-                                    <code class="format-code">[{"project_id": "xxx", "credentials": {...}}, ...]</code>
-                                </div>
-                                <div class="format-example">
-                                    <span class="format-label">对象格式：</span>
-                                    <code class="format-code">{"project1": {"credentials": {...}}, "project2": {...}}</code>
-                                </div>
-                                <div class="format-example">
-                                    <span class="format-label">包含creds字段：</span>
-                                    <code class="format-code">{"creds": {"project1": {...}, "project2": {...}}}</code>
-                                </div>
-                            </small>
-                        </div>
-
-                        <div class="button-group json-actions">
-                            <button class="btn-primary convert-btn" onclick="convertJsonToToml()" id="convertBtn">
-                                <i class="fas fa-exchange-alt"></i> 转换为TOML预览
-                            </button>
-                            <button class="btn-secondary clear-btn" onclick="clearJsonInput()">
-                                <i class="fas fa-eraser"></i> 清空
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- TOML预览区域 -->
-                    <div class="auth-section toml-preview-section" id="tomlPreviewSection" style="display: none;">
-                        <h3><i class="fas fa-code"></i> TOML格式预览</h3>
-                        <div class="toml-preview-container">
-                            <div class="toml-preview-header">
-                                <span class="preview-label">转换后的TOML格式内容：</span>
-                                <div class="preview-actions-mini">
-                                    <button class="btn-icon copy-toml-btn" onclick="copyTomlToClipboard()" title="复制TOML内容">
-                                        <i class="fas fa-copy"></i>
-                                    </button>
+                            <div class="form-group">
+                                <label>
+                                    <input type="radio" name="permissionType" value="custom" onchange="handlePermissionTypeChange()">
+                                    <i class="fas fa-list"></i> 自定义允许的模型:
+                                </label>
+                                <div id="customModelSelection" class="model-selection-container">
+                                    <div class="model-list" id="modelCheckboxes"></div>
                                 </div>
                             </div>
-                            <div class="toml-preview">
-                                <pre id="tomlPreview" class="toml-content"></pre>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn secondary" onclick="closeModelPermissionModal()">
+                                <i class="fas fa-times"></i> 取消
+                            </button>
+                            <button class="btn" onclick="saveModelPermissions()">
+                                <i class="fas fa-save"></i> 保存设置
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 使用统计标签页 -->
+            <div id="usageTab" class="tab-content">
+                <h3><i class="fas fa-chart-line"></i> 使用统计</h3>
+
+                <div class="stats-container" id="usageStatsContainer">
+                    <div class="stat-item total">
+                        <span class="stat-number" id="totalApiCalls">0</span>
+                        <span class="stat-label">总调用数</span>
+                    </div>
+                    <div class="stat-item normal">
+                        <span class="stat-number" id="geminiProCalls">0</span>
+                        <span class="stat-label">Pro Models</span>
+                    </div>
+                    <div class="stat-item disabled">
+                        <span class="stat-number" id="totalFiles">0</span>
+                        <span class="stat-label">活跃文件数</span>
+                    </div>
+                </div>
+
+                <div class="manage-actions">
+                    <button class="refresh-btn" onclick="refreshUsageStats()">
+                        <i class="fas fa-sync-alt"></i> 刷新统计
+                    </button>
+                    <button class="btn error" onclick="resetAllUsageStats()">
+                        <i class="fas fa-redo"></i> 重置所有统计
+                    </button>
+                </div>
+
+                <div id="usageListSection">
+                    <div class="loading" id="usageLoading">正在加载使用统计...</div>
+                    <div id="usageList"></div>
+                </div>
+
+                <div class="config-group">
+                    <h4><i class="fas fa-question-circle"></i> 使用说明</h4>
+                    <div class="config-info">
+                        <strong>统计范围：</strong>
+                        <ul>
+                            <li><strong>每日配额：</strong>默认每日配额 Pro模型: 75次，所有模型: 600次（可在配置面板或环境变量中修改）</li>
+                            <li><strong>配额重置：</strong>每天 UTC 07:00 自动重置调用计数</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 调用日志标签页 -->
+            <div id="apilogTab" class="tab-content">
+                <h3><i class="fas fa-list-alt"></i> 调用日志</h3>
+                <p>查看详细的API调用记录，包含Token使用统计</p>
+
+                <div class="stats-container" id="apiLogStatsContainer">
+                    <div class="stat-item total">
+                        <span class="stat-number" id="totalLogEntries">0</span>
+                        <span class="stat-label">总记录数</span>
+                    </div>
+                </div>
+
+                <div class="manage-actions">
+                    <button class="refresh-btn" onclick="refreshApiLog()">
+                        <i class="fas fa-sync-alt"></i> 刷新日志
+                    </button>
+                    <button class="btn" onclick="exportApiLog()">
+                        <i class="fas fa-download"></i> 导出CSV
+                    </button>
+                </div>
+
+                <!-- 筛选控件 -->
+                <div class="filter-container">
+                    <div class="filter-row">
+                        <div class="filter-item">
+                            <label for="credentialFilter" class="filter-label"><i class="fas fa-file-alt"></i> 凭证筛选</label>
+                            <select id="credentialFilter" class="filter-select" onchange="applyLogFilters()">
+                                <option value="all">全部凭证</option>
+                            </select>
+                        </div>
+                        <div class="filter-item">
+                            <label for="modelFilter" class="filter-label"><i class="fas fa-robot"></i> 模型筛选</label>
+                            <select id="modelFilter" class="filter-select" onchange="applyLogFilters()">
+                                <option value="all">全部模型</option>
+                            </select>
+                        </div>
+                        <div class="filter-item">
+                            <label for="logPageSizeSelect" class="filter-label"><i class="fas fa-list"></i> 每页显示</label>
+                            <select id="logPageSizeSelect" class="filter-select" onchange="changeLogPageSize()">
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                                <option value="200">200</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 调用日志表格 -->
+                <div id="apiLogSection">
+                    <div class="loading" id="apiLogLoading">正在加载调用日志...</div>
+                    <div id="apiLogTableContainer" class="hidden">
+                        <div class="table-wrapper">
+                            <table class="api-log-table">
+                                <thead>
+                                    <tr>
+                                        <th onclick="sortLogTable('timestamp')">
+                                            <i class="fas fa-clock"></i> 时间
+                                            <i class="fas fa-sort sort-icon" id="timestamp-sort"></i>
+                                        </th>
+                                        <th onclick="sortLogTable('credential')">
+                                            <i class="fas fa-file-alt"></i> 凭证
+                                            <i class="fas fa-sort sort-icon" id="credential-sort"></i>
+                                        </th>
+                                        <th onclick="sortLogTable('model')">
+                                            <i class="fas fa-robot"></i> 模型
+                                            <i class="fas fa-sort sort-icon" id="model-sort"></i>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody id="apiLogTableBody">
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- 分页控件 -->
+                        <div class="pagination-container" id="logPaginationContainer">
+                            <button class="pagination-btn" id="logPrevPageBtn" onclick="changeLogPage(-1)">上一页</button>
+                            <div class="pagination-info" id="logPaginationInfo">第 1 页，共 1 页</div>
+                            <button class="pagination-btn" id="logNextPageBtn" onclick="changeLogPage(1)">下一页</button>
+                        </div>
+                    </div>
+
+                    <!-- 图表统计区域 -->
+                    <div id="apiLogChartsContainer" class="charts-container hidden">
+                        <div class="chart-grid">
+                            <div class="chart-item">
+                                <h4><i class="fas fa-chart-line"></i> 调用次数趋势</h4>
+                                <canvas id="tokenTrendChart"></canvas>
+                            </div>
+                            <div class="chart-item">
+                                <h4><i class="fas fa-chart-pie"></i> 模型使用分布</h4>
+                                <canvas id="modelDistributionChart"></canvas>
+                            </div>
+                            <div class="chart-item">
+                                <h4><i class="fas fa-chart-bar"></i> 凭证调用统计</h4>
+                                <canvas id="credentialUsageChart"></canvas>
                             </div>
                         </div>
-                        <div class="preview-actions">
-                            <button class="btn-success import-btn" onclick="importTomlToSystem()">
-                                <i class="fas fa-download"></i> 导入到系统
-                            </button>
-                            <button class="btn-secondary" onclick="copyTomlToClipboard()">
-                                <i class="fas fa-copy"></i> 复制TOML
-                            </button>
-                        </div>
                     </div>
+                </div>
 
-                    <!-- 导入结果区域 -->
-                    <div class="auth-section import-results-section" id="importResultsSection" style="display: none;">
-                        <h3><i class="fas fa-chart-line"></i> 导入结果</h3>
-                        <div class="import-results">
-                            <div class="result-summary" id="resultSummary"></div>
-                            <div class="result-details" id="resultDetails"></div>
-                        </div>
+                <!-- 使用说明 -->
+                <div class="config-group">
+                    <h4><i class="fas fa-question-circle"></i> 使用说明</h4>
+                    <div class="config-info">
+                        <strong>数据说明：</strong>
+                        <ul>
+                            <li><strong>时间范围：</strong>显示最近的API调用记录，按时间倒序排列</li>
+                            <li><strong>Token统计：</strong>输入/输出Token数来自Google API返回的usageMetadata</li>
+                            <li><strong>数据来源：</strong>基于apilog.csv文件，可通过Docker挂卷持久化存储</li>
+                            <li><strong>图表分析：</strong>支持Token趋势、模型分布、凭证使用等多维度分析</li>
+                        </ul>
                     </div>
-
-                    <!-- 状态消息 -->
-                    <div id="jsonImportStatus" class="status-message" style="display: none;"></div>
                 </div>
             </div>
 
-            <div class="content-panel" id="backup">
-                <div class="panel-header">
-                    <h2>备份</h2>
-                    <p>备份和恢复系统中的OAuth凭证</p>
+            <!-- JSON导入标签页 -->
+            <div id="importTab" class="tab-content">
+                <h3><i class="fas fa-file-import"></i> JSON导入TOML</h3>
+                <p>将JSON格式的凭证数组转换为TOML格式并导入到系统中</p>
+
+                <div class="row">
+                    <div class="label">输入 JSON 数组（支持格式：直接对象、数组、或 {"creds": {...}} 结构）：</div>
+                    <textarea id="jsonInput" placeholder="粘贴凭证的 JSON 数组或对象到这里&#10;例如: [{&quot;filename&quot;: &quot;creds1.json&quot;, &quot;content&quot;: {...}}]"></textarea>
                 </div>
-                <div class="panel-content">
-                    <div class="backup-controls">
-                        <div class="button-group">
-                            <button id="uploadBackupBtn" class="btn btn-primary">
-                                <i class="fas fa-upload"></i> 立即上传备份
-                            </button>
-                            <button id="downloadBackupBtn" class="btn btn-secondary">
-                                <i class="fas fa-download"></i> 立即恢复备份
-                            </button>
+
+                <div class="row">
+                    <button class="btn secondary" id="convertBtn" onclick="convertJsonToToml()">
+                        <i class="fas fa-exchange-alt"></i> 转换为 TOML
+                    </button>
+                    <button class="btn secondary" id="clearBtn" onclick="clearImportForm()">
+                        <i class="fas fa-trash-alt"></i> 清空
+                    </button>
+                    <button class="btn secondary" id="copyBtn" onclick="copyTomlOutput()">
+                        <i class="fas fa-copy"></i> 复制TOML
+                    </button>
+                    <div id="importStatus"></div>
+                </div>
+
+                <div class="row">
+                    <div class="label">转换后的 TOML 内容预览：</div>
+                    <textarea id="tomlOutput" readonly placeholder="转换结果会出现在这里"></textarea>
+                </div>
+
+                <div class="row">
+                    <button class="btn" id="importBtn" onclick="importTomlToSystem()" disabled>
+                        <i class="fas fa-upload"></i> 导入到系统
+                    </button>
+                    <div id="importResult" class="import-result"></div>
+                </div>
+
+                <div class="config-group">
+                    <h4><i class="fas fa-question-circle"></i> 使用说明</h4>
+                    <div class="config-info">
+                        <strong>导入流程：</strong>
+                        <ol>
+                            <li>将凭证的JSON数组粘贴到上方输入框（支持多种JSON格式）</li>
+                            <li>点击"转换为TOML"按钮进行转换</li>
+                            <li>检查转换后的TOML内容</li>
+                            <li>点击"导入到系统"将凭证导入到系统中</li>
+                        </ol>
+                        <strong>支持的JSON格式：</strong>
+                        <ul>
+                            <li>数组格式：<code>[{filename: "...", content: {...}}]</code></li>
+                            <li>对象格式：<code>{creds1.json: {content: {...}, ...}}</code></li>
+                            <li>嵌套格式：<code>{creds: {filename1: {...}, filename2: {...}}}</code></li>
+                        </ul>
+                        <strong>注意事项：</strong>
+                        <ul>
+                            <li>系统会自动提取关键字段：project_id, client_id, client_secret, token, refresh_token, access_token</li>
+                            <li>导入时会自动与现有凭证状态合并，避免破坏原有统计数据</li>
+                            <li>敏感信息仅在本地处理，不会长期存储在前端</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 配置管理标签页 -->
+            <div id="configTab" class="tab-content">
+                <h3><i class="fas fa-cog"></i> 配置管理</h3>
+                <p>管理系统配置参数，修改后立即生效</p>
+
+                <div class="manage-actions">
+                    <button class="refresh-btn" onclick="loadConfig()">
+                        <i class="fas fa-sync-alt"></i> 刷新配置
+                    </button>
+                    <button class="btn" onclick="saveConfig()">
+                        <i class="fas fa-save"></i> 保存配置
+                    </button>
+                </div>
+
+                <div id="configSection">
+                    <div class="loading" id="configLoading">正在加载配置...</div>
+                    <div id="configForm" class="hidden">
+                        <div class="config-group">
+                            <h4><i class="fas fa-key"></i> 密码配置</h4>
+                            <div class="form-group">
+                                <label for="configApiPassword">APIKey:</label>
+                                <input type="text" id="configApiPassword" class="config-input" placeholder="pwd" />
+                            </div>
+                            <div class="form-group">
+                                <label for="configPanelPassword">控制面板密码:</label>
+                                <input type="text" id="configPanelPassword" class="config-input" placeholder="pwd" />
+                            </div>
                         </div>
-                        <div id="backupStatus" class="status-message" style="display: none;"></div>
-                        <div id="backupConfig" class="backup-config" style="margin-top: 20px;">
-                            <h4>当前备份配置</h4>
-                            <div id="backupConfigInfo" class="config-info">
-                                <p>加载中...</p>
+                        <div class="config-group">
+                            <h4><i class="fas fa-chart-bar"></i> 每日配额配置</h4>
+                            <div class="form-group">
+                                <label for="configDailyLimitProModels">Pro模型每日限额:</label>
+                                <input type="number" id="configDailyLimitProModels" class="config-input"
+                                    placeholder="75" min="1" />
+                            </div>
+                            <div class="form-group">
+                                <label for="configDailyLimitTotal">总调用每日限额:</label>
+                                <input type="number" id="configDailyLimitTotal" class="config-input" placeholder="600"
+                                    min="1" />
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="content-panel" id="today-stats">
-                <div class="panel-header">
-                    <h2>今日统计</h2>
-                    <p>查看今日使用统计</p>
-                </div>
-                <div class="panel-content">
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-number">1,234</div>
-                            <div class="stat-label">API调用次数</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number">567</div>
-                            <div class="stat-label">成功次数</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number">89%</div>
-                            <div class="stat-label">成功率</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="content-panel" id="month-stats">
-                <div class="panel-header">
-                    <h2>本月统计</h2>
-                    <p>查看本月使用统计</p>
-                </div>
-                <div class="panel-content">
-                    <canvas id="monthlyChart"></canvas>
-                </div>
-            </div>
-
-            <div class="content-panel" id="custom-stats">
-                <div class="panel-header">
-                    <h2>自定义时段</h2>
-                    <p>查看自定义时段统计</p>
-                </div>
-                <div class="panel-content">
-                    <p>自定义统计功能开发中...</p>
-                </div>
-            </div>
-
-            <div class="content-panel" id="success-logs">
-                <div class="panel-header">
-                    <h2>成功日志</h2>
-                    <p>查看成功的调用日志</p>
-                </div>
-                <div class="panel-content">
-                    <p>成功日志功能开发中...</p>
-                </div>
-            </div>
-
-            <div class="content-panel" id="error-logs">
-                <div class="panel-header">
-                    <h2>失败日志</h2>
-                    <p>查看失败的调用日志</p>
-                </div>
-                <div class="panel-content">
-                    <p>失败日志功能开发中...</p>
-                </div>
-            </div>
-
-            <div class="content-panel" id="all-logs">
-                <div class="panel-header">
-                    <h2>全部日志</h2>
-                    <p>查看所有调用日志</p>
-                </div>
-                <div class="panel-content">
-                    <p>全部日志功能开发中...</p>
-                </div>
-            </div>
-
-            <div class="content-panel" id="basic-config">
-                <div class="panel-header">
-                    <h2>基础配置</h2>
-                    <p>管理系统基础配置</p>
-                </div>
-                <div class="panel-content">
-                    <p>基础配置功能开发中...</p>
-                </div>
-            </div>
-
-            <div class="content-panel" id="advanced-config">
-                <div class="panel-header">
-                    <h2>高级配置</h2>
-                    <p>管理系统高级配置</p>
-                </div>
-                <div class="panel-content">
-                    <p>高级配置功能开发中...</p>
-                </div>
-            </div>
-
-            <div class="content-panel" id="system-settings">
-                <div class="panel-header">
-                    <h2>系统设置</h2>
-                    <p>系统级设置管理</p>
-                </div>
-                <div class="panel-content">
-                    <p>系统设置功能开发中...</p>
-                </div>
-            </div>
-        </main>
+        </div>
+    </div>
     </div>
 
-    <!-- 移动端菜单按钮 -->
-    <button class="mobile-menu-btn" id="mobileMenuBtn">
-        <i class="fas fa-bars"></i>
-    </button>
-
-    <script src="/static/js/auth.js"></script>
-    <script src="/static/js/login.js"></script>
-    <script src="/static/js/oauth.js"></script>
-    <script src="/static/js/control_panel.js"></script>
-    <script src="/static/js/credentials.js"></script>
-    <script src="/static/js/json_import.js"></script>
+    <!-- JavaScript 模块 -->
     <script src="/static/js/model_permissions.js"></script>
-    <script src="/static/js/backup.js"></script>
+    <script src="/static/js/control_panel.js"></script>
+    <script src="/static/js/apilog.js"></script>
 </body>
+
 </html>

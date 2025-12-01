@@ -1,0 +1,126 @@
+/* ==================================
+ * 使用统计组件样式
+ * ================================== */
+
+/* --- 使用统计卡片 --- */
+.usage-card {
+    background: var(--card-bg);
+    border-radius: var(--card-border-radius);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: var(--shadow-soft);
+    border: 1px solid var(--border-color);
+}
+
+.usage-header {
+    margin-bottom: 1rem;
+}
+
+.usage-filename {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.usage-progress {
+    margin-bottom: 1rem;
+}
+
+.usage-progress-label {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.usage-progress-bar {
+    height: 8px;
+    background: rgba(226, 145, 216, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.usage-progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 1s ease-out;
+}
+
+.usage-progress-fill.gemini {
+    background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+}
+
+.usage-progress-fill.total {
+    background: linear-gradient(90deg, var(--secondary-color), var(--accent-color));
+}
+
+.usage-progress-fill.warning {
+    background: linear-gradient(90deg, var(--warning-color), #f7c873);
+}
+
+.usage-progress-fill.danger {
+    background: linear-gradient(90deg, var(--error-color), #f88989);
+}
+
+.usage-info {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.8rem;
+    margin-bottom: 1rem;
+}
+
+.usage-info-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+}
+
+.usage-info-label {
+    color: var(--text-secondary);
+}
+
+.usage-info-value {
+    font-weight: 500;
+}
+
+.usage-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.usage-btn {
+    background: rgba(226, 145, 216, 0.15);
+    color: var(--text-primary);
+    border: 1px solid rgba(226, 145, 216, 0.2);
+    border-radius: 12px;
+    padding: 8px 16px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-speed) ease;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.usage-btn:hover {
+    background: rgba(226, 145, 216, 0.25);
+    transform: translateY(-2px);
+}
+
+.usage-btn.reset {
+    background-color: rgba(249, 216, 154, 0.2);
+    color: #b38b28;
+    border-color: rgba(249, 216, 154, 0.3);
+}
+
+.usage-btn.reset:hover {
+    background-color: rgba(249, 216, 154, 0.3);
+}
+
+/* --- 响应式设计 --- */
+@media (max-width: 768px) {
+    .usage-info {
+        grid-template-columns: 1fr;
+    }
+}
