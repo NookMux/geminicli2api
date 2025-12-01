@@ -34,6 +34,7 @@ from .credential_manager import CredentialManager
 from .usage_stats import get_usage_stats, get_aggregated_stats, get_usage_stats_instance
 from .storage_adapter import get_storage_adapter
 from .api_call_logger import get_api_log_file_path
+from .google_chat_api import test_credential_file, test_all_credentials
 
 # 创建路由器
 router = APIRouter()
@@ -2056,3 +2057,45 @@ async def reset_usage_statistics(request: UsageResetRequest, token: str = Depend
         log.error(f"重置使用统计失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+class CredTestRequest(BaseModel):
+    filename: Optional[str] = None
+
+
+@router.post("/creds/test")
+async def test_credentials(request: CredTestRequest, token: str = Depends(verify_token)):
+    """
+    凭证健康检查接口。
+
+    - 如果提供 filename，则只检查指定凭证；
+    - 如果未提供，则对当前所有凭证执行一次批量检查。
+
+    检查使用的模型及是否启用定时检查由环境变量 CREDENTIAL_TEST_CONFIG 控制：
+        {"model": "gemini-2.5-flash", "enabled": true, "interval_seconds": 600}
+    """
+    try:
+        import config as app_config
+
+        cfg = await app_config.get_credential_test_config()
+        model_name = (cfg or {}).get("model") or "gemini-2.5-flash"
+
+        if request.filename:
+            result = await test_credential_file(request.filename, model_name)
+            return JSONResponse(content={
+                "mode": "single",
+                "model": model_name,
+                "result": result,
+            })
+        else:
+            result = await test_all_credentials(model_name)
+            return JSONResponse(content={
+                "mode": "all",
+                "model": model_name,
+                **result,
+            })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"凭证健康检查接口调用失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

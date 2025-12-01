@@ -519,6 +519,19 @@ function createCredCard(fullPath, credInfo) {
                 <div class="cred-actions">${actionButtons}</div>
             `;
 
+    // 为凭证卡片追加“健康检查”按钮
+    const actionsContainer = div.querySelector('.cred-actions');
+    if (actionsContainer) {
+        const healthBtn = document.createElement('button');
+        healthBtn.className = 'cred-btn health';
+        healthBtn.textContent = '健康检查';
+        healthBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            testCredential(filename);
+        });
+        actionsContainer.appendChild(healthBtn);
+    }
+
     const actionButtonElements = div.querySelectorAll('[data-filename][data-action]');
     actionButtonElements.forEach(button => {
         button.addEventListener('click', function (e) {
@@ -685,6 +698,65 @@ async function batchAction(action) {
 // ===========================
 // 邮箱相关
 // ===========================
+
+// 凭证健康检查
+async function testCredential(filename) {
+    try {
+        showStatus(`正在对凭证 ${filename} 进行健康检查...`, 'info');
+
+        const response = await fetch('/creds/test', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ filename })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.result) {
+            const result = data.result;
+            const ok = !!result.ok;
+            const statusCode = result.status_code ?? '未知';
+            const message = result.message || (ok ? '健康检查成功，凭证可用' : '健康检查失败，凭证可能已失效');
+
+            showStatus(`凭证 ${filename}: ${message}（状态码 ${statusCode}）`, ok ? 'success' : 'error');
+            await refreshCredsStatus();
+        } else {
+            showStatus(`健康检查失败: ${data.detail || data.error || '未知错误'}`, 'error');
+        }
+    } catch (error) {
+        showStatus(`健康检查失败: ${error.message}`, 'error');
+    }
+}
+
+async function testAllCredentials() {
+    if (!confirm('确认要对当前所有凭证执行一次健康检查吗？这可能需要一定时间。')) {
+        return;
+    }
+
+    try {
+        showStatus('正在对所有凭证进行健康检查...', 'info');
+
+        const response = await fetch('/creds/test', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({})
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            const total = data.total ?? 0;
+            const successCount = data.success_count ?? 0;
+            const failedCount = data.failed_count ?? 0;
+            showStatus(`健康检查完成：成功 ${successCount}/${total}，失败 ${failedCount}`, failedCount === 0 ? 'success' : 'error');
+            await refreshCredsStatus();
+        } else {
+            showStatus(`健康检查失败: ${data.detail || data.error || '未知错误'}`, 'error');
+        }
+    } catch (error) {
+        showStatus(`健康检查失败: ${error.message}`, 'error');
+    }
+}
 
 async function fetchUserEmail(filename) {
     try {
@@ -1313,3 +1385,17 @@ async function importTomlToSystem() {
         showStatus(`导入网络错误: ${error.message}`, 'error');
     }
 }
+// 初始化批量“健康检查全部凭证”按钮
+document.addEventListener('DOMContentLoaded', () => {
+    const batchActions = document.querySelector('.batch-actions');
+    if (batchActions && !document.getElementById('batchHealthBtn')) {
+        const btn = document.createElement('button');
+        btn.id = 'batchHealthBtn';
+        btn.className = 'batch-btn batch-health';
+        btn.innerHTML = '<i class="fas fa-heartbeat"></i> 健康检查全部凭证';
+        btn.addEventListener('click', () => {
+            testAllCredentials();
+        });
+        batchActions.appendChild(btn);
+    }
+});

@@ -230,6 +230,16 @@
     background-color: rgba(159, 145, 226, 0.3);
 }
 
+.cred-btn.health {
+    background-color: rgba(249, 216, 154, 0.2);
+    color: #b38b28;
+    border-color: rgba(249, 216, 154, 0.3);
+}
+
+.cred-btn.health:hover {
+    background-color: rgba(249, 216, 154, 0.3);
+}
+
 /* --- 模型权限弹窗 --- */
 .modal {
     display: none;
@@ -484,6 +494,12 @@
     background-color: rgba(245, 163, 163, 0.2);
     color: #a55555;
     border-color: rgba(245, 163, 163, 0.3);
+}
+
+.batch-btn.batch-health {
+    background-color: rgba(249, 216, 154, 0.2);
+    color: #b38b28;
+    border-color: rgba(249, 216, 154, 0.3);
 }
 
 /* --- 刷新按钮 --- */
