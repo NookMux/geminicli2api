@@ -2,11 +2,11 @@
  * 箱宝的软萌UI设计 - 基础样式
  * ================================== */
 
+/* --- 性能优化的动画样式 --- */
 @keyframes spin {
     from {
         transform: rotate(0deg);
     }
-
     to {
         transform: rotate(360deg);
     }
@@ -35,7 +35,6 @@
         opacity: 0;
         transform: translateY(20px);
     }
-
     to {
         opacity: 1;
         transform: translateY(0);
@@ -52,6 +51,78 @@
     20% {
         transform: scale(0.95);
     }
+}
+
+/* 减少动画对性能的影响 */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* 为动画元素添加硬件加速 */
+.optimize-animation {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    perspective: 1000px;
+    will-change: transform, opacity;
+}
+
+/* 优化按钮动画 */
+.btn {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: #fff;
+    padding: 14px 30px;
+    border: none;
+    border-radius: var(--button-border-radius);
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    width: 100%;
+    margin-bottom: 1rem;
+    transition: transform var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
+    box-shadow: 0 4px 15px rgba(226, 145, 216, 0.3);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    /* 性能优化 */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+/* 简化按钮的伪元素动画 */
+.btn::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    opacity: 0.6;
+    transition: transform 0.3s ease; /* 缩短动画时间 */
+    transform: translateX(0); /* 使用 transform 而不是 left */
+}
+
+.btn:hover::before {
+    transform: translateX(200%);
+}
+
+.btn:hover:not(:disabled) {
+    transform: translateY(-3px) translateZ(0);
+    box-shadow: 0 8px 25px rgba(226, 145, 216, 0.4);
+}
+
+.btn:active:not(:disabled) {
+    transform: translateY(-1px) translateZ(0);
 }
 
 :root {
@@ -179,68 +250,29 @@ h3 {
     color: var(--primary-color);
 }
 
-/* --- 通用按钮样式 --- */
-.btn {
-    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-    color: #fff;
-    padding: 14px 30px;
-    border: none;
-    border-radius: var(--button-border-radius);
-    font-size: 1rem;
-    font-weight: 500;
-    cursor: pointer;
-    width: 100%;
-    margin-bottom: 1rem;
-    transition: all var(--transition-speed) ease;
-    box-shadow: 0 4px 15px rgba(226, 145, 216, 0.3);
-    position: relative;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-}
-
-.btn::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-    transition: left 0.5s;
-}
-
-.btn:hover::before {
-    left: 100%;
-}
-
-.btn:hover:not(:disabled) {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 25px rgba(226, 145, 216, 0.4);
-}
-
-.btn:active:not(:disabled) {
-    transform: translateY(-1px);
-}
 
 .btn.secondary {
     background: linear-gradient(135deg, var(--secondary-color), var(--accent-color));
     box-shadow: 0 4px 15px rgba(159, 145, 226, 0.3);
+    transform: translateZ(0);
+    backface-visibility: hidden;
 }
 
 .btn.secondary:hover:not(:disabled) {
     box-shadow: 0 8px 25px rgba(159, 145, 226, 0.4);
+    transform: translateY(-3px) translateZ(0);
 }
 
 .btn.error {
     background: linear-gradient(135deg, var(--error-color), #f89b9b);
     box-shadow: 0 4px 15px rgba(245, 163, 163, 0.3);
+    transform: translateZ(0);
+    backface-visibility: hidden;
 }
 
 .btn.error:hover:not(:disabled) {
     box-shadow: 0 8px 25px rgba(245, 163, 163, 0.4);
+    transform: translateY(-3px) translateZ(0);
 }
 
 /* --- 通用输入框样式 --- */
