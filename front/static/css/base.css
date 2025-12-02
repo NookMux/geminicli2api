@@ -170,19 +170,6 @@ html {
     overflow: hidden;
 }
 
-/* 添加一些装饰元素 */
-body::before {
-    content: "";
-    position: fixed;
-    top: -50%;
-    right: -50%;
-    width: 200%;
-    height: 200%;
-    background: radial-gradient(circle, rgba(226, 145, 216, 0.05) 0%, rgba(197, 179, 230, 0.05) 50%, rgba(159, 145, 226, 0.05) 100%);
-    z-index: -1;
-    animation: float 20s ease-in-out infinite;
-}
-
 body::after {
     content: "";
     position: fixed;
@@ -379,7 +366,8 @@ select:focus {
 .status,
 .project-info,
 .stats-container,
-.usage-card {
+.usage-card,
+.progress-container {
     background: var(--surface-bg);
     border: 1px solid var(--border-color);
     border-radius: var(--card-border-radius);
@@ -428,6 +416,75 @@ textarea:focus {
 textarea[readonly] {
     background-color: rgba(250, 252, 255, 0.9);
     border-color: var(--accent-color);
+}
+
+.progress-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.progress-item {
+    border: 1px dashed var(--border-color);
+    border-radius: var(--card-border-radius);
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.progress-status {
+    font-size: 0.9rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.progress-bar {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 999px;
+    height: 10px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+    transition: width 0.3s ease;
+}
+
+.progress-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.progress-message {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.status-completed {
+    color: #0f9d58;
+}
+
+.status-error {
+    color: var(--warning-color);
+}
+
+.status-running {
+    color: var(--primary-color);
 }
 
 .import-result {

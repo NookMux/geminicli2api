@@ -35,6 +35,7 @@ from .usage_stats import get_usage_stats, get_aggregated_stats, get_usage_stats_
 from .storage_adapter import get_storage_adapter
 from .api_call_logger import get_api_log_file_path
 from .google_chat_api import test_credential_file, test_all_credentials
+from .progress_tracker import ProgressOperation, progress_tracker
 
 # 创建路由器
 router = APIRouter()
@@ -1156,16 +1157,34 @@ async def refresh_all_user_emails(token: str = Depends(verify_token)):
     """刷新所有凭证文件的用户邮箱地址"""
     try:
         await ensure_credential_manager_initialized()
-        
+
         # 获取存储适配器
         storage_adapter = await get_storage_adapter()
-        
+
         # 获取所有凭证文件
         credential_filenames = await storage_adapter.list_credentials()
-        
+
         results = []
         success_count = 0
-        
+
+        await progress_tracker.start(
+            ProgressOperation.REFRESH_EMAILS,
+            total=len(credential_filenames),
+            message="正在刷新所有用户邮箱...",
+        )
+
+        if not credential_filenames:
+            await progress_tracker.finish(
+                ProgressOperation.REFRESH_EMAILS,
+                message="没有发现任何凭证文件可刷新",
+            )
+            return JSONResponse(content={
+                "success_count": 0,
+                "total_count": 0,
+                "results": [],
+                "message": "没有找到凭证文件"
+            })
+
         for filename in credential_filenames:
             try:
                 email = await credential_manager.get_or_fetch_user_email(filename)
@@ -1181,8 +1200,12 @@ async def refresh_all_user_emails(token: str = Depends(verify_token)):
                         "filename": os.path.basename(filename),
                         "user_email": None,
                         "success": False,
-                        "error": "无法获取邮箱"
+                        "error": "无法获取邮箱",
                     })
+                await progress_tracker.advance(
+                    ProgressOperation.REFRESH_EMAILS,
+                    message=f"正在刷新邮箱: {os.path.basename(filename)}",
+                )
             except Exception as e:
                 results.append({
                     "filename": os.path.basename(filename),
@@ -1190,17 +1213,50 @@ async def refresh_all_user_emails(token: str = Depends(verify_token)):
                     "success": False,
                     "error": str(e)
                 })
-        
+                await progress_tracker.advance(
+                    ProgressOperation.REFRESH_EMAILS,
+                    message=f"处理 {os.path.basename(filename)} 时出错",
+                )
+
+        await progress_tracker.finish(
+            ProgressOperation.REFRESH_EMAILS,
+            message=f"成功获取 {success_count}/{len(credential_filenames)} 个邮箱地址",
+        )
+
         return JSONResponse(content={
             "success_count": success_count,
             "total_count": len(credential_filenames),
             "results": results,
-            "message": f"成功获取 {success_count}/{len(credential_filenames)} 个邮箱地址"
+            "message": f"成功获取 {success_count}/{len(credential_filenames)} 个邮箱地址",
         })
-        
+
     except Exception as e:
         log.error(f"批量获取用户邮箱失败: {e}")
+        await progress_tracker.fail(
+            ProgressOperation.REFRESH_EMAILS,
+            error=f"刷新邮箱失败: {e}",
+        )
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/progress")
+async def get_progress(token: str = Depends(verify_token)):
+    """获取批量任务的进度信息"""
+    snapshot = await progress_tracker.snapshot([
+        ProgressOperation.REFRESH_EMAILS,
+        ProgressOperation.HEALTH_CHECK,
+    ])
+    response_payload = {
+        key: {
+            "status": state.status,
+            "total": state.total,
+            "processed": state.processed,
+            "message": state.message,
+            "error": state.error,
+        }
+        for key, state in snapshot.items()
+    }
+    return JSONResponse(content=response_payload)
 
 @router.get("/creds/download-all")
 async def download_all_creds(token: str = Depends(verify_token)):
@@ -2087,7 +2143,11 @@ async def test_credentials(request: CredTestRequest, token: str = Depends(verify
                 "result": result,
             })
         else:
-            result = await test_all_credentials(model_name)
+            result = await test_all_credentials(
+                model_name,
+                progress_operation=ProgressOperation.HEALTH_CHECK,
+                tracker=progress_tracker,
+            )
             return JSONResponse(content={
                 "mode": "all",
                 "model": model_name,
@@ -2098,4 +2158,8 @@ async def test_credentials(request: CredTestRequest, token: str = Depends(verify
         raise
     except Exception as e:
         log.error(f"凭证健康检查接口调用失败: {e}")
+        await progress_tracker.fail(
+            ProgressOperation.HEALTH_CHECK,
+            error=f"健康检查失败: {e}",
+        )
         raise HTTPException(status_code=500, detail=str(e))

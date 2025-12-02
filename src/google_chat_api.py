@@ -1235,7 +1235,7 @@ async def test_credential_file(filename: str, model_name: str) -> dict:
         return result
 
 
-async def test_all_credentials(model_name: str) -> dict:
+async def test_all_credentials(model_name: str, progress_operation: str | None = None, tracker=None) -> dict:
     """
     对当前所有凭证做一次批量健康检查。
 
@@ -1254,6 +1254,8 @@ async def test_all_credentials(model_name: str) -> dict:
         files = await storage_adapter.list_credentials()
     except Exception as e:
         log.error(f"Health check: failed to list credentials: {e}")
+        if tracker and progress_operation:
+            await tracker.fail(progress_operation, f"无法列出凭证: {e}")
         return {
             "total": 0,
             "success_count": 0,
@@ -1262,6 +1264,8 @@ async def test_all_credentials(model_name: str) -> dict:
         }
 
     if not files:
+        if tracker and progress_operation:
+            await tracker.finish(progress_operation, "没有找到凭证可进行健康检查")
         return {
             "total": 0,
             "success_count": 0,
@@ -1272,11 +1276,25 @@ async def test_all_credentials(model_name: str) -> dict:
     results = []
     success_count = 0
 
+    if tracker and progress_operation:
+        await tracker.start(progress_operation, total=len(files), message="正在执行健康检查...")
+
     for filename in files:
         res = await test_credential_file(filename, model_name)
         results.append(res)
         if res.get("ok"):
             success_count += 1
+        if tracker and progress_operation:
+            await tracker.advance(
+                progress_operation,
+                message=f"正在检查凭证: {filename}",
+            )
+
+    if tracker and progress_operation:
+        await tracker.finish(
+            progress_operation,
+            message=f"健康检查完成：成功 {success_count}/{len(results)}，失败 {len(results) - success_count}",
+        )
 
     total = len(results)
     failed_count = total - success_count
