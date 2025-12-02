@@ -7,6 +7,14 @@ let authInProgress = false;
 let authToken = '';
 let credsData = {};
 
+const PROGRESS_KEYS = {
+    refreshAllEmails: 'refresh_all_emails',
+    healthCheckAll: 'test_all_credentials'
+};
+
+let progressWatchList = new Set();
+let progressTimer = null;
+
 // 分页和筛选相关变量
 let filteredCredsData = {};
 let currentPage = 1;
@@ -46,6 +54,103 @@ function getAuthHeaders() {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${authToken}`
     };
+}
+
+function startProgressPolling(operations) {
+    operations.forEach(op => progressWatchList.add(op));
+    renderProgressStatus();
+    if (!progressTimer) {
+        progressTimer = setInterval(pollProgressStatus, 2000);
+    }
+    pollProgressStatus();
+}
+
+function stopProgressPolling() {
+    if (progressTimer) {
+        clearInterval(progressTimer);
+        progressTimer = null;
+    }
+    progressWatchList.clear();
+}
+
+async function pollProgressStatus() {
+    if (!progressWatchList.size) {
+        stopProgressPolling();
+        return;
+    }
+
+    try {
+        const response = await fetch('/progress', {
+            method: 'GET',
+            headers: getAuthHeaders()
+        });
+        const data = await response.json();
+        renderProgressStatus(data);
+
+        const allDone = Array.from(progressWatchList).every(key => {
+            const status = data?.[key]?.status;
+            return status === 'completed' || status === 'error';
+        });
+
+        if (allDone) {
+            stopProgressPolling();
+        }
+    } catch (error) {
+        console.error('轮询进度失败', error);
+    }
+}
+
+function renderProgressStatus(progressData = {}) {
+    const container = document.getElementById('progressContainer');
+    if (!container) return;
+
+    const keys = Object.keys(PROGRESS_KEYS).map(k => PROGRESS_KEYS[k]);
+    const items = keys
+        .map(key => ({ key, data: progressData[key] }))
+        .filter(item => item.data && item.data.status && item.data.status !== 'idle');
+
+    if (!items.length) {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+        return;
+    }
+
+    const statusLabel = {
+        running: '进行中',
+        completed: '已完成',
+        error: '失败',
+        idle: '待开始'
+    };
+
+    const titleMap = {
+        [PROGRESS_KEYS.refreshAllEmails]: '刷新所有邮箱',
+        [PROGRESS_KEYS.healthCheckAll]: '健康检查全部凭证'
+    };
+
+    container.classList.remove('hidden');
+    container.innerHTML = items.map(({ key, data }) => {
+        const total = data.total || 0;
+        const processed = data.processed || 0;
+        const percent = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
+        const status = data.status || 'idle';
+        const message = data.message || '';
+
+        return `
+            <div class="progress-item">
+                <div class="progress-header">
+                    <span class="progress-title">${titleMap[key] || key}</span>
+                    <span class="progress-status status-${status}">${statusLabel[status] || status}</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill status-${status}" style="width: ${percent}%"></div>
+                </div>
+                <div class="progress-meta">
+                    <span>${processed}/${total || '?'} (${percent}%)</span>
+                    <span class="progress-message">${message}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 // ===========================
@@ -735,6 +840,7 @@ async function testAllCredentials() {
 
     try {
         showStatus('正在对所有凭证进行健康检查...', 'info');
+        startProgressPolling([PROGRESS_KEYS.healthCheckAll]);
 
         const response = await fetch('/creds/test', {
             method: 'POST',
@@ -787,6 +893,7 @@ async function refreshAllEmails() {
         }
 
         showStatus('正在刷新所有用户邮箱...', 'info');
+        startProgressPolling([PROGRESS_KEYS.refreshAllEmails]);
 
         const response = await fetch('/creds/refresh-all-emails', {
             method: 'POST',
