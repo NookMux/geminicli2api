@@ -64,47 +64,48 @@
                     <i class="fas fa-cog"></i> 配置管理
                 </button>
             </div>
-            <div id="oauthTab" class="tab-content active">
-                <div class="form-group">
-                    <label for="projectId">
-                        <i class="fas fa-project-diagram"></i> 项目ID (可选):
-                    </label>
-                    <input type="text" id="projectId" placeholder="留空将自动检测项目" />
-                </div>
-
-                <div class="form-group">
-                    <label>
-                        <input type="checkbox" id="getAllProjectsCreds">
-                        <i class="fas fa-layer-group"></i> 获取当前账号的所有项目凭证
-                    </label>
-                </div>
-
-                <button class="btn" id="getAuthBtn" onclick="startAuth()">
-                    <i class="fas fa-link"></i> 获取认证链接
-                </button>
-
-                <div id="authUrlSection" class="hidden">
-                    <h3><i class="fas fa-external-link-alt"></i> 认证链接：</h3>
-                    <div class="auth-url">
-                        <a id="authUrl" href="#" target="_blank">
-                            <i class="fas fa-mouse-pointer"></i> 点击此链接进行认证
-                        </a>
+            <div class="tab-panels">
+                <div id="oauthTab" class="tab-content active">
+                    <div class="form-group">
+                        <label for="projectId">
+                            <i class="fas fa-project-diagram"></i> 项目ID (可选):
+                        </label>
+                        <input type="text" id="projectId" placeholder="留空将自动检测项目" />
                     </div>
-                    <div class="callback-url-section">
-                        <div class="form-group">
-                            <input type="url" id="callbackUrlInput" placeholder="授权后，将跳转的URL粘贴于此" />
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="getAllProjectsCreds">
+                            <i class="fas fa-layer-group"></i> 获取当前账号的所有项目凭证
+                        </label>
+                    </div>
+
+                    <button class="btn" id="getAuthBtn" onclick="startAuth()">
+                        <i class="fas fa-link"></i> 获取认证链接
+                    </button>
+
+                    <div id="authUrlSection" class="hidden">
+                        <h3><i class="fas fa-external-link-alt"></i> 认证链接：</h3>
+                        <div class="auth-url">
+                            <a id="authUrl" href="#" target="_blank">
+                                <i class="fas fa-mouse-pointer"></i> 点击此链接进行认证
+                            </a>
                         </div>
-                        <button class="btn secondary" onclick="processCallbackUrl()">
-                            <i class="fas fa-paper-plane"></i> 提交URL
-                        </button>
+                        <div class="callback-url-section">
+                            <div class="form-group">
+                                <input type="url" id="callbackUrlInput" placeholder="授权后，将跳转的URL粘贴于此" />
+                            </div>
+                            <button class="btn secondary" onclick="processCallbackUrl()">
+                                <i class="fas fa-paper-plane"></i> 提交URL
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="credentialsSection" class="hidden">
+                        <h3><i class="fas fa-file-alt"></i> 认证文件内容：</h3>
+                        <div class="credentials" id="credentialsContent"></div>
                     </div>
                 </div>
-
-                <div id="credentialsSection" class="hidden">
-                    <h3><i class="fas fa-file-alt"></i> 认证文件内容：</h3>
-                    <div class="credentials" id="credentialsContent"></div>
-                </div>
-            </div>
 
             <!-- 文件管理标签页 -->
             <div id="manageTab" class="tab-content">
@@ -518,6 +519,8 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
             </div>
 
         </div>
