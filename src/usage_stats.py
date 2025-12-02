@@ -120,16 +120,20 @@ class UsageStats:
                     if isinstance(stats_data, dict):
                         normalized_filename = self._normalize_filename(filename)
                         
-                        # 提取使用统计字段
+                        # 提取使用统计字段，只在存储中确实存在覆盖值时才加载
                         usage_data = {
                             "pro_model_calls": stats_data.get("pro_model_calls", 0),
                             "total_calls": stats_data.get("total_calls", 0),
                             "next_reset_time": stats_data.get("next_reset_time"),
-                            "daily_limit_pro_models": stats_data.get("daily_limit_pro_models", self._default_daily_limit_pro),
-                            "daily_limit_total": stats_data.get("daily_limit_total", self._default_daily_limit_total)
+                            # 只在存储中的值与默认值不同时才视为覆盖
+                            "daily_limit_pro_models": stats_data.get("daily_limit_pro_models") if stats_data.get("daily_limit_pro_models") not in (None, self._default_daily_limit_pro) else None,
+                            "daily_limit_total": stats_data.get("daily_limit_total") if stats_data.get("daily_limit_total") not in (None, self._default_daily_limit_total) else None
                         }
 
-                        # 只加载有实际使用数据的统计，或者有reset时间的
+                        # 清理None值，确保缓存中只保存真正的覆盖值
+                        usage_data = {k: v for k, v in usage_data.items() if v is not None}
+
+                        # 只要存在统计数据或reset时间就保存（排除只有覆盖限额的情况）
                         if (usage_data.get("pro_model_calls", 0) > 0 or
                             usage_data.get("total_calls", 0) > 0 or
                             usage_data.get("next_reset_time")):
@@ -186,13 +190,19 @@ class UsageStats:
                     continue
 
                 try:
+                    # 构建统计数据，永远写入基础字段，只在存在覆盖时才写入限额字段
                     stats_data = {
                         "pro_model_calls": stats.get("pro_model_calls", 0),
                         "total_calls": stats.get("total_calls", 0),
                         "next_reset_time": stats.get("next_reset_time"),
-                        "daily_limit_pro_models": stats.get("daily_limit_pro_models", self._default_daily_limit_pro),
-                        "daily_limit_total": stats.get("daily_limit_total", self._default_daily_limit_total)
                     }
+
+                    # 只在缓存中存在覆盖值时才写入限额字段
+                    if "daily_limit_pro_models" in stats and stats["daily_limit_pro_models"] is not None:
+                        stats_data["daily_limit_pro_models"] = stats["daily_limit_pro_models"]
+
+                    if "daily_limit_total" in stats and stats["daily_limit_total"] is not None:
+                        stats_data["daily_limit_total"] = stats["daily_limit_total"]
 
                     success = await self._storage_adapter.update_usage_stats(normalized_filename, stats_data)
                     if success:
@@ -225,14 +235,15 @@ class UsageStats:
                 self._cache_dirty = True
                 log.debug(f"Removed oldest usage stats cache entry: {oldest_key}")
             
+            # 新建stats时只写必须字段，不写入默认限额以避免被视为"有覆盖"
             next_reset = _get_next_utc_7am()
             self._stats_cache[normalized_filename] = {
                 "pro_model_calls": 0,
                 "total_calls": 0,
                 "next_reset_time": next_reset.isoformat(),
-                # 使用动态配置的默认配额值
-                "daily_limit_pro_models": self._default_daily_limit_pro,
-                "daily_limit_total": self._default_daily_limit_total
+                # 注意：不在这里写入默认限额，避免被视为"有覆盖"
+                # "daily_limit_pro_models": self._default_daily_limit_pro,
+                # "daily_limit_total": self._default_daily_limit_total
             }
             self._cache_dirty = True  # 标记缓存已修改
         
@@ -298,8 +309,8 @@ class UsageStats:
                 self._cache_dirty = True  # 标记缓存已修改
 
                 log.debug(f"Usage recorded - File: {normalized_filename}, Model: {model_name}, "
-                         f"Pro Models: {stats['pro_model_calls']}/{stats.get('daily_limit_pro_models', self._default_daily_limit_pro)}, "
-                         f"Total: {stats['total_calls']}/{stats.get('daily_limit_total', self._default_daily_limit_total)}")
+                         f"Pro Models: {stats['pro_model_calls']}/{stats.get('daily_limit_pro_models') if 'daily_limit_pro_models' in stats else self._default_daily_limit_pro}, "
+                         f"Total: {stats['total_calls']}/{stats.get('daily_limit_total') if 'daily_limit_total' in stats else self._default_daily_limit_total}")
                 
                 if reset_performed:
                     log.info(f"Daily quota was reset for {normalized_filename}")
@@ -328,8 +339,8 @@ class UsageStats:
                     "filename": normalized_filename,
                     "pro_model_calls": stats.get("pro_model_calls", 0),
                     "total_calls": stats.get("total_calls", 0),
-                    "daily_limit_pro_models": stats.get("daily_limit_pro_models", self._default_daily_limit_pro),
-                    "daily_limit_total": stats.get("daily_limit_total", self._default_daily_limit_total),
+                    "daily_limit_pro_models": stats["daily_limit_pro_models"] if "daily_limit_pro_models" in stats else self._default_daily_limit_pro,
+                    "daily_limit_total": stats["daily_limit_total"] if "daily_limit_total" in stats else self._default_daily_limit_total,
                     "next_reset_time": stats.get("next_reset_time")
                 }
             else:
@@ -341,8 +352,8 @@ class UsageStats:
                     all_stats[filename] = {
                         "pro_model_calls": stats.get("pro_model_calls", 0),
                         "total_calls": stats.get("total_calls", 0),
-                        "daily_limit_pro_models": stats.get("daily_limit_pro_models", self._default_daily_limit_pro),
-                        "daily_limit_total": stats.get("daily_limit_total", self._default_daily_limit_total),
+                        "daily_limit_pro_models": stats["daily_limit_pro_models"] if "daily_limit_pro_models" in stats else self._default_daily_limit_pro,
+                        "daily_limit_total": stats["daily_limit_total"] if "daily_limit_total" in stats else self._default_daily_limit_total,
                         "next_reset_time": stats.get("next_reset_time")
                     }
                 
@@ -390,8 +401,8 @@ class UsageStats:
                     stats["daily_limit_total"] = total_limit
 
                 log.info(f"Updated daily limits for {normalized_filename}: "
-                        f"Pro Models = {stats.get('daily_limit_pro_models', self._default_daily_limit_pro)}, "
-                        f"Total = {stats.get('daily_limit_total', self._default_daily_limit_total)}")
+                        f"Pro Models = {stats.get('daily_limit_pro_models') if 'daily_limit_pro_models' in stats else self._default_daily_limit_pro}, "
+                        f"Total = {stats.get('daily_limit_total') if 'daily_limit_total' in stats else self._default_daily_limit_total}")
 
             except Exception as e:
                 log.error(f"Failed to update daily limits: {e}")
