@@ -1,0 +1,20 @@
+# Docker 构建忽略文件
+.git
+.gitignore
+README.md
+Dockerfile
+.dockerignore
+docker-compose.yml
+.github
+node_modules
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+.env
+.nyc_output
+coverage
+.coverage
+cover/
+.coverage/
+dist/
+build/

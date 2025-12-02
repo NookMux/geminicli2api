@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Antigravity OAuth 管理</title>
+  <link rel="stylesheet" href="/admin/panel.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Antigravity OAuth 管理</h1>
+    <p>这里可以为代理服务添加 Google 账号。授权完成后，账号信息会写入 <code>data/accounts.json</code> 并参与轮询使用。</p>
+
+    <div style="text-align:right; margin-bottom:8px;">
+      <button id="logoutBtn" class="refresh-btn">退出登录</button>
+    </div>
+
+    <button id="loginBtn">➕ 添加新账号</button>
+    <span id="status" class="badge" style="display:none;"></span>
+
+    <div style="margin-top:16px;">
+      <p style="margin:4px 0 6px;">
+        1. 点击上面的"添加新账号"，打开 Google 授权页面。<br />
+        2. 已完成授权，浏览器删测到最终权限的页面，以第一步形式的授权方式不同，但自己看了后，在链接的地址条权限码中去掉返回的全部 URL 呗入。<br />
+        3. 将上述的全部 URL 剪切，付至此处，点击"提交回调文本，并烦权限码"来完成账号添加。
+      </p>
+      <input
+        id="callbackUrlInput"
+        type="text"
+        placeholder="将回调后浏览器真实的全部 URL 放入这里"
+        style="width:100%;box-sizing:border-box;padding:8px 10px;margin-top:4px;"
+      />
+      <button
+        id="submitCallbackBtn"
+        class="refresh-btn"
+        style="margin-top:8px;"
+      >
+        提交回调 URL 并烦权限码
+      </button>
+    </div>
+
+    <div class="accounts">
+      <div class="accounts-header">
+        <strong>当前账号列表</strong>
+        <button id="refreshBtn" class="refresh-btn">刷新</button>
+      </div>
+      <div id="accountsList" class="accounts-list">加载中...</div>
+    </div>
+  </div>
+
+  <script src="/admin/panel.js"></script>
+</body>
+</html>
+

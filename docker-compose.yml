@@ -1,27 +1,25 @@
 version: '3.8'
-
 networks:
   1panel-network:
     external: true
-
 services:
-  gcli2api:
-    image: ghcr.io/zhongruan0522/geminicli2api:分支名
-    container_name: geminicli2api
+  antigravity-api:
+    image: ghcr.io/zhongruan0522/antigravity2api-nodejs:latest
+    container_name: antigravity-api
     restart: unless-stopped
     networks:
       - 1panel-network
     ports:
-      - "7861:7861"
+      - "8045:8045"
     environment:
-      - HOST=0.0.0.0
-      - PORT=7861
-      - API_PASSWORD=your_api_key
-      - PANEL_PASSWORD=your_password
-      - CALLS_PER_ROTATION=100
-      - DAILY_LIMIT_PRO_MODELS=75
-      - DAILY_LIMIT_TOTAL=600
+      - PANEL_USER=admin
+      - PANEL_PASSWORD=zhc080522
+      - API_KEY=sk-text
     volumes:
-      - ./data/creds:/app/creds
-      - ./var/data/creds/apilog.csv:/app/apilog.csv
-      - ./var/data/creds/call_trace.log:/app/call_trace.log
+      - ./data:/app/data
+    healthcheck:
+      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:' + process.env.PORT + '/healthz', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
