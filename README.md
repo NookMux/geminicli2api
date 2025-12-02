@@ -12,6 +12,7 @@
 - ✅ API Key 认证
 - ✅ 思维链（Thinking）输出
 - ✅ 图片输入支持（Base64 编码）
+- ✅ 直接暴露 OpenAI 兼容接口（/v1/chat/completions 与 /v1/models），可被官方 SDK 直接调用
 
 ## 环境要求
 
@@ -116,6 +117,38 @@ npm start
 
 ## API 使用
 
+### OpenAI 兼容基址
+
+- **Base URL**：`http://<host>:8045`（可在环境变量中修改 `HOST`、`PORT`）
+- **API Key 认证**：所有 `/v1/*` 路径必须携带 `Authorization: Bearer <API_KEY>`；`API_KEY` 在 `.env` 中配置，服务启动时会强制校验。
+
+> 管理面板与 OAuth 登录仍需设置 `PANEL_USER` 与 `PANEL_PASSWORD`，但 OpenAI 兼容接口仅依赖 API Key 进行鉴权。
+
+### 使用 OpenAI 官方 SDK 调用
+
+可以直接使用 OpenAI 官方 SDK，将 `baseURL` 指向本代理即可，无需改动调用代码：
+
+```javascript
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+  apiKey: 'sk-text',
+  baseURL: 'http://localhost:8045/v1'
+});
+
+const completion = await client.chat.completions.create({
+  model: 'gemini-2.0-flash-thinking-exp',
+  messages: [{ role: 'user', content: '你好，介绍一下自己。' }],
+  stream: true
+});
+
+for await (const chunk of completion) {
+  process.stdout.write(chunk.choices[0]?.delta?.content || '');
+}
+```
+
+### 使用 cURL 调用
+
 ### 获取模型列表
 
 ```bash
@@ -205,6 +238,29 @@ curl http://localhost:8045/v1/chat/completions \
 - PNG (`data:image/png;base64,...`)
 - GIF (`data:image/gif;base64,...`)
 - WebP (`data:image/webp;base64,...`)
+
+### Gemini 接口直通
+
+除 OpenAI 兼容接口外，也提供了符合官方 Gemini v1beta 形态的直通路径，方便将 SDK 或 cURL 直接指向代理：
+
+- **Base URL**：`http://<host>:8045/gemini/v1beta`
+- **流式生成**：`POST /models/{model}:streamGenerateContent`
+- **非流式生成**：`POST /models/{model}:generateContent`
+
+与 `/v1/*` 一样，这两个接口同样要求携带 `Authorization: Bearer <API_KEY>`。请求体保持 Gemini 原生格式，例如：
+
+```bash
+curl http://localhost:8045/gemini/v1beta/models/gemini-2.0-flash-exp:streamGenerateContent \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-text" \
+  -d '{
+    "contents": [{
+      "role": "user",
+      "parts": [{"text": "简述一下项目现状"}]
+    }],
+    "generationConfig": {"temperature": 0.7}
+  }'
+```
 
 ## 多账号管理
 

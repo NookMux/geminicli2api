@@ -1,7 +1,7 @@
 import axios from 'axios';
 import tokenManager from '../auth/token_manager.js';
 import config from '../config/config.js';
-import { generateToolCallId } from '../utils/idGenerator.js';
+import { generateRequestId, generateToolCallId } from '../utils/idGenerator.js';
 import AntigravityRequester from '../AntigravityRequester.js';
 import { saveBase64Image } from '../utils/imageStorage.js';
 
@@ -56,6 +56,33 @@ function buildRequesterConfig(headers, body = null) {
   };
   if (body !== null) reqConfig.body = JSON.stringify(body);
   return reqConfig;
+}
+
+function buildGeminiRequest(model, requestBody = {}, token) {
+  const { generationConfig, systemInstruction, sessionId, ...rest } = requestBody;
+
+  return {
+    project: token.projectId,
+    requestId: generateRequestId(),
+    request: {
+      systemInstruction:
+        systemInstruction || {
+          role: 'user',
+          parts: [{ text: config.systemInstruction }]
+        },
+      generationConfig: {
+        topP: config.defaults.top_p,
+        topK: config.defaults.top_k,
+        temperature: config.defaults.temperature,
+        maxOutputTokens: config.defaults.max_tokens,
+        ...(generationConfig || {})
+      },
+      sessionId: sessionId || token.sessionId,
+      ...rest
+    },
+    model,
+    userAgent: 'antigravity'
+  };
 }
 
 // 统一错误处理
@@ -221,7 +248,7 @@ export async function getAvailableModels() {
 }
 
 export async function generateAssistantResponseNoStream(requestBody, token) {
-  
+
   const headers = buildHeaders(token);
   let data;
   
@@ -278,4 +305,68 @@ export async function generateAssistantResponseNoStream(requestBody, token) {
 
 export function closeRequester() {
   if (requester) requester.close();
+}
+
+export async function streamGeminiContent(model, requestBody, token, onChunk) {
+  const headers = buildHeaders(token);
+  const payload = buildGeminiRequest(model, requestBody, token);
+
+  if (useAxios) {
+    try {
+      const axiosConfig = { ...buildAxiosConfig(config.api.url, headers, payload), responseType: 'stream' };
+      const response = await axios(axiosConfig);
+
+      response.data.on('data', chunk => onChunk(chunk.toString()));
+      await new Promise((resolve, reject) => {
+        response.data.on('end', resolve);
+        response.data.on('error', reject);
+      });
+    } catch (error) {
+      await handleApiError(error, token);
+    }
+  } else {
+    try {
+      const streamResponse = requester.antigravity_fetchStream(
+        config.api.url,
+        buildRequesterConfig(headers, payload)
+      );
+      let errorBody = '';
+      let statusCode = null;
+
+      await new Promise((resolve, reject) => {
+        streamResponse
+          .onStart(({ status }) => {
+            statusCode = status;
+          })
+          .onData(chunk => (statusCode !== 200 ? (errorBody += chunk) : onChunk(chunk)))
+          .onEnd(() => (statusCode !== 200 ? reject({ status: statusCode, message: errorBody }) : resolve()))
+          .onError(reject);
+      });
+    } catch (error) {
+      await handleApiError(error, token);
+    }
+  }
+}
+
+export async function generateGeminiContent(model, requestBody, token) {
+  const headers = buildHeaders(token);
+  const payload = buildGeminiRequest(model, requestBody, token);
+
+  try {
+    if (useAxios) {
+      return (await axios(buildAxiosConfig(config.api.noStreamUrl, headers, payload))).data;
+    }
+
+    const response = await requester.antigravity_fetch(
+      config.api.noStreamUrl,
+      buildRequesterConfig(headers, payload)
+    );
+    if (response.status !== 200) {
+      const errorBody = await response.text();
+      throw { status: response.status, message: errorBody };
+    }
+    return response.json();
+  } catch (error) {
+    await handleApiError(error, token);
+  }
 }

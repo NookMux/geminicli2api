@@ -3,17 +3,21 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import { parseToml } from '../utils/tomlParser.js';
 import {
   generateAssistantResponse,
   generateAssistantResponseNoStream,
   getAvailableModels,
-  closeRequester
+  closeRequester,
+  generateGeminiContent,
+  streamGeminiContent
 } from '../api/client.js';
 import { generateRequestBody } from '../utils/utils.js';
 import logger from '../utils/logger.js';
 import config from '../config/config.js';
 import tokenManager from '../auth/token_manager.js';
 import { buildAuthUrl, exchangeCodeForToken } from '../auth/oauth_client.js';
+import { appendLog, getRecentLogs, getUsageSummary } from '../utils/log_store.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -120,9 +124,9 @@ app.get('/', (req, res) => {
   return res.redirect('/admin/login');
 });
 
-// API key check for /v1/* endpoints（API_KEY 在启动时强制要求配置）
+// API key check for /v1/* 和 /gemini/* endpoints（API_KEY 在启动时强制要求配置）
 app.use((req, res, next) => {
-  if (req.path.startsWith('/v1/')) {
+  if (req.path.startsWith('/v1/') || req.path.startsWith('/gemini/')) {
     const apiKey = config.security?.apiKey;
     if (apiKey) {
       const authHeader = req.headers.authorization;
@@ -197,6 +201,7 @@ function requirePanelAuthApi(req, res, next) {
 }
 
 function readAccountsSafe() {
+  const usageMap = getUsageSummary();
   try {
     if (!fs.existsSync(ACCOUNTS_FILE)) return [];
     const raw = fs.readFileSync(ACCOUNTS_FILE, 'utf-8');
@@ -208,12 +213,108 @@ function readAccountsSafe() {
       enable: acc.enable !== false,
       hasRefreshToken: !!acc.refresh_token,
       createdAt: acc.timestamp || null,
-      expiresIn: acc.expires_in || null
+      expiresIn: acc.expires_in || null,
+      usage: usageMap[acc.projectId] || {
+        total: 0,
+        success: 0,
+        failed: 0,
+        lastUsedAt: null,
+        models: []
+      }
     }));
   } catch (e) {
     logger.error(`读取 accounts.json 失败: ${e.message}`);
     return [];
   }
+}
+
+function parseTimestamp(raw) {
+  if (raw && Number.isFinite(Number(raw.timestamp))) {
+    return Number(raw.timestamp);
+  }
+
+  const dateString = raw?.created_at || raw?.createdAt;
+  if (dateString) {
+    const parsed = Date.parse(dateString);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+
+  return Date.now();
+}
+
+function normalizeTomlAccount(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const accessToken = raw.access_token ?? raw.accessToken;
+  const refreshToken = raw.refresh_token ?? raw.refreshToken;
+
+  if (!accessToken || !refreshToken) return null;
+
+  const normalized = {
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    expires_in: Number.isFinite(Number(raw.expires_in ?? raw.expiresIn))
+      ? Number(raw.expires_in ?? raw.expiresIn)
+      : 3600,
+    timestamp: parseTimestamp(raw),
+    enable: raw.disabled === true ? false : raw.enable !== false
+  };
+
+  const projectId = raw.projectId ?? raw.project_id;
+  if (projectId) normalized.projectId = projectId;
+
+  const copyPairs = [
+    ['email', 'email'],
+    ['user_id', 'user_id'],
+    ['userId', 'user_id'],
+    ['user_email', 'user_email'],
+    ['userEmail', 'user_email'],
+    ['last_used', 'last_used'],
+    ['lastUsed', 'last_used'],
+    ['created_at', 'created_at'],
+    ['createdAt', 'created_at'],
+    ['next_reset_time', 'next_reset_time'],
+    ['nextResetTime', 'next_reset_time'],
+    ['daily_limit_claude', 'daily_limit_claude'],
+    ['dailyLimitClaude', 'daily_limit_claude'],
+    ['daily_limit_gemini', 'daily_limit_gemini'],
+    ['dailyLimitGemini', 'daily_limit_gemini'],
+    ['daily_limit_total', 'daily_limit_total'],
+    ['dailyLimitTotal', 'daily_limit_total'],
+    ['claude_sonnet_4_5_calls', 'claude_sonnet_4_5_calls'],
+    ['gemini_3_pro_calls', 'gemini_3_pro_calls'],
+    ['total_calls', 'total_calls'],
+    ['last_success', 'last_success'],
+    ['error_codes', 'error_codes'],
+    ['gemini_3_series_banned_until', 'gemini_3_series_banned_until']
+  ];
+
+  for (const [source, target] of copyPairs) {
+    if (raw[source] !== undefined) {
+      normalized[target] = raw[source];
+    }
+  }
+
+  return normalized;
+}
+
+function mergeAccounts(existing, incoming, replaceExisting = false) {
+  if (replaceExisting) return incoming;
+
+  const map = new Map();
+
+  existing.forEach((acc, idx) => {
+    const key = acc.refresh_token || acc.access_token || `existing-${idx}`;
+    map.set(key, acc);
+  });
+
+  incoming.forEach((acc, idx) => {
+    const key = acc.refresh_token || acc.access_token || `incoming-${idx}`;
+    const current = map.get(key) || {};
+    map.set(key, { ...current, ...acc });
+  });
+
+  return Array.from(map.values());
 }
 
 // Simple login page for admin panel
@@ -343,7 +444,7 @@ app.get('/auth/oauth/callback', (req, res) => {
 
 // 解析用户粘贴的回调 URL，交换 code 为 token，写入 accounts.json 并刷新 TokenManager
 app.post('/auth/oauth/parse-url', requirePanelAuthApi, async (req, res) => {
-  const { url } = req.body || {};
+  const { url, replaceIndex } = req.body || {};
 
   if (!url || typeof url !== 'string') {
     return res.status(400).json({ error: 'url 字段必填且必须为字符串' });
@@ -390,13 +491,17 @@ app.post('/auth/oauth/parse-url', requirePanelAuthApi, async (req, res) => {
     }
 
     if (!Array.isArray(accounts)) accounts = [];
-    accounts.push(account);
+    if (Number.isInteger(replaceIndex) && replaceIndex >= 0 && replaceIndex < accounts.length) {
+      accounts[replaceIndex] = account;
+    } else {
+      accounts.push(account);
+    }
 
     const dir = path.dirname(ACCOUNTS_FILE);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2));
+    fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2), 'utf-8');
 
     // Reload TokenManager so new account becomes usable without restart
     if (typeof tokenManager.initialize === 'function') {
@@ -412,9 +517,140 @@ app.post('/auth/oauth/parse-url', requirePanelAuthApi, async (req, res) => {
   }
 });
 
+// Import accounts from TOML and merge into accounts.json
+app.post('/auth/accounts/import-toml', requirePanelAuthApi, (req, res) => {
+  const { toml: tomlContent, replaceExisting = false } = req.body || {};
+
+  if (!tomlContent || typeof tomlContent !== 'string') {
+    return res.status(400).json({ error: 'toml 字段必填且必须为字符串' });
+  }
+
+  let parsed;
+  try {
+    parsed = parseToml(tomlContent);
+  } catch (e) {
+    return res.status(400).json({ error: `TOML 解析失败: ${e.message}` });
+  }
+
+  const accountsFromToml = Array.isArray(parsed.accounts) ? parsed.accounts : [];
+  if (accountsFromToml.length === 0) {
+    return res.status(400).json({ error: '未在 TOML 中找到 accounts 列表' });
+  }
+
+  const normalized = [];
+  let skipped = 0;
+
+  for (const raw of accountsFromToml) {
+    const acc = normalizeTomlAccount(raw);
+    if (acc) {
+      normalized.push(acc);
+    } else {
+      skipped += 1;
+    }
+  }
+
+  if (normalized.length === 0) {
+    return res.status(400).json({ error: 'TOML 中没有有效的账号信息' });
+  }
+
+  let existing = [];
+  if (!replaceExisting && fs.existsSync(ACCOUNTS_FILE)) {
+    try {
+      existing = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf-8'));
+      if (!Array.isArray(existing)) existing = [];
+    } catch (e) {
+      logger.warn(`读取 accounts.json 失败，将忽略已有账号: ${e.message}`);
+      existing = [];
+    }
+  }
+
+  const merged = mergeAccounts(existing, normalized, replaceExisting);
+
+  const dir = path.dirname(ACCOUNTS_FILE);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(merged, null, 2), 'utf-8');
+
+  if (typeof tokenManager.initialize === 'function') {
+    tokenManager.initialize();
+  }
+
+  return res.json({
+    success: true,
+    imported: normalized.length,
+    skipped,
+    total: merged.length
+  });
+});
+
 // Simple JSON list of accounts for front-end
 app.get('/auth/accounts', requirePanelAuthApi, (req, res) => {
   res.json({ accounts: readAccountsSafe() });
+});
+
+// Manually refresh a single account by index
+app.post('/auth/accounts/:index/refresh', requirePanelAuthApi, async (req, res) => {
+  const index = Number.parseInt(req.params.index, 10);
+  if (Number.isNaN(index)) return res.status(400).json({ error: '无效的账号序号' });
+
+  try {
+    const accounts = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf-8'));
+    const target = accounts[index];
+    if (!target) return res.status(404).json({ error: '账号不存在' });
+    await tokenManager.refreshToken(target);
+    accounts[index] = target;
+    fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2), 'utf-8');
+    tokenManager.initialize();
+    res.json({ success: true });
+  } catch (e) {
+    logger.error('刷新账号失败', e.message);
+    res.status(500).json({ error: e.message || '刷新失败' });
+  }
+});
+
+// Delete an account
+app.delete('/auth/accounts/:index', requirePanelAuthApi, (req, res) => {
+  const index = Number.parseInt(req.params.index, 10);
+  if (Number.isNaN(index)) return res.status(400).json({ error: '无效的账号序号' });
+
+  try {
+    const accounts = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf-8'));
+    if (!accounts[index]) return res.status(404).json({ error: '账号不存在' });
+    accounts.splice(index, 1);
+    fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2), 'utf-8');
+    tokenManager.initialize();
+    res.json({ success: true });
+  } catch (e) {
+    logger.error('删除账号失败', e.message);
+    res.status(500).json({ error: e.message || '删除失败' });
+  }
+});
+
+// Toggle enable/disable for an account
+app.post('/auth/accounts/:index/enable', requirePanelAuthApi, (req, res) => {
+  const index = Number.parseInt(req.params.index, 10);
+  const { enable = true } = req.body || {};
+  if (Number.isNaN(index)) return res.status(400).json({ error: '无效的账号序号' });
+
+  try {
+    const accounts = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf-8'));
+    if (!accounts[index]) return res.status(404).json({ error: '账号不存在' });
+    accounts[index].enable = !!enable;
+    fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2), 'utf-8');
+    tokenManager.initialize();
+    res.json({ success: true });
+  } catch (e) {
+    logger.error('更新账号状态失败', e.message);
+    res.status(500).json({ error: e.message || '更新失败' });
+  }
+});
+
+// Recent request logs
+app.get('/admin/logs', requirePanelAuthApi, (req, res) => {
+  const limit = req.query.limit ? Number.parseInt(req.query.limit, 10) : 200;
+  res.json({ logs: getRecentLogs(limit) });
 });
 
 // Minimal HTML admin panel for OAuth (served as static file)
@@ -516,8 +752,22 @@ app.post('/v1/chat/completions', async (req, res) => {
         ]
       });
     }
+
+    appendLog({
+      timestamp: new Date().toISOString(),
+      model,
+      projectId: token?.projectId || null,
+      success: true
+    });
   } catch (error) {
     logger.error('生成响应失败:', error.message);
+    appendLog({
+      timestamp: new Date().toISOString(),
+      model: model || req.body?.model || 'unknown',
+      projectId: null,
+      success: false,
+      message: error.message
+    });
     if (!res.headersSent) {
       const { id, created } = createResponseMeta();
       const errorContent = `错误: ${error.message}`;
@@ -545,6 +795,46 @@ app.post('/v1/chat/completions', async (req, res) => {
         });
       }
     }
+  }
+});
+
+app.post(/^\/gemini\/v1beta\/models\/([^/]+):streamGenerateContent$/, async (req, res) => {
+  const model = req.params[0];
+
+  try {
+    const token = await tokenManager.getToken();
+    if (!token) {
+      throw new Error('没有可用的 token，请先通过 OAuth 面板或 npm run login 获取。');
+    }
+
+    setStreamHeaders(res);
+    await streamGeminiContent(model, req.body || {}, token, chunk => res.write(chunk));
+    res.end();
+  } catch (error) {
+    logger.error('Gemini 流式生成失败:', error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+      res.end();
+    }
+  }
+});
+
+app.post(/^\/gemini\/v1beta\/models\/([^/]+):generateContent$/, async (req, res) => {
+  const model = req.params[0];
+
+  try {
+    const token = await tokenManager.getToken();
+    if (!token) {
+      throw new Error('没有可用的 token，请先通过 OAuth 面板或 npm run login 获取。');
+    }
+
+    const data = await generateGeminiContent(model, req.body || {}, token);
+    res.json(data);
+  } catch (error) {
+    logger.error('Gemini 文本生成失败:', error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 

@@ -20,11 +20,25 @@ class TokenManager {
     this.initialize();
   }
 
+  ensureDataFile() {
+    const dir = path.dirname(this.filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    if (!fs.existsSync(this.filePath)) {
+      fs.writeFileSync(this.filePath, '[]', 'utf8');
+      log.warn(`未找到账号文件，已创建空文件: ${this.filePath}`);
+    }
+  }
+
   initialize() {
     try {
       log.info('正在初始化token管理器...');
+      this.ensureDataFile();
+
       const data = fs.readFileSync(this.filePath, 'utf8');
-      let tokenArray = JSON.parse(data);
+      let tokenArray = JSON.parse(data || '[]');
       let needSave = false;
       
       tokenArray = tokenArray.map(token => {
@@ -96,9 +110,10 @@ class TokenManager {
 
   saveToFile() {
     try {
+      this.ensureDataFile();
       const data = fs.readFileSync(this.filePath, 'utf8');
       const allTokens = JSON.parse(data);
-      
+
       this.tokens.forEach(memToken => {
         const index = allTokens.findIndex(t => t.refresh_token === memToken.refresh_token);
         if (index !== -1) {
