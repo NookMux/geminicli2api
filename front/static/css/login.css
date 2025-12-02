@@ -15,6 +15,15 @@
     border: 1px solid var(--border-color);
 }
 
+#loginSection {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    box-sizing: border-box;
+}
+
 .login-icon {
     font-size: 3rem;
     color: var(--primary-color);
