@@ -13,7 +13,7 @@ services:
       - "8045:8045"
     environment:
       - PANEL_USER=admin
-      - PANEL_PASSWORD=zhc080522
+      - PANEL_PASSWORD=设置你的密码
       - API_KEY=sk-text
     volumes:
       - ./data:/app/data

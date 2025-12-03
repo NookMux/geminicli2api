@@ -5,6 +5,7 @@ import axios from 'axios';
 import { log } from '../utils/logger.js';
 import { generateProjectId, generateSessionId } from '../utils/idGenerator.js';
 import config from '../config/config.js';
+import { getUsageCountSince } from '../utils/log_store.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,6 +18,9 @@ class TokenManager {
     this.filePath = filePath;
     this.tokens = [];
     this.currentIndex = 0;
+    this.hourlyLimit = Number.isFinite(Number(config.credentials?.maxUsagePerHour))
+      ? Number(config.credentials.maxUsagePerHour)
+      : 20;
     this.initialize();
   }
 
@@ -30,6 +34,30 @@ class TokenManager {
       fs.writeFileSync(this.filePath, '[]', 'utf8');
       log.warn(`未找到账号文件，已创建空文件: ${this.filePath}`);
     }
+  }
+
+  isWithinHourlyLimit(token) {
+    if (!this.hourlyLimit || Number.isNaN(this.hourlyLimit)) return true;
+
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    const usage = getUsageCountSince(token.projectId, oneHourAgo);
+
+    if (usage >= this.hourlyLimit) {
+      log.warn(
+        `账号 ${token.projectId || '未知'} 已达到每小时 ${this.hourlyLimit} 次上限，切换下一个账号`
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  moveToNextToken() {
+    if (this.tokens.length === 0) {
+      this.currentIndex = 0;
+      return;
+    }
+    this.currentIndex = (this.currentIndex + 1) % this.tokens.length;
   }
 
   initialize() {
@@ -139,17 +167,23 @@ class TokenManager {
   async getToken() {
     if (this.tokens.length === 0) return null;
 
-    const startIndex = this.currentIndex;
+    let attempts = 0;
     const totalTokens = this.tokens.length;
 
-    for (let i = 0; i < totalTokens; i++) {
+    while (attempts < totalTokens) {
       const token = this.tokens[this.currentIndex];
-      
+
       try {
         if (this.isExpired(token)) {
           await this.refreshToken(token);
         }
-        this.currentIndex = (this.currentIndex + 1) % this.tokens.length;
+
+        if (!this.isWithinHourlyLimit(token)) {
+          this.moveToNextToken();
+          attempts += 1;
+          continue;
+        }
+
         return token;
       } catch (error) {
         if (error.statusCode === 403 || error.statusCode === 400) {
@@ -159,12 +193,37 @@ class TokenManager {
           if (this.tokens.length === 0) return null;
         } else {
           log.error(`Token ${this.currentIndex + 1} 刷新失败:`, error.message);
-          this.currentIndex = (this.currentIndex + 1) % this.tokens.length;
+          this.moveToNextToken();
         }
       }
+
+      attempts += 1;
     }
 
     return null;
+  }
+
+  async getTokenByProjectId(projectId) {
+    if (!projectId || this.tokens.length === 0) return null;
+
+    const token = this.tokens.find(t => t.projectId === projectId && t.enable !== false);
+    if (!token) return null;
+
+    try {
+      if (this.isExpired(token)) {
+        await this.refreshToken(token);
+      }
+      return token;
+    } catch (error) {
+      if (error.statusCode === 403 || error.statusCode === 400) {
+        log.warn(`账号 ${projectId}: Token 已失效或错误，已自动禁用该账号`);
+        this.disableToken(token);
+        return null;
+      }
+
+      log.error(`Token ${projectId} 刷新失败:`, error.message);
+      return null;
+    }
   }
 
   disableCurrentToken(token) {

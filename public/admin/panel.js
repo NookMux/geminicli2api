@@ -4,24 +4,45 @@ const statusEl = document.getElementById('status');
 const tomlStatusEl = document.getElementById('tomlStatus');
 const listEl = document.getElementById('accountsList');
 const refreshBtn = document.getElementById('refreshBtn');
+const logsRefreshBtn = document.getElementById('logsRefreshBtn');
+const hourlyUsageEl = document.getElementById('hourlyUsage');
 const manageStatusEl = document.getElementById('manageStatus');
 const callbackUrlInput = document.getElementById('callbackUrlInput');
 const submitCallbackBtn = document.getElementById('submitCallbackBtn');
 const logsEl = document.getElementById('logs');
 const usageEl = document.getElementById('usageSummary');
+const usageStatusEl = document.getElementById('usageStatus');
+const settingsGrid = document.getElementById('settingsGrid');
+const settingsStatusEl = document.getElementById('settingsStatus');
+const settingsRefreshBtn = document.getElementById('settingsRefreshBtn');
 const importTomlBtn = document.getElementById('importTomlBtn');
 const tomlInput = document.getElementById('tomlInput');
 const replaceExistingCheckbox = document.getElementById('replaceExisting');
 const tabButtons = document.querySelectorAll('.tab-btn');
 const tabPanels = document.querySelectorAll('.tab-panel');
 const deleteDisabledBtn = document.getElementById('deleteDisabledBtn');
+const usageRefreshBtn = document.getElementById('usageRefreshBtn');
 const paginationInfo = document.getElementById('paginationInfo');
 const prevPageBtn = document.getElementById('prevPageBtn');
 const nextPageBtn = document.getElementById('nextPageBtn');
+const logPaginationInfo = document.getElementById('logPaginationInfo');
+const logPrevPageBtn = document.getElementById('logPrevPageBtn');
+const logNextPageBtn = document.getElementById('logNextPageBtn');
+const statusFilterSelect = document.getElementById('statusFilter');
+const errorFilterCheckbox = document.getElementById('errorFilter');
+
+const HOUR_WINDOW_MINUTES = 60;
+const HOURLY_LIMIT = 20;
 
 const PAGE_SIZE = 5;
 let accountsData = [];
+let filteredAccounts = [];
 let currentPage = 1;
+const LOG_PAGE_SIZE = 20;
+let logsData = [];
+let logCurrentPage = 1;
+let statusFilter = 'all';
+let errorOnly = false;
 
 let replaceIndex = null;
 
@@ -35,6 +56,20 @@ function setStatus(text, type = 'info', target = statusEl) {
   target.className = `badge badge-${type}`;
   target.style.display = 'inline-block';
 }
+
+function isNightTime() {
+  const now = new Date();
+  const hour = now.getHours();
+  return hour >= 18 || hour < 6;
+}
+
+function applyAutoTheme() {
+  const theme = isNightTime() ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', theme);
+}
+
+applyAutoTheme();
+setInterval(applyAutoTheme, 10 * 60 * 1000);
 
 function activateTab(target) {
   tabButtons.forEach(btn => {
@@ -52,6 +87,16 @@ async function fetchJson(url, options = {}) {
     throw new Error(data.error || `HTTP ${res.status}`);
   }
   return data;
+}
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function renderUsageCard(account) {
@@ -76,6 +121,21 @@ function hasUsageRecord(account) {
     (usage.failed ?? 0) > 0 ||
     !!usage.lastUsedAt
   );
+}
+
+function updateFilteredAccounts() {
+  filteredAccounts = accountsData.filter(acc => {
+    const matchesStatus =
+      statusFilter === 'all' || (statusFilter === 'enabled' && acc.enable) || (statusFilter === 'disabled' && !acc.enable);
+
+    const failedCount = acc?.usage?.failed || 0;
+    const matchesError = !errorOnly || failedCount > 0;
+
+    return matchesStatus && matchesError;
+  });
+
+  currentPage = 1;
+  renderAccountsList();
 }
 
 function bindAccountActions() {
@@ -149,34 +209,27 @@ async function refreshAccounts() {
   try {
     const data = await fetchJson('/auth/accounts');
     accountsData = data.accounts || [];
-    if (!accountsData.length) {
-      listEl.textContent = '暂无账号，请先添加一个。';
-      if (paginationInfo) paginationInfo.textContent = '第 0 / 0 页';
-      if (prevPageBtn) prevPageBtn.disabled = true;
-      if (nextPageBtn) nextPageBtn.disabled = true;
-    } else {
-      currentPage = 1;
-      renderAccountsList();
-    }
+    updateFilteredAccounts();
     renderUsageSummary(accountsData);
+    loadHourlyUsage();
   } catch (e) {
     listEl.textContent = '加载失败: ' + e.message;
   }
 }
 
 function renderAccountsList() {
-  if (!accountsData.length) {
-    listEl.textContent = '暂无账号，请先添加一个。';
+  if (!filteredAccounts.length) {
+    listEl.textContent = accountsData.length ? '没有符合筛选条件的凭证。' : '暂无账号，请先添加一个。';
     if (paginationInfo) paginationInfo.textContent = '第 0 / 0 页';
     if (prevPageBtn) prevPageBtn.disabled = true;
     if (nextPageBtn) nextPageBtn.disabled = true;
     return;
   }
 
-  const totalPages = Math.max(1, Math.ceil(accountsData.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filteredAccounts.length / PAGE_SIZE));
   currentPage = Math.min(Math.max(currentPage, 1), totalPages);
   const start = (currentPage - 1) * PAGE_SIZE;
-  const pageItems = accountsData.slice(start, start + PAGE_SIZE);
+  const pageItems = filteredAccounts.slice(start, start + PAGE_SIZE);
 
   listEl.innerHTML = pageItems
     .map(acc => {
@@ -207,7 +260,7 @@ function renderAccountsList() {
     .join('');
 
   if (paginationInfo) {
-    paginationInfo.textContent = `第 ${currentPage} / ${totalPages} 页，共 ${accountsData.length} 个凭证`;
+    paginationInfo.textContent = `第 ${currentPage} / ${totalPages} 页，共 ${filteredAccounts.length} 个凭证`;
   }
   if (prevPageBtn) prevPageBtn.disabled = currentPage === 1;
   if (nextPageBtn) nextPageBtn.disabled = currentPage === totalPages;
@@ -262,32 +315,249 @@ function renderUsageSummary(accounts) {
   usageEl.innerHTML = summary || '暂无使用记录';
 }
 
+function renderSettings(groups) {
+  if (!settingsGrid) return;
+  if (!groups || groups.length === 0) {
+    settingsGrid.textContent = '暂无配置数据';
+    return;
+  }
+
+  const html = groups
+    .map(group => {
+      const items = (group.items || [])
+        .map(item => {
+          const value = item?.value ?? '未设置';
+          const badges = [
+            `<span class="chip ${item.isDefault ? '' : 'chip-success'}">${item.isDefault ? '默认值' : '环境变量'}</span>`,
+            item.sensitive ? '<span class="chip chip-warning">敏感信息</span>' : ''
+          ]
+            .filter(Boolean)
+            .join('');
+
+          const metaParts = [
+            item.isDefault ? '使用默认值' : '来自环境变量',
+            item.defaultValue !== null && item.defaultValue !== undefined
+              ? `默认：${escapeHtml(item.defaultValue)}`
+              : '无默认值',
+            item.description ? escapeHtml(item.description) : ''
+          ]
+            .filter(Boolean)
+            .join(' · ');
+
+          return `
+            <div class="setting-item ${item.isMissing ? 'missing' : ''}">
+              <div class="setting-header">
+                <div class="setting-key">${escapeHtml(item.label || item.key)}</div>
+                ${badges}
+              </div>
+              <div class="setting-value">${escapeHtml(value)}</div>
+              <div class="setting-meta">${metaParts}</div>
+            </div>
+          `;
+        })
+        .join('');
+
+      return `
+        <div class="settings-group">
+          <div class="settings-group-header">${escapeHtml(group.name || '配置')}</div>
+          <div class="settings-list">${items || '<div class="setting-item">暂无配置</div>'}</div>
+        </div>
+      `;
+    })
+    .join('');
+
+  settingsGrid.innerHTML = html;
+}
+
+async function loadSettings() {
+  if (!settingsGrid) return;
+  settingsGrid.textContent = '加载中...';
+  try {
+    const data = await fetchJson('/admin/settings');
+    renderSettings(data.groups || []);
+    if (data.updatedAt) {
+      setStatus(`已更新：${new Date(data.updatedAt).toLocaleString()}`, 'success', settingsStatusEl);
+    }
+  } catch (e) {
+    settingsGrid.textContent = '加载设置失败: ' + e.message;
+    setStatus('刷新失败: ' + e.message, 'error', settingsStatusEl);
+  }
+}
+
 async function loadLogs() {
   if (!logsEl) return;
+  logsEl.textContent = '加载中...';
+  if (logPaginationInfo) logPaginationInfo.textContent = '加载中...';
+  if (logPrevPageBtn) logPrevPageBtn.disabled = true;
+  if (logNextPageBtn) logNextPageBtn.disabled = true;
   try {
     const data = await fetchJson('/admin/logs?limit=200');
-    const logs = data.logs || [];
-    if (logs.length === 0) {
-      logsEl.textContent = '暂无调用日志';
+    logsData = data.logs || [];
+    logCurrentPage = 1;
+    renderLogs();
+  } catch (e) {
+    logsEl.textContent = '加载日志失败: ' + e.message;
+    if (logPaginationInfo) logPaginationInfo.textContent = '';
+  }
+}
+
+function bindLogDetailToggles() {
+  document.querySelectorAll('[data-toggle-detail]')?.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.dataset.toggleDetail;
+      const detailEl = document.getElementById(targetId);
+      if (!detailEl) return;
+      const isOpen = !detailEl.classList.contains('open');
+      detailEl.classList.toggle('open', isOpen);
+      detailEl.style.display = isOpen ? 'block' : 'none';
+      btn.textContent = isOpen ? '收起错误原文' : '查看错误原文';
+    });
+  });
+}
+
+function renderLogs() {
+  if (!logsEl) return;
+
+  if (!logsData.length) {
+    logsEl.textContent = '暂无调用日志';
+    if (logPaginationInfo) logPaginationInfo.textContent = '第 0 / 0 页';
+    if (logPrevPageBtn) logPrevPageBtn.disabled = true;
+    if (logNextPageBtn) logNextPageBtn.disabled = true;
+    return;
+  }
+
+  const totalPages = Math.max(1, Math.ceil(logsData.length / LOG_PAGE_SIZE));
+  logCurrentPage = Math.min(Math.max(logCurrentPage, 1), totalPages);
+  const start = (logCurrentPage - 1) * LOG_PAGE_SIZE;
+  const pageItems = logsData.slice(start, start + LOG_PAGE_SIZE);
+
+  logsEl.innerHTML = pageItems
+    .map((log, idx) => {
+      const time = log.timestamp ? new Date(log.timestamp).toLocaleString() : '未知时间';
+      const cls = log.success ? 'log-success' : 'log-fail';
+      const hasError = !log.success;
+      const detailId = `log-detail-${start + idx}`;
+      const detailText = hasError ? escapeHtml(log.message || '未返回错误信息') : '';
+
+      return `
+        <div class="log-item ${cls}">
+          <div class="log-content">
+            <div class="log-time">${time}</div>
+            <div class="log-meta">模型：${log.model || '未知模型'} | 项目：${log.projectId || '未知项目'}</div>
+            ${
+              hasError
+                ? `<div class="log-error-hint">失败原因：点击下方按钮查看原文</div>
+                   <button class="mini-btn log-detail-toggle" data-toggle-detail="${detailId}">查看错误原文</button>
+                   <div class="log-detail" id="${detailId}"><pre>${detailText}</pre></div>`
+                : ''
+            }
+          </div>
+          <div class="log-status">${log.success ? '成功' : '失败'}</div>
+        </div>
+      `;
+    })
+    .join('');
+
+  if (logPaginationInfo) {
+    logPaginationInfo.textContent = `第 ${logCurrentPage} / ${totalPages} 页，共 ${logsData.length} 条`;
+  }
+  if (logPrevPageBtn) logPrevPageBtn.disabled = logCurrentPage === 1;
+  if (logNextPageBtn) logNextPageBtn.disabled = logCurrentPage === totalPages;
+  bindLogDetailToggles();
+}
+
+async function loadHourlyUsage() {
+  if (!hourlyUsageEl) return;
+  hourlyUsageEl.textContent = '加载中...';
+  try {
+    const data = await fetchJson('/admin/logs/usage');
+    const usageMap = new Map();
+    (data.usage || []).forEach(item => {
+      if (!item) return;
+      usageMap.set(item.projectId || '未知项目', item);
+    });
+
+    const merged = (accountsData.length ? accountsData : Array.from(usageMap.values()))
+      .map(acc => {
+        const projectId = acc.projectId || acc.project || acc.id || '未知项目';
+        const stats = usageMap.get(projectId) || acc || {};
+        const usage = acc.usage || {};
+
+        const totalCalls = usage.total ?? stats.count ?? 0;
+        const successCalls = usage.success ?? stats.success ?? 0;
+        const failedCalls = usage.failed ?? stats.failed ?? 0;
+        const lastUsedAt = usage.lastUsedAt || stats.lastUsedAt || null;
+
+        const hasActivity =
+          (stats.count || 0) > 0 ||
+          (totalCalls || 0) > 0 ||
+          (successCalls || 0) > 0 ||
+          (failedCalls || 0) > 0 ||
+          !!lastUsedAt;
+
+        return {
+          projectId,
+          label: acc.projectId || acc.project || acc.label || `账号 #${(acc.index ?? 0) + 1}`,
+          count: stats.count || 0,
+          success: successCalls,
+          failed: failedCalls,
+          total: totalCalls,
+          lastUsedAt,
+          hasActivity
+        };
+      })
+      .filter(item => item.hasActivity);
+
+    const windowMinutes = data.windowMinutes || HOUR_WINDOW_MINUTES;
+    const limit = data.limitPerCredential || HOURLY_LIMIT;
+
+    if (!merged.length) {
+      hourlyUsageEl.textContent = '暂无最近 1 小时内的调用记录';
       return;
     }
-    logsEl.innerHTML = logs
-      .map(log => {
-        const time = log.timestamp ? new Date(log.timestamp).toLocaleString() : '未知时间';
-        const cls = log.success ? 'log-success' : 'log-fail';
+
+    const sorted = merged.sort((a, b) => {
+      const aTime = a.lastUsedAt ? Date.parse(a.lastUsedAt) : 0;
+      const bTime = b.lastUsedAt ? Date.parse(b.lastUsedAt) : 0;
+      if (aTime !== bTime) return bTime - aTime;
+      return (b.count || 0) - (a.count || 0);
+    });
+
+    const html = sorted
+      .map(item => {
+        const percent = Math.min(100, Math.round(((item.count || 0) / limit) * 100));
+        const lastUsedText = item.lastUsedAt ? new Date(item.lastUsedAt).toLocaleString() : '暂无';
         return `
-          <div class="log-item ${cls}">
-            <div>
-              <div class="log-time">${time}</div>
-              <div class="log-meta">模型：${log.model || '未知模型'} | 项目：${log.projectId || '未知项目'}</div>
+          <div class="log-usage-row">
+            <div class="log-usage-header">
+              <div class="log-usage-title">${escapeHtml(item.label)}</div>
+              <div class="log-usage-meta">${item.count || 0} / ${limit} 次 · ${windowMinutes} 分钟</div>
             </div>
-            <div class="log-status">${log.success ? '成功' : '失败'}</div>
+            <div class="progress-bar" aria-label="${escapeHtml(item.label)} 用量">
+              <div class="progress" style="width:${percent}%;"></div>
+            </div>
+            <div class="log-usage-stats">
+              <div class="log-usage-stat">
+                <span class="stat-label">总调用</span>
+                <span class="stat-value">${item.total || 0}</span>
+              </div>
+              <div class="log-usage-stat">
+                <span class="stat-label">成功 / 失败</span>
+                <span class="stat-value">${item.success || 0} / ${item.failed || 0}</span>
+              </div>
+              <div class="log-usage-stat">
+                <span class="stat-label">最近使用</span>
+                <span class="stat-value">${escapeHtml(lastUsedText)}</span>
+              </div>
+            </div>
           </div>
         `;
       })
       .join('');
+
+    hourlyUsageEl.innerHTML = html;
   } catch (e) {
-    logsEl.textContent = '加载日志失败: ' + e.message;
+    hourlyUsageEl.textContent = '加载用量失败: ' + e.message;
   }
 }
 
@@ -386,9 +656,38 @@ if (prevPageBtn) {
 
 if (nextPageBtn) {
   nextPageBtn.addEventListener('click', () => {
-    const totalPages = Math.max(1, Math.ceil(accountsData.length / PAGE_SIZE));
+    const totalPages = Math.max(1, Math.ceil(filteredAccounts.length / PAGE_SIZE));
     currentPage = Math.min(totalPages, currentPage + 1);
     renderAccountsList();
+  });
+}
+
+if (logPrevPageBtn) {
+  logPrevPageBtn.addEventListener('click', () => {
+    logCurrentPage = Math.max(1, logCurrentPage - 1);
+    renderLogs();
+  });
+}
+
+if (logNextPageBtn) {
+  logNextPageBtn.addEventListener('click', () => {
+    const totalPages = Math.max(1, Math.ceil(logsData.length / LOG_PAGE_SIZE));
+    logCurrentPage = Math.min(totalPages, logCurrentPage + 1);
+    renderLogs();
+  });
+}
+
+if (statusFilterSelect) {
+  statusFilterSelect.addEventListener('change', () => {
+    statusFilter = statusFilterSelect.value || 'all';
+    updateFilteredAccounts();
+  });
+}
+
+if (errorFilterCheckbox) {
+  errorFilterCheckbox.addEventListener('change', () => {
+    errorOnly = !!errorFilterCheckbox.checked;
+    updateFilteredAccounts();
   });
 }
 
@@ -414,8 +713,54 @@ if (refreshBtn) {
   refreshBtn.addEventListener('click', () => {
     refreshAccounts();
     loadLogs();
+    loadHourlyUsage();
+  });
+}
+
+if (logsRefreshBtn) {
+  logsRefreshBtn.addEventListener('click', async () => {
+    try {
+      logsRefreshBtn.disabled = true;
+      logsRefreshBtn.textContent = '刷新中...';
+      await loadLogs();
+    } finally {
+      logsRefreshBtn.textContent = '🔄 刷新日志';
+      logsRefreshBtn.disabled = false;
+    }
+  });
+}
+
+if (usageRefreshBtn) {
+  usageRefreshBtn.addEventListener('click', async () => {
+    try {
+      usageRefreshBtn.disabled = true;
+      usageRefreshBtn.textContent = '刷新中...';
+      renderUsageSummary(accountsData);
+      await loadHourlyUsage();
+      setStatus('用量已刷新', 'success', usageStatusEl);
+    } catch (e) {
+      setStatus('刷新用量失败: ' + e.message, 'error', usageStatusEl);
+    } finally {
+      usageRefreshBtn.textContent = '🔄 刷新用量';
+      usageRefreshBtn.disabled = false;
+    }
+  });
+}
+
+if (settingsRefreshBtn) {
+  settingsRefreshBtn.addEventListener('click', async () => {
+    try {
+      settingsRefreshBtn.disabled = true;
+      settingsRefreshBtn.textContent = '刷新中...';
+      await loadSettings();
+    } finally {
+      settingsRefreshBtn.textContent = '🔄 刷新配置';
+      settingsRefreshBtn.disabled = false;
+    }
   });
 }
 
 refreshAccounts();
 loadLogs();
+loadHourlyUsage();
+loadSettings();

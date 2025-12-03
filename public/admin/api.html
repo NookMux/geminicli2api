@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Antigravity API 文档</title>
+  <link rel="stylesheet" href="/admin/panel.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div>
+        <h1>Antigravity API 文档</h1>
+        <p>以下接口均需在请求头中携带 <code>Authorization: Bearer $API_KEY</code>。</p>
+      </div>
+      <a class="refresh-btn" href="/admin/" rel="noopener">← 返回控制台</a>
+    </header>
+
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <div class="eyebrow">认证</div>
+          <h2>API Key</h2>
+          <p>所有接口均使用环境变量 <code>API_KEY</code> 校验，未通过校验将返回 <code>401</code>。</p>
+        </div>
+      </div>
+      <div class="card-body">
+        <ul>
+          <li>请求头：<code>Authorization: Bearer &lt;API_KEY&gt;</code></li>
+          <li>Content-Type：对于 POST 请求请使用 <code>application/json</code></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <div class="eyebrow">凭证清单</div>
+          <h2>GET /v1/lits</h2>
+          <p>返回所有已启用的凭证名称（projectId）及当前小时用量与剩余额度。</p>
+        </div>
+      </div>
+      <div class="card-body">
+        <p><strong>请求示例</strong></p>
+        <pre><code>GET /v1/lits
+Authorization: Bearer &lt;API_KEY&gt;</code></pre>
+        <p><strong>响应示例</strong></p>
+        <pre><code>{
+  "credentials": [
+    {"name": "project-1", "used_per_hour": 3, "remaining_per_hour": 17},
+    {"name": "project-2", "used_per_hour": 0, "remaining_per_hour": 20}
+  ],
+  "windowMinutes": 60,
+  "limitPerCredential": 20,
+  "updatedAt": "2025-01-01T00:00:00.000Z"
+}</code></pre>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <div class="eyebrow">OpenAI 兼容</div>
+          <h2>POST /v1/chat/completions</h2>
+          <p>与 OpenAI <code>/v1/chat/completions</code> 兼容，按系统配置的每小时限额自动轮换凭证。</p>
+        </div>
+      </div>
+      <div class="card-body">
+        <p><strong>请求示例</strong></p>
+        <pre><code>POST /v1/chat/completions
+Authorization: Bearer &lt;API_KEY&gt;
+Content-Type: application/json
+
+{
+  "model": "gemini-pro",
+  "stream": true,
+  "messages": [
+    {"role": "user", "content": "你好"}
+  ]
+}</code></pre>
+        <p><strong>响应示例（流式片段）</strong></p>
+        <pre><code>data: {"id":"chatcmpl-...","object":"chat.completion.chunk",...}
+...
+data: [DONE]</code></pre>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <div class="eyebrow">按凭证直连</div>
+          <h2>POST /{credential}/v1/chat/completions</h2>
+          <p>指定凭证（projectId）执行 OpenAI 规范聊天接口，不受每小时用量限制。</p>
+        </div>
+      </div>
+      <div class="card-body">
+        <p><strong>请求示例</strong></p>
+        <pre><code>POST /project-1/v1/chat/completions
+Authorization: Bearer &lt;API_KEY&gt;
+Content-Type: application/json
+
+{
+  "model": "gemini-pro",
+  "messages": [
+    {"role": "user", "content": "使用指定凭证回复我"}
+  ]
+}</code></pre>
+        <p><strong>响应示例（非流式）</strong></p>
+        <pre><code>{
+  "id": "chatcmpl-...",
+  "object": "chat.completion",
+  "created": 1735689600,
+  "model": "gemini-pro",
+  "choices": [
+    {
+      "index": 0,
+      "message": {"role": "assistant", "content": "好的，这是按指定凭证生成的回复。"},
+      "finish_reason": "stop"
+    }
+  ]
+}</code></pre>
+        <p>当凭证不可用或被停用时返回 <code>404</code>，不会计入轮询用量。</p>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

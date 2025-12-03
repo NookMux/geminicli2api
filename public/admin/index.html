@@ -21,6 +21,8 @@
       <button class="tab-btn" data-tab-target="manage">管理凭证</button>
       <button class="tab-btn" data-tab-target="usage">凭证用量</button>
       <button class="tab-btn" data-tab-target="logs">调用日志</button>
+      <button class="tab-btn" data-tab-target="settings">系统设置</button>
+      <button class="tab-btn" data-tab-target="api-docs">API 文档</button>
     </div>
 
     <section class="card tab-panel active" data-tab="auth">
@@ -86,6 +88,20 @@
           <button id="refreshBtn" class="refresh-btn">刷新列表</button>
         </div>
       </div>
+      <div class="filter-row">
+        <label class="filter-field">
+          <span>状态筛选</span>
+          <select id="statusFilter" class="input select">
+            <option value="all">全部</option>
+            <option value="enabled">仅启用</option>
+            <option value="disabled">仅停用</option>
+          </select>
+        </label>
+        <label class="filter-field checkbox-row">
+          <input type="checkbox" id="errorFilter" />
+          <span>仅显示有报错的凭证</span>
+        </label>
+      </div>
       <div class="status-row">
         <span id="manageStatus" class="badge" style="display:none;"></span>
       </div>
@@ -104,8 +120,22 @@
         <div>
           <div class="eyebrow">步骤 3</div>
           <h2>凭证用量</h2>
-          <p>只显示有调用记录的凭证。</p>
+          <p>只显示有调用记录的凭证，按最近使用排序，并展示最近一小时的限额进度及累计调用数据。</p>
         </div>
+        <button id="usageRefreshBtn" class="refresh-btn">🔄 刷新用量</button>
+      </div>
+      <div class="status-row">
+        <span id="usageStatus" class="badge" style="display:none;"></span>
+      </div>
+      <div class="log-usage-card">
+        <div class="log-usage-head">
+          <div>
+            <div class="eyebrow">每小时用量</div>
+            <h3>凭证 20 次 / 小时 限额</h3>
+            <p>按浏览器时区计算当前小时的调用占比。</p>
+          </div>
+        </div>
+        <div id="hourlyUsage" class="log-usage-list">加载中...</div>
       </div>
       <div id="usageSummary" class="summary-grid">暂无使用记录</div>
     </section>
@@ -117,8 +147,51 @@
           <h2>调用日志</h2>
           <p>精确到秒，记录使用的模型以及调用结果。</p>
         </div>
+        <button id="logsRefreshBtn" class="refresh-btn">🔄 刷新日志</button>
       </div>
-      <div id="logs" class="logs">加载中...</div>
+      <div class="logs-body">
+        <div class="pagination-bar logs-pagination">
+          <div id="logPaginationInfo" class="pagination-info">加载中...</div>
+          <div class="pagination-controls">
+            <button id="logPrevPageBtn" class="mini-btn">上一页</button>
+            <button id="logNextPageBtn" class="mini-btn">下一页</button>
+          </div>
+        </div>
+        <div id="logs" class="logs">加载中...</div>
+      </div>
+    </section>
+
+    <section class="card tab-panel" data-tab="settings">
+      <div class="card-header">
+        <div>
+          <div class="eyebrow">环境变量</div>
+          <h2>当前配置</h2>
+          <p>查看面板、网络、生成参数和限额配置，敏感信息会自动加密展示。</p>
+        </div>
+        <div class="card-actions">
+          <button id="settingsRefreshBtn" class="refresh-btn">🔄 刷新配置</button>
+        </div>
+      </div>
+      <div class="status-row">
+        <span id="settingsStatus" class="badge" style="display:none;"></span>
+      </div>
+      <div id="settingsGrid" class="settings-grid">加载中...</div>
+    </section>
+
+    <section class="card tab-panel" data-tab="api-docs">
+      <div class="card-header">
+        <div>
+          <div class="eyebrow">API 参考</div>
+          <h2>查看全部接口与示例</h2>
+          <p>跳转到独立页面查看 API 端点、请求示例和返回格式，不与控制台页面混合。</p>
+        </div>
+        <div class="card-actions">
+          <a class="refresh-btn" href="/admin/api.html" target="_blank" rel="noopener">↗ 打开 API 文档</a>
+        </div>
+      </div>
+      <div class="card-body">
+        <p>新页面将列出所有可用 API，包括凭证清单、限额说明、OpenAI 兼容的聊天接口以及按凭证固定的免限额调用示例。</p>
+      </div>
     </section>
   </div>
 

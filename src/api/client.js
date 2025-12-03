@@ -85,29 +85,143 @@ function buildGeminiRequest(model, requestBody = {}, token) {
   };
 }
 
-// 统一错误处理
-async function handleApiError(error, token) {
-  const status = error.response?.status || error.status || 'Unknown';
-  let errorBody = error.message;
-  
-  if (error.response?.data?.readable) {
+function statusFromStatusText(statusText) {
+  if (!statusText) return null;
+
+  const normalized = String(statusText).toUpperCase();
+  if (normalized === 'RESOURCE_EXHAUSTED') return 429;
+  if (normalized === 'INTERNAL') return 500;
+  if (normalized === 'UNAUTHENTICATED') return 401;
+
+  const numeric = parseInt(statusText, 10);
+  return Number.isNaN(numeric) ? null : numeric;
+}
+
+function parseRetryDelayMs(errorInfo, message) {
+  let retryDelayMs = null;
+
+  const retryDetail = errorInfo?.details?.find(
+    detail => typeof detail === 'object' && detail['@type']?.includes('RetryInfo')
+  );
+
+  if (retryDetail?.retryDelay) {
+    const secondsMatch = /([0-9]+(?:\.[0-9]+)?)s/.exec(retryDetail.retryDelay);
+    if (secondsMatch) {
+      retryDelayMs = Math.ceil(parseFloat(secondsMatch[1]) * 1000);
+    }
+  }
+
+  if (!retryDelayMs && typeof message === 'string') {
+    const messageMatch = /retry in ([0-9]+(?:\.[0-9]+)?)s/i.exec(message);
+    if (messageMatch) {
+      retryDelayMs = Math.ceil(parseFloat(messageMatch[1]) * 1000);
+    }
+  }
+
+  return retryDelayMs;
+}
+
+function detectEmbeddedError(body) {
+  if (!body) return null;
+
+  try {
+    const parsed = typeof body === 'string' ? JSON.parse(body) : body;
+    if (!parsed?.error) return null;
+
+    const status = statusFromStatusText(parsed.error.code || parsed.error.status);
+    const retryDelayMs = parseRetryDelayMs(parsed.error, parsed.error.message || body);
+
+    return {
+      status,
+      message: JSON.stringify(parsed.error, null, 2),
+      retryDelayMs,
+      disableToken: status === 401
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function extractErrorDetails(error) {
+  let status = statusFromStatusText(error?.status || error?.statusCode || error?.response?.status);
+  let message = error?.message || error?.response?.statusText || 'Unknown error';
+  let retryDelayMs = error?.retryDelayMs || null;
+  let disableToken = error?.disableToken === true;
+
+  if (error?.response?.data?.readable) {
     const chunks = [];
     for await (const chunk of error.response.data) {
       chunks.push(chunk);
     }
-    errorBody = Buffer.concat(chunks).toString();
-  } else if (typeof error.response?.data === 'object') {
-    errorBody = JSON.stringify(error.response.data, null, 2);
-  } else if (error.response?.data) {
-    errorBody = error.response.data;
+    message = Buffer.concat(chunks).toString();
+  } else if (typeof error?.response?.data === 'object') {
+    message = JSON.stringify(error.response.data, null, 2);
+  } else if (error?.response?.data) {
+    message = error.response.data;
+  } else if (error?.message && error?.message !== message) {
+    message = error.message;
   }
-  
-  if (status === 403) {
+
+  const embeddedError = detectEmbeddedError(message);
+  if (embeddedError) {
+    status = embeddedError.status ?? status;
+    retryDelayMs = embeddedError.retryDelayMs ?? retryDelayMs;
+    disableToken = embeddedError.disableToken || disableToken;
+    message = embeddedError.message;
+  }
+
+  return {
+    status: status ?? 'Unknown',
+    message,
+    retryDelayMs,
+    disableToken
+  };
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function withRetry(operation, token) {
+  const maxAttempts = Math.max(config.retry?.maxAttempts || 1, 1);
+  const retryStatusCodes = config.retry?.statusCodes?.length
+    ? config.retry.statusCodes
+    : [429, 500];
+
+  let attempt = 0;
+  while (attempt < maxAttempts) {
+    try {
+      return await operation();
+    } catch (error) {
+      const details = await extractErrorDetails(error);
+
+      if (details.disableToken || details.status === 401) {
+        tokenManager.disableCurrentToken(token);
+        throw error;
+      }
+
+      const shouldRetry = retryStatusCodes.includes(details.status);
+      if (!shouldRetry || attempt === maxAttempts - 1) {
+        throw error;
+      }
+
+      const delayMs = details.retryDelayMs ?? Math.min(1000 * (attempt + 1), 5000);
+      await delay(delayMs);
+      attempt += 1;
+    }
+  }
+}
+
+// 统一错误处理
+async function handleApiError(error, token) {
+  const details = await extractErrorDetails(error);
+
+  if (details.status === 403 || details.status === 401 || details.disableToken) {
     tokenManager.disableCurrentToken(token);
-    throw new Error(`该账号没有使用权限，已自动禁用。错误详情: ${errorBody}`);
+    throw new Error(`该账号没有使用权限或凭证失效，已自动禁用。错误详情: ${details.message}`);
   }
-  
-  throw new Error(`API请求失败 (${status}): ${errorBody}`);
+
+  throw new Error(`API请求失败 (${details.status}): ${details.message}`);
 }
 
 // 转换 functionCall 为 OpenAI 格式
@@ -123,12 +237,35 @@ function convertToToolCall(functionCall) {
 }
 
 // 解析并发送流式响应片段（会修改 state 并触发 callback）
+function toOpenAiUsage(usageMetadata) {
+  if (!usageMetadata) return null;
+
+  const prompt = usageMetadata.promptTokenCount ?? usageMetadata.inputTokenCount ?? null;
+  const completion = usageMetadata.candidatesTokenCount ?? usageMetadata.outputTokenCount ?? null;
+  const total =
+    usageMetadata.totalTokenCount ??
+    (Number.isFinite(prompt) && Number.isFinite(completion) ? prompt + completion : null);
+  const inferredCompletion =
+    completion ?? (Number.isFinite(total) && Number.isFinite(prompt) ? Math.max(total - prompt, 0) : total);
+
+  return {
+    prompt_tokens: prompt,
+    completion_tokens: inferredCompletion,
+    total_tokens:
+      total ?? (Number.isFinite(prompt) && Number.isFinite(inferredCompletion) ? prompt + inferredCompletion : null)
+  };
+}
+
 function parseAndEmitStreamChunk(line, state, callback) {
   if (!line.startsWith('data: ')) return;
   
   try {
     const data = JSON.parse(line.slice(6));
     const parts = data.response?.candidates?.[0]?.content?.parts;
+
+    if (data.response?.usageMetadata) {
+      state.usage = toOpenAiUsage(data.response.usageMetadata);
+    }
     
     if (parts) {
       for (const part of parts) {
@@ -170,9 +307,9 @@ function parseAndEmitStreamChunk(line, state, callback) {
 // ==================== 导出函数 ====================
 
 export async function generateAssistantResponse(requestBody, token, callback) {
-  
+
   const headers = buildHeaders(token);
-  const state = { thinkingStarted: false, toolCalls: [] };
+  const state = { thinkingStarted: false, toolCalls: [], usage: null };
   let buffer = ''; // 缓冲区：处理跨 chunk 的不完整行
   
   const processChunk = (chunk) => {
@@ -181,22 +318,21 @@ export async function generateAssistantResponse(requestBody, token, callback) {
     buffer = lines.pop(); // 保留最后一行（可能不完整）
     lines.forEach(line => parseAndEmitStreamChunk(line, state, callback));
   };
-  
-  if (useAxios) {
-    try {
-      const axiosConfig = { ...buildAxiosConfig(config.api.url, headers, requestBody), responseType: 'stream' };
-      const response = await axios(axiosConfig);
-      
-      response.data.on('data', chunk => processChunk(chunk.toString()));
-      await new Promise((resolve, reject) => {
-        response.data.on('end', resolve);
-        response.data.on('error', reject);
-      });
-    } catch (error) {
-      await handleApiError(error, token);
-    }
-  } else {
-    try {
+
+  try {
+    await withRetry(async () => {
+      if (useAxios) {
+        const axiosConfig = { ...buildAxiosConfig(config.api.url, headers, requestBody), responseType: 'stream' };
+        const response = await axios(axiosConfig);
+
+        response.data.on('data', chunk => processChunk(chunk.toString()));
+        await new Promise((resolve, reject) => {
+          response.data.on('end', resolve);
+          response.data.on('error', reject);
+        });
+        return;
+      }
+
       const streamResponse = requester.antigravity_fetchStream(config.api.url, buildRequesterConfig(headers, requestBody));
       let errorBody = '';
       let statusCode = null;
@@ -208,10 +344,12 @@ export async function generateAssistantResponse(requestBody, token, callback) {
           .onEnd(() => statusCode !== 200 ? reject({ status: statusCode, message: errorBody }) : resolve())
           .onError(reject);
       });
-    } catch (error) {
-      await handleApiError(error, token);
-    }
+    }, token);
+  } catch (error) {
+    await handleApiError(error, token);
   }
+
+  return { usage: state.usage };
 }
 
 export async function getAvailableModels() {
@@ -219,20 +357,29 @@ export async function getAvailableModels() {
   if (!token) throw new Error('没有可用的token，请运行 npm run login 获取token');
   
   const headers = buildHeaders(token);
-  
+
   try {
-    let data;
-    if (useAxios) {
-      data = (await axios(buildAxiosConfig(config.api.modelsUrl, headers, {}))).data;
-    } else {
-      const response = await requester.antigravity_fetch(config.api.modelsUrl, buildRequesterConfig(headers, {}));
-      if (response.status !== 200) {
-        const errorBody = await response.text();
-        throw { status: response.status, message: errorBody };
+    const data = await withRetry(async () => {
+      if (useAxios) {
+        return (await axios(buildAxiosConfig(config.api.modelsUrl, headers, {}))).data;
       }
-      data = await response.json();
-    }
-    
+
+      const response = await requester.antigravity_fetch(config.api.modelsUrl, buildRequesterConfig(headers, {}));
+      const bodyText = await response.text();
+      const embeddedError = detectEmbeddedError(bodyText);
+
+      if (response.status !== 200 || embeddedError) {
+        throw {
+          status: embeddedError?.status ?? response.status,
+          message: embeddedError?.message ?? bodyText,
+          retryDelayMs: embeddedError?.retryDelayMs,
+          disableToken: embeddedError?.disableToken
+        };
+      }
+
+      return JSON.parse(bodyText);
+    }, token);
+
     return {
       object: 'list',
       data: Object.keys(data.models).map(id => ({
@@ -251,24 +398,35 @@ export async function generateAssistantResponseNoStream(requestBody, token) {
 
   const headers = buildHeaders(token);
   let data;
-  
+
   try {
-    if (useAxios) {
-      data = (await axios(buildAxiosConfig(config.api.noStreamUrl, headers, requestBody))).data;
-    } else {
-      const response = await requester.antigravity_fetch(config.api.noStreamUrl, buildRequesterConfig(headers, requestBody));
-      if (response.status !== 200) {
-        const errorBody = await response.text();
-        throw { status: response.status, message: errorBody };
+    data = await withRetry(async () => {
+      if (useAxios) {
+        return (await axios(buildAxiosConfig(config.api.noStreamUrl, headers, requestBody))).data;
       }
-      data = await response.json();
-    }
+
+      const response = await requester.antigravity_fetch(config.api.noStreamUrl, buildRequesterConfig(headers, requestBody));
+      const bodyText = await response.text();
+      const embeddedError = detectEmbeddedError(bodyText);
+
+      if (response.status !== 200 || embeddedError) {
+        throw {
+          status: embeddedError?.status ?? response.status,
+          message: embeddedError?.message ?? bodyText,
+          retryDelayMs: embeddedError?.retryDelayMs,
+          disableToken: embeddedError?.disableToken
+        };
+      }
+
+      return JSON.parse(bodyText);
+    }, token);
   } catch (error) {
     await handleApiError(error, token);
   }
   
   // 解析响应内容
   const parts = data.response?.candidates?.[0]?.content?.parts || [];
+  const usage = toOpenAiUsage(data.response?.usageMetadata);
   let content = '';
   let thinkingContent = '';
   const toolCalls = [];
@@ -300,7 +458,7 @@ export async function generateAssistantResponseNoStream(requestBody, token) {
     return { content: markdown, toolCalls };
   }
   
-  return { content, toolCalls };
+  return { content, toolCalls, usage };
 }
 
 export function closeRequester() {
@@ -311,21 +469,20 @@ export async function streamGeminiContent(model, requestBody, token, onChunk) {
   const headers = buildHeaders(token);
   const payload = buildGeminiRequest(model, requestBody, token);
 
-  if (useAxios) {
-    try {
-      const axiosConfig = { ...buildAxiosConfig(config.api.url, headers, payload), responseType: 'stream' };
-      const response = await axios(axiosConfig);
+  try {
+    await withRetry(async () => {
+      if (useAxios) {
+        const axiosConfig = { ...buildAxiosConfig(config.api.url, headers, payload), responseType: 'stream' };
+        const response = await axios(axiosConfig);
 
-      response.data.on('data', chunk => onChunk(chunk.toString()));
-      await new Promise((resolve, reject) => {
-        response.data.on('end', resolve);
-        response.data.on('error', reject);
-      });
-    } catch (error) {
-      await handleApiError(error, token);
-    }
-  } else {
-    try {
+        response.data.on('data', chunk => onChunk(chunk.toString()));
+        await new Promise((resolve, reject) => {
+          response.data.on('end', resolve);
+          response.data.on('error', reject);
+        });
+        return;
+      }
+
       const streamResponse = requester.antigravity_fetchStream(
         config.api.url,
         buildRequesterConfig(headers, payload)
@@ -342,9 +499,9 @@ export async function streamGeminiContent(model, requestBody, token, onChunk) {
           .onEnd(() => (statusCode !== 200 ? reject({ status: statusCode, message: errorBody }) : resolve()))
           .onError(reject);
       });
-    } catch (error) {
-      await handleApiError(error, token);
-    }
+    }, token);
+  } catch (error) {
+    await handleApiError(error, token);
   }
 }
 
@@ -353,19 +510,28 @@ export async function generateGeminiContent(model, requestBody, token) {
   const payload = buildGeminiRequest(model, requestBody, token);
 
   try {
-    if (useAxios) {
-      return (await axios(buildAxiosConfig(config.api.noStreamUrl, headers, payload))).data;
-    }
+    return await withRetry(async () => {
+      if (useAxios) {
+        return (await axios(buildAxiosConfig(config.api.noStreamUrl, headers, payload))).data;
+      }
 
-    const response = await requester.antigravity_fetch(
-      config.api.noStreamUrl,
-      buildRequesterConfig(headers, payload)
-    );
-    if (response.status !== 200) {
-      const errorBody = await response.text();
-      throw { status: response.status, message: errorBody };
-    }
-    return response.json();
+      const response = await requester.antigravity_fetch(
+        config.api.noStreamUrl,
+        buildRequesterConfig(headers, payload)
+      );
+      const bodyText = await response.text();
+      const embeddedError = detectEmbeddedError(bodyText);
+
+      if (response.status !== 200 || embeddedError) {
+        throw {
+          status: embeddedError?.status ?? response.status,
+          message: embeddedError?.message ?? bodyText,
+          retryDelayMs: embeddedError?.retryDelayMs,
+          disableToken: embeddedError?.disableToken
+        };
+      }
+      return JSON.parse(bodyText);
+    }, token);
   } catch (error) {
     await handleApiError(error, token);
   }

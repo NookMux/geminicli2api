@@ -13,6 +13,7 @@
 - ✅ 思维链（Thinking）输出
 - ✅ 图片输入支持（Base64 编码）
 - ✅ 直接暴露 OpenAI 兼容接口（/v1/chat/completions 与 /v1/models），可被官方 SDK 直接调用
+- ✅ 凭证用量查询与指定凭证直连调用（/v1/lits、/{credential}/v1/chat/completions）
 
 ## 环境要求
 
@@ -67,6 +68,7 @@ Docker 部署时支持以下环境变量配置：
 -e PORT=8045
 -e HOST=0.0.0.0
 -e API_KEY=sk-text
+-e CREDENTIAL_MAX_USAGE_PER_HOUR=20  # 单个凭证的每小时调用上限，可按需调整
 
 # 代理配置（如需要）
 -e PROXY=http://host.docker.internal:7897
@@ -148,6 +150,48 @@ for await (const chunk of completion) {
 ```
 
 ### 使用 cURL 调用
+
+### 查询凭证用量（GET /v1/lits）
+
+> 需要携带 `Authorization: Bearer <API_KEY>`
+
+```bash
+curl http://localhost:8045/v1/lits \
+  -H "Authorization: Bearer sk-text"
+```
+
+响应示例：
+
+```json
+{
+  "credentials": [
+    { "name": "project-123", "used_per_hour": 2, "remaining_per_hour": 18 },
+    { "name": "project-abc", "used_per_hour": 0, "remaining_per_hour": 20 }
+  ],
+  "windowMinutes": 60,
+  "limitPerCredential": 20,
+  "updatedAt": "2024-12-01T12:00:00.000Z"
+}
+```
+
+`remaining_per_hour` 为 `null` 时表示未启用限速。
+
+### 指定凭证直连调用（POST /{credential}/v1/chat/completions）
+
+> 仍需携带 `Authorization: Bearer <API_KEY>`，但该路径**不受全局每小时用量限制**，适合排查单个凭证可用性。
+
+```bash
+curl http://localhost:8045/my-credential/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-text" \
+  -d '{
+    "model": "gemini-2.0-flash-exp",
+    "messages": [{"role": "user", "content": "你好"}],
+    "stream": false
+  }'
+```
+
+凭证名称取自 `/v1/lits` 返回的 `name` 字段。
 
 ### 获取模型列表
 
@@ -288,6 +332,11 @@ curl http://localhost:8045/gemini/v1beta/models/gemini-2.0-flash-exp:streamGener
 - `enable: false` 可禁用某个账号
 - Token 过期会自动刷新
 - 刷新失败（403）会自动禁用并切换下一个账号
+
+### 管理面板与可视化 API 文档
+
+- 管理入口：`/admin/login`，登录后跳转 `/admin/oauth` 管理 Google 账号与 Token。
+- 文档入口：管理面板顶部提供 “API 文档” 选项卡，点击会在新标签页打开 `/admin/api.html`，集中展示当前可用接口、请求参数和返回示例，便于复制调用。
 
 ## 配置说明
 

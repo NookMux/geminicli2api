@@ -17,7 +17,12 @@ import logger from '../utils/logger.js';
 import config from '../config/config.js';
 import tokenManager from '../auth/token_manager.js';
 import { buildAuthUrl, exchangeCodeForToken } from '../auth/oauth_client.js';
-import { appendLog, getRecentLogs, getUsageSummary } from '../utils/log_store.js';
+import {
+  appendLog,
+  getRecentLogs,
+  getUsageCountsWithinWindow,
+  getUsageSummary
+} from '../utils/log_store.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,6 +33,236 @@ const OAUTH_STATE = crypto.randomUUID();
 const PANEL_USER = process.env.PANEL_USER || 'admin';
 const PANEL_PASSWORD = process.env.PANEL_PASSWORD || null;
 const PANEL_SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 管理面板登录有效期：2 小时
+
+function normalizeValue(value) {
+  if (value === undefined || value === null) return null;
+  if (Array.isArray(value)) return value.join(', ');
+  if (typeof value === 'object') return JSON.stringify(value);
+  return value;
+}
+
+function maskSecret(value) {
+  if (value === undefined || value === null) return null;
+  const str = String(value);
+  if (!str) return null;
+  if (str.length <= 4) return '****';
+  return `${str.slice(0, 2)}${'*'.repeat(Math.max(4, str.length - 4))}${str.slice(-2)}`;
+}
+
+function buildSettingsSummary() {
+  const groups = new Map();
+
+  SETTINGS_DEFINITIONS.forEach(def => {
+    const envValue = process.env[def.key];
+    const envNormalized = normalizeValue(envValue);
+    const defaultNormalized = normalizeValue(def.defaultValue ?? null);
+    const resolved = normalizeValue(def.valueResolver ? def.valueResolver() : envValue ?? def.defaultValue);
+
+    const isDefault =
+      envValue === undefined ||
+      envValue === null ||
+      envValue === '' ||
+      (defaultNormalized !== null && envNormalized === String(defaultNormalized));
+
+    const item = {
+      key: def.key,
+      label: def.label || def.key,
+      value: def.sensitive ? maskSecret(resolved) : resolved,
+      defaultValue: defaultNormalized,
+      source: isDefault ? 'default' : 'env',
+      sensitive: !!def.sensitive,
+      isDefault,
+      isMissing: resolved === null,
+      description: def.description || ''
+    };
+
+    const groupName = def.category || '未分组';
+    if (!groups.has(groupName)) {
+      groups.set(groupName, { name: groupName, items: [] });
+    }
+    groups.get(groupName).items.push(item);
+  });
+
+  return Array.from(groups.values());
+}
+
+const SETTINGS_DEFINITIONS = [
+  {
+    key: 'PANEL_USER',
+    label: '面板登录用户名',
+    category: '面板与安全',
+    defaultValue: 'admin',
+    valueResolver: () => PANEL_USER
+  },
+  {
+    key: 'PANEL_PASSWORD',
+    label: '面板登录密码',
+    category: '面板与安全',
+    defaultValue: null,
+    sensitive: true,
+    valueResolver: () => (PANEL_PASSWORD ? '已配置' : null),
+    description: '用于保护管理界面，未配置将拒绝启动'
+  },
+  {
+    key: 'API_KEY',
+    label: 'API 密钥',
+    category: '面板与安全',
+    defaultValue: null,
+    sensitive: true,
+    valueResolver: () => process.env.API_KEY || null,
+    description: '保护 /v1/* 端点的访问'
+  },
+  {
+    key: 'MAX_REQUEST_SIZE',
+    label: '最大请求体',
+    category: '面板与安全',
+    defaultValue: '50mb',
+    valueResolver: () => config.security.maxRequestSize
+  },
+  {
+    key: 'PORT',
+    label: '服务端口',
+    category: '服务与网络',
+    defaultValue: 8045,
+    valueResolver: () => config.server.port
+  },
+  {
+    key: 'HOST',
+    label: '监听地址',
+    category: '服务与网络',
+    defaultValue: '0.0.0.0',
+    valueResolver: () => process.env.HOST || config.server.host
+  },
+  {
+    key: 'API_URL',
+    label: '流式接口 URL',
+    category: '服务与网络',
+    defaultValue:
+      'https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:streamGenerateContent?alt=sse',
+    valueResolver: () => config.api.url
+  },
+  {
+    key: 'API_MODELS_URL',
+    label: '模型列表 URL',
+    category: '服务与网络',
+    defaultValue: 'https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:fetchAvailableModels',
+    valueResolver: () => config.api.modelsUrl
+  },
+  {
+    key: 'API_NO_STREAM_URL',
+    label: '非流式接口 URL',
+    category: '服务与网络',
+    defaultValue:
+      'https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:generateContent',
+    valueResolver: () => config.api.noStreamUrl
+  },
+  {
+    key: 'API_HOST',
+    label: 'API Host 头',
+    category: '服务与网络',
+    defaultValue: 'daily-cloudcode-pa.sandbox.googleapis.com',
+    valueResolver: () => config.api.host
+  },
+  {
+    key: 'API_USER_AGENT',
+    label: 'User-Agent',
+    category: '服务与网络',
+    defaultValue: 'antigravity/1.11.3 windows/amd64',
+    valueResolver: () => config.api.userAgent
+  },
+  {
+    key: 'PROXY',
+    label: 'HTTP 代理',
+    category: '服务与网络',
+    defaultValue: null,
+    valueResolver: () => config.proxy
+  },
+  {
+    key: 'TIMEOUT',
+    label: '请求超时(ms)',
+    category: '服务与网络',
+    defaultValue: 180000,
+    valueResolver: () => config.timeout
+  },
+  {
+    key: 'USE_NATIVE_AXIOS',
+    label: '使用原生 Axios',
+    category: '服务与网络',
+    defaultValue: 'false',
+    valueResolver: () => config.useNativeAxios
+  },
+  {
+    key: 'DEFAULT_TEMPERATURE',
+    label: '默认温度',
+    category: '生成参数',
+    defaultValue: 1,
+    valueResolver: () => config.defaults.temperature
+  },
+  {
+    key: 'DEFAULT_TOP_P',
+    label: '默认 top_p',
+    category: '生成参数',
+    defaultValue: 0.85,
+    valueResolver: () => config.defaults.top_p
+  },
+  {
+    key: 'DEFAULT_TOP_K',
+    label: '默认 top_k',
+    category: '生成参数',
+    defaultValue: 50,
+    valueResolver: () => config.defaults.top_k
+  },
+  {
+    key: 'DEFAULT_MAX_TOKENS',
+    label: '默认最大 Tokens',
+    category: '生成参数',
+    defaultValue: 8096,
+    valueResolver: () => config.defaults.max_tokens
+  },
+  {
+    key: 'SYSTEM_INSTRUCTION',
+    label: '系统提示词',
+    category: '生成参数',
+    defaultValue:
+      '你是聊天机器人，名字叫萌萌，如同名字这般，你的性格是软软糯糯萌萌哒的，专门为用户提供聊天和情绪价值，协助进行小说创作或者角色扮演',
+    valueResolver: () => config.systemInstruction
+  },
+  {
+    key: 'CREDENTIAL_MAX_USAGE_PER_HOUR',
+    label: '凭证每小时调用上限',
+    category: '限额与重试',
+    defaultValue: 20,
+    valueResolver: () => config.credentials.maxUsagePerHour
+  },
+  {
+    key: 'RETRY_STATUS_CODES',
+    label: '重试状态码',
+    category: '限额与重试',
+    defaultValue: '429,500',
+    valueResolver: () => config.retry.statusCodes
+  },
+  {
+    key: 'RETRY_MAX_ATTEMPTS',
+    label: '最大重试次数',
+    category: '限额与重试',
+    defaultValue: 3,
+    valueResolver: () => config.retry.maxAttempts
+  },
+  {
+    key: 'MAX_IMAGES',
+    label: '图片保存上限',
+    category: '限额与重试',
+    defaultValue: 10,
+    valueResolver: () => config.maxImages
+  },
+  {
+    key: 'IMAGE_BASE_URL',
+    label: '图片访问基础 URL',
+    category: '限额与重试',
+    defaultValue: null,
+    valueResolver: () => config.imageBaseUrl
+  }
+];
 
 // 为了防止误配置导致管理面板完全裸露，这里强制要求配置 PANEL_PASSWORD
 if (!PANEL_PASSWORD) {
@@ -69,20 +304,21 @@ const setStreamHeaders = res => {
   res.setHeader('Connection', 'keep-alive');
 };
 
-const createStreamChunk = (id, created, model, delta, finish_reason = null) => ({
+const createStreamChunk = (id, created, model, delta, finish_reason = null, usage = null) => ({
   id,
   object: 'chat.completion.chunk',
   created,
   model,
-  choices: [{ index: 0, delta, finish_reason }]
+  choices: [{ index: 0, delta, finish_reason }],
+  ...(usage ? { usage } : {})
 });
 
 const writeStreamData = (res, data) => {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 };
 
-const endStream = (res, id, created, model, finish_reason) => {
-  writeStreamData(res, createStreamChunk(id, created, model, {}, finish_reason));
+const endStream = (res, id, created, model, finish_reason, usage = null) => {
+  writeStreamData(res, createStreamChunk(id, created, model, {}, finish_reason, usage));
   res.write('data: [DONE]\n\n');
   res.end();
 };
@@ -124,9 +360,14 @@ app.get('/', (req, res) => {
   return res.redirect('/admin/login');
 });
 
-// API key check for /v1/* 和 /gemini/* endpoints（API_KEY 在启动时强制要求配置）
+// API key check for /v1/*、/gemini/* 以及 /{credential}/v1/* endpoints（API_KEY 在启动时强制要求配置）
+const isProtectedApiPath = pathname => {
+  const normalized = pathname || '';
+  return /^\/(?:[\w-]+\/)?v1\//.test(normalized) || normalized.startsWith('/gemini/');
+};
+
 app.use((req, res, next) => {
-  if (req.path.startsWith('/v1/') || req.path.startsWith('/gemini/')) {
+  if (isProtectedApiPath(req.path)) {
     const apiKey = config.security?.apiKey;
     if (apiKey) {
       const authHeader = req.headers.authorization;
@@ -248,6 +489,9 @@ function normalizeTomlAccount(raw) {
   const accessToken = raw.access_token ?? raw.accessToken;
   const refreshToken = raw.refresh_token ?? raw.refreshToken;
 
+  // 只导入在 TOML 中显式标记 disabled = true 的账号，其它全部跳过
+  if (raw.disabled !== true) return null;
+
   if (!accessToken || !refreshToken) return null;
 
   const normalized = {
@@ -257,7 +501,8 @@ function normalizeTomlAccount(raw) {
       ? Number(raw.expires_in ?? raw.expiresIn)
       : 3600,
     timestamp: parseTimestamp(raw),
-    enable: raw.disabled === true ? false : raw.enable !== false
+    // 导入后在本系统中默认启用
+    enable: true
   };
 
   const projectId = raw.projectId ?? raw.project_id;
@@ -414,21 +659,16 @@ app.post('/admin/logout', (req, res) => {
 
 // Return Google OAuth URL as JSON for front-end
 // 前端现在采用“手动粘贴回调 URL”模式，这里仍然返回带 redirect_uri 的完整授权链接
-app.get('/auth/oauth/url', requirePanelAuthApi, (req, res) => {
-  const host = req.headers['x-forwarded-host'] || req.headers.host;
-  const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'http')
-    .toString()
-    .split(',')[0];
-  const base = `${proto}://${host}`;
-  const redirectUri = `${base}/auth/oauth/callback`;
+  app.get('/auth/oauth/url', requirePanelAuthApi, (req, res) => {
+    const redirectUri = `http://localhost:${config.server.port}/oauth-callback`;
 
-  const url = buildAuthUrl(redirectUri, OAUTH_STATE);
-  res.json({ url });
-});
+    const url = buildAuthUrl(redirectUri, OAUTH_STATE);
+    res.json({ url });
+  });
 
 // 仅作为提示页面使用：不再在这里直接交换 token
 // 用户在完成授权后，需要复制浏览器地址栏中的完整 URL，回到管理面板粘贴，由新的解析接口处理
-app.get('/auth/oauth/callback', (req, res) => {
+app.get(['/oauth-callback', '/auth/oauth/callback'], (req, res) => {
   return res.send(
     '<!DOCTYPE html>' +
       '<html lang="zh-CN"><head><meta charset="utf-8" />' +
@@ -647,6 +887,21 @@ app.post('/auth/accounts/:index/enable', requirePanelAuthApi, (req, res) => {
   }
 });
 
+app.get('/admin/settings', requirePanelAuthApi, (req, res) => {
+  res.json({
+    updatedAt: new Date().toISOString(),
+    groups: buildSettingsSummary()
+  });
+});
+
+app.get('/admin/logs/usage', requirePanelAuthApi, (req, res) => {
+  const windowMinutes = 60;
+  const limitPerCredential = 20;
+  const usage = getUsageCountsWithinWindow(windowMinutes * 60 * 1000);
+
+  res.json({ windowMinutes, limitPerCredential, usage, updatedAt: new Date().toISOString() });
+});
+
 // Recent request logs
 app.get('/admin/logs', requirePanelAuthApi, (req, res) => {
   const limit = req.query.limit ? Number.parseInt(req.query.limit, 10) : 200;
@@ -671,27 +926,21 @@ app.use('/admin', (req, res, next) => {
 
 // ===== API routes =====
 
-app.get('/v1/models', async (req, res) => {
-  try {
-    const models = await getAvailableModels();
-    res.json(models);
-  } catch (error) {
-    logger.error('获取模型列表失败:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/v1/chat/completions', async (req, res) => {
+const createChatCompletionHandler = (resolveToken, options = {}) => async (req, res) => {
   const { messages, model, stream = true, tools, ...params } = req.body || {};
 
+  let token = null;
   try {
     if (!messages) {
       return res.status(400).json({ error: 'messages is required' });
     }
 
-    const token = await tokenManager.getToken();
+    token = await resolveToken(req);
     if (!token) {
-      throw new Error('没有可用的 token，请先通过 OAuth 面板或 npm run login 获取。');
+      const message =
+        options.tokenMissingError || '没有可用的 token，请先通过 OAuth 面板或 npm run login 获取。';
+      const status = options.tokenMissingStatus || 503;
+      return res.status(status).json({ error: message });
     }
 
     const isImageModel = typeof model === 'string' && model.includes('-image');
@@ -715,12 +964,12 @@ app.post('/v1/chat/completions', async (req, res) => {
       setStreamHeaders(res);
 
       if (isImageModel) {
-        const { content } = await generateAssistantResponseNoStream(requestBody, token);
+        const { content, usage } = await generateAssistantResponseNoStream(requestBody, token);
         writeStreamData(res, createStreamChunk(id, created, model, { content }));
-        endStream(res, id, created, model, 'stop');
+        endStream(res, id, created, model, 'stop', usage);
       } else {
         let hasToolCall = false;
-        await generateAssistantResponse(requestBody, token, data => {
+        const { usage } = await generateAssistantResponse(requestBody, token, data => {
           const delta =
             data.type === 'tool_calls'
               ? { tool_calls: data.tool_calls }
@@ -728,10 +977,10 @@ app.post('/v1/chat/completions', async (req, res) => {
           if (data.type === 'tool_calls') hasToolCall = true;
           writeStreamData(res, createStreamChunk(id, created, model, delta));
         });
-        endStream(res, id, created, model, hasToolCall ? 'tool_calls' : 'stop');
+        endStream(res, id, created, model, hasToolCall ? 'tool_calls' : 'stop', usage);
       }
     } else {
-      const { content, toolCalls } = await generateAssistantResponseNoStream(
+      const { content, toolCalls, usage } = await generateAssistantResponseNoStream(
         requestBody,
         token
       );
@@ -749,7 +998,8 @@ app.post('/v1/chat/completions', async (req, res) => {
             message,
             finish_reason: toolCalls.length > 0 ? 'tool_calls' : 'stop'
           }
-        ]
+        ],
+        usage: usage || null
       });
     }
 
@@ -764,7 +1014,7 @@ app.post('/v1/chat/completions', async (req, res) => {
     appendLog({
       timestamp: new Date().toISOString(),
       model: model || req.body?.model || 'unknown',
-      projectId: null,
+      projectId: token?.projectId || null,
       success: false,
       message: error.message
     });
@@ -780,7 +1030,8 @@ app.post('/v1/chat/completions', async (req, res) => {
         );
         endStream(res, id, created, model || 'unknown', 'stop');
       } else {
-        res.json({
+        const status = error.statusCode || 500;
+        res.status(status).json({
           id,
           object: 'chat.completion',
           created,
@@ -796,7 +1047,54 @@ app.post('/v1/chat/completions', async (req, res) => {
       }
     }
   }
+};
+
+app.get('/v1/models', async (req, res) => {
+  try {
+    const models = await getAvailableModels();
+    res.json(models);
+  } catch (error) {
+    logger.error('获取模型列表失败:', error.message);
+    res.status(500).json({ error: error.message });
+  }
 });
+
+app.get('/v1/lits', (req, res) => {
+  const limitPerCredential = Number.isFinite(Number(config.credentials?.maxUsagePerHour))
+    ? Number(config.credentials.maxUsagePerHour)
+    : null;
+  const usageMap = new Map(
+    getUsageCountsWithinWindow(60 * 60 * 1000).map(item => [item.projectId, item.count])
+  );
+
+  const credentials = (tokenManager.tokens || [])
+    .filter(token => token.enable !== false)
+    .map(token => {
+      const used = usageMap.get(token.projectId) || 0;
+      const remaining = limitPerCredential === null ? null : Math.max(limitPerCredential - used, 0);
+      return {
+        name: token.projectId,
+        used_per_hour: used,
+        remaining_per_hour: remaining
+      };
+    });
+
+  res.json({
+    credentials,
+    windowMinutes: 60,
+    limitPerCredential,
+    updatedAt: new Date().toISOString()
+  });
+});
+
+app.post('/v1/chat/completions', createChatCompletionHandler(() => tokenManager.getToken()));
+app.post(
+  '/:credential/v1/chat/completions',
+  createChatCompletionHandler(
+    req => tokenManager.getTokenByProjectId(req.params.credential),
+    { tokenMissingError: '指定的凭证不存在或已停用，请检查凭证名。', tokenMissingStatus: 404 }
+  )
+);
 
 app.post(/^\/gemini\/v1beta\/models\/([^/]+):streamGenerateContent$/, async (req, res) => {
   const model = req.params[0];

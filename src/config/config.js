@@ -30,6 +30,9 @@ TIMEOUT=180000
 # PROXY=http://127.0.0.1:7897
 MAX_IMAGES=10 # 最多保存的图片个数，超过就会删除时间最旧的
 # IMAGE_BASE_URL=http://your-domain.com  # 可选：自定义图片访问基础 URL，默认使用 局域网ip或者本地回环
+CREDENTIAL_MAX_USAGE_PER_HOUR=20
+RETRY_STATUS_CODES=429,500
+RETRY_MAX_ATTEMPTS=3
 
 
 # 系统提示词
@@ -66,6 +69,16 @@ const config = {
   security: {
     maxRequestSize: process.env.MAX_REQUEST_SIZE || '50mb',
     apiKey: process.env.API_KEY || null
+  },
+  credentials: {
+    maxUsagePerHour: parseInt(process.env.CREDENTIAL_MAX_USAGE_PER_HOUR, 10) || 20
+  },
+  retry: {
+    statusCodes: (process.env.RETRY_STATUS_CODES || '429,500')
+      .split(',')
+      .map(code => parseInt(code.trim(), 10))
+      .filter(code => !Number.isNaN(code)),
+    maxAttempts: parseInt(process.env.RETRY_MAX_ATTEMPTS, 10) || 3
   },
   useNativeAxios: process.env.USE_NATIVE_AXIOS !== 'false',
   timeout: parseInt(process.env.TIMEOUT) || 30000,
