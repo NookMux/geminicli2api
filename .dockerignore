@@ -18,3 +18,9 @@ cover/
 .coverage/
 dist/
 build/
+test/
+Tests/
+Docs/
+docs/
+scripts/
+scripts/**

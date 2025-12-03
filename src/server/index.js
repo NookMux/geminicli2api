@@ -19,6 +19,7 @@ import tokenManager from '../auth/token_manager.js';
 import { buildAuthUrl, exchangeCodeForToken } from '../auth/oauth_client.js';
 import {
   appendLog,
+  getLogDetail,
   getRecentLogs,
   getUsageCountsWithinWindow,
   getUsageSummary
@@ -33,6 +34,39 @@ const OAUTH_STATE = crypto.randomUUID();
 const PANEL_USER = process.env.PANEL_USER || 'admin';
 const PANEL_PASSWORD = process.env.PANEL_PASSWORD || null;
 const PANEL_SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 管理面板登录有效期：2 小时
+const SENSITIVE_HEADERS = ['authorization', 'cookie'];
+
+function sanitizeHeaders(headers = {}) {
+  const result = {};
+  Object.entries(headers || {}).forEach(([key, value]) => {
+    result[key] = SENSITIVE_HEADERS.includes(String(key).toLowerCase()) ? '[REDACTED]' : value;
+  });
+  return result;
+}
+
+function createRequestSnapshot(req) {
+  return {
+    path: req.originalUrl,
+    method: req.method,
+    headers: sanitizeHeaders(req.headers),
+    query: req.query,
+    body: req.body
+  };
+}
+
+function summarizeStreamEvents(events = []) {
+  const summary = { text: '', tool_calls: null, thinking: '' };
+  events.forEach(event => {
+    if (event?.type === 'tool_calls') {
+      summary.tool_calls = event.tool_calls;
+    } else if (event?.type === 'thinking') {
+      summary.thinking += event.content || '';
+    } else if (event?.content) {
+      summary.text += event.content;
+    }
+  });
+  return summary;
+}
 
 function normalizeValue(value) {
   if (value === undefined || value === null) return null;
@@ -896,7 +930,9 @@ app.get('/admin/settings', requirePanelAuthApi, (req, res) => {
 
 app.get('/admin/logs/usage', requirePanelAuthApi, (req, res) => {
   const windowMinutes = 60;
-  const limitPerCredential = 20;
+  const limitPerCredential = Number.isFinite(Number(config.credentials.maxUsagePerHour))
+    ? Number(config.credentials.maxUsagePerHour)
+    : null;
   const usage = getUsageCountsWithinWindow(windowMinutes * 60 * 1000);
 
   res.json({ windowMinutes, limitPerCredential, usage, updatedAt: new Date().toISOString() });
@@ -906,6 +942,12 @@ app.get('/admin/logs/usage', requirePanelAuthApi, (req, res) => {
 app.get('/admin/logs', requirePanelAuthApi, (req, res) => {
   const limit = req.query.limit ? Number.parseInt(req.query.limit, 10) : 200;
   res.json({ logs: getRecentLogs(limit) });
+});
+
+app.get('/admin/logs/:id', requirePanelAuthApi, (req, res) => {
+  const detail = getLogDetail(req.params.id);
+  if (!detail) return res.status(404).json({ error: '日志不存在或已过期' });
+  res.json({ log: detail });
 });
 
 // Minimal HTML admin panel for OAuth (served as static file)
@@ -928,11 +970,40 @@ app.use('/admin', (req, res, next) => {
 
 const createChatCompletionHandler = (resolveToken, options = {}) => async (req, res) => {
   const { messages, model, stream = true, tools, ...params } = req.body || {};
+  const startedAt = Date.now();
+  const requestSnapshot = createRequestSnapshot(req);
+  const streamEventsForLog = [];
+  let responseBodyForLog = null;
+  let responseSummaryForLog = null;
 
   let token = null;
+  const writeLog = ({ success, status, message }) => {
+    appendLog({
+      timestamp: new Date().toISOString(),
+      model: model || req.body?.model || 'unknown',
+      projectId: token?.projectId || null,
+      success,
+      status,
+      message,
+      durationMs: Date.now() - startedAt,
+      path: req.originalUrl,
+      method: req.method,
+      detail: {
+        request: requestSnapshot,
+        response: {
+          status,
+          headers: res.getHeaders ? res.getHeaders() : undefined,
+          body: responseBodyForLog,
+          modelOutput: responseSummaryForLog
+        }
+      }
+    });
+  };
   try {
     if (!messages) {
-      return res.status(400).json({ error: 'messages is required' });
+      res.status(400).json({ error: 'messages is required' });
+      writeLog({ success: false, status: 400, message: 'messages is required' });
+      return;
     }
 
     token = await resolveToken(req);
@@ -940,7 +1011,9 @@ const createChatCompletionHandler = (resolveToken, options = {}) => async (req, 
       const message =
         options.tokenMissingError || '没有可用的 token，请先通过 OAuth 面板或 npm run login 获取。';
       const status = options.tokenMissingStatus || 503;
-      return res.status(status).json({ error: message });
+      res.status(status).json({ error: message });
+      writeLog({ success: false, status, message });
+      return;
     }
 
     const isImageModel = typeof model === 'string' && model.includes('-image');
@@ -967,9 +1040,12 @@ const createChatCompletionHandler = (resolveToken, options = {}) => async (req, 
         const { content, usage } = await generateAssistantResponseNoStream(requestBody, token);
         writeStreamData(res, createStreamChunk(id, created, model, { content }));
         endStream(res, id, created, model, 'stop', usage);
+        responseBodyForLog = { stream: true, image: true, usage, content };
+        responseSummaryForLog = { text: content };
       } else {
         let hasToolCall = false;
         const { usage } = await generateAssistantResponse(requestBody, token, data => {
+          streamEventsForLog.push(data);
           const delta =
             data.type === 'tool_calls'
               ? { tool_calls: data.tool_calls }
@@ -978,6 +1054,8 @@ const createChatCompletionHandler = (resolveToken, options = {}) => async (req, 
           writeStreamData(res, createStreamChunk(id, created, model, delta));
         });
         endStream(res, id, created, model, hasToolCall ? 'tool_calls' : 'stop', usage);
+        responseBodyForLog = { stream: true, events: streamEventsForLog, usage };
+        responseSummaryForLog = summarizeStreamEvents(streamEventsForLog);
       }
     } else {
       const { content, toolCalls, usage } = await generateAssistantResponseNoStream(
@@ -986,6 +1064,8 @@ const createChatCompletionHandler = (resolveToken, options = {}) => async (req, 
       );
       const message = { role: 'assistant', content };
       if (toolCalls.length > 0) message.tool_calls = toolCalls;
+
+      const finishReason = toolCalls.length > 0 ? 'tool_calls' : 'stop';
 
       res.json({
         id,
@@ -996,28 +1076,21 @@ const createChatCompletionHandler = (resolveToken, options = {}) => async (req, 
           {
             index: 0,
             message,
-            finish_reason: toolCalls.length > 0 ? 'tool_calls' : 'stop'
+            finish_reason: finishReason
           }
         ],
         usage: usage || null
       });
+      responseBodyForLog = { stream: false, choices: [{ message, finish_reason: finishReason }], usage };
+      responseSummaryForLog = { text: content, tool_calls: toolCalls, usage };
     }
 
-    appendLog({
-      timestamp: new Date().toISOString(),
-      model,
-      projectId: token?.projectId || null,
-      success: true
-    });
+    writeLog({ success: true, status: res.statusCode || 200 });
   } catch (error) {
     logger.error('生成响应失败:', error.message);
-    appendLog({
-      timestamp: new Date().toISOString(),
-      model: model || req.body?.model || 'unknown',
-      projectId: token?.projectId || null,
-      success: false,
-      message: error.message
-    });
+    responseBodyForLog = responseBodyForLog || { error: error.message };
+    const errorStatus = error.statusCode || (res.statusCode >= 400 ? res.statusCode : 500);
+    writeLog({ success: false, status: errorStatus, message: error.message });
     if (!res.headersSent) {
       const { id, created } = createResponseMeta();
       const errorContent = `错误: ${error.message}`;
@@ -1098,18 +1171,50 @@ app.post(
 
 app.post(/^\/gemini\/v1beta\/models\/([^/]+):streamGenerateContent$/, async (req, res) => {
   const model = req.params[0];
+  const startedAt = Date.now();
+  const requestSnapshot = createRequestSnapshot(req);
+  const capturedChunks = [];
+  let token = null;
+
+  const writeLog = ({ success, status, message, body }) =>
+    appendLog({
+      timestamp: new Date().toISOString(),
+      model,
+      projectId: token?.projectId || null,
+      success,
+      status,
+      message,
+      durationMs: Date.now() - startedAt,
+      path: req.originalUrl,
+      method: req.method,
+      detail: {
+        request: requestSnapshot,
+        response: {
+          status,
+          headers: res.getHeaders ? res.getHeaders() : undefined,
+          body: body ?? { stream: true, chunks: capturedChunks }
+        }
+      }
+    });
 
   try {
-    const token = await tokenManager.getToken();
+    token = await tokenManager.getToken();
     if (!token) {
       throw new Error('没有可用的 token，请先通过 OAuth 面板或 npm run login 获取。');
     }
 
     setStreamHeaders(res);
-    await streamGeminiContent(model, req.body || {}, token, chunk => res.write(chunk));
+    await streamGeminiContent(model, req.body || {}, token, chunk => {
+      capturedChunks.push(chunk);
+      res.write(chunk);
+    });
     res.end();
+
+    writeLog({ success: true, status: res.statusCode || 200 });
   } catch (error) {
     logger.error('Gemini 流式生成失败:', error.message);
+    const errorStatus = error.statusCode || (res.statusCode >= 400 ? res.statusCode : 500);
+    writeLog({ success: false, status: errorStatus, message: error.message });
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     } else {
@@ -1121,17 +1226,47 @@ app.post(/^\/gemini\/v1beta\/models\/([^/]+):streamGenerateContent$/, async (req
 
 app.post(/^\/gemini\/v1beta\/models\/([^/]+):generateContent$/, async (req, res) => {
   const model = req.params[0];
+  const startedAt = Date.now();
+  const requestSnapshot = createRequestSnapshot(req);
+  let responseBodyForLog = null;
+  let token = null;
+
+  const writeLog = ({ success, status, message }) =>
+    appendLog({
+      timestamp: new Date().toISOString(),
+      model,
+      projectId: token?.projectId || null,
+      success,
+      status,
+      message,
+      durationMs: Date.now() - startedAt,
+      path: req.originalUrl,
+      method: req.method,
+      detail: {
+        request: requestSnapshot,
+        response: {
+          status,
+          headers: res.getHeaders ? res.getHeaders() : undefined,
+          body: responseBodyForLog
+        }
+      }
+    });
 
   try {
-    const token = await tokenManager.getToken();
+    token = await tokenManager.getToken();
     if (!token) {
       throw new Error('没有可用的 token，请先通过 OAuth 面板或 npm run login 获取。');
     }
 
     const data = await generateGeminiContent(model, req.body || {}, token);
     res.json(data);
+    responseBodyForLog = data;
+
+    writeLog({ success: true, status: res.statusCode || 200 });
   } catch (error) {
     logger.error('Gemini 文本生成失败:', error.message);
+    const errorStatus = error.statusCode || (res.statusCode >= 400 ? res.statusCode : 500);
+    writeLog({ success: false, status: errorStatus, message: error.message });
     res.status(500).json({ error: error.message });
   }
 });

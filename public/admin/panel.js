@@ -10,7 +10,6 @@ const manageStatusEl = document.getElementById('manageStatus');
 const callbackUrlInput = document.getElementById('callbackUrlInput');
 const submitCallbackBtn = document.getElementById('submitCallbackBtn');
 const logsEl = document.getElementById('logs');
-const usageEl = document.getElementById('usageSummary');
 const usageStatusEl = document.getElementById('usageStatus');
 const settingsGrid = document.getElementById('settingsGrid');
 const settingsStatusEl = document.getElementById('settingsStatus');
@@ -43,6 +42,7 @@ let logsData = [];
 let logCurrentPage = 1;
 let statusFilter = 'all';
 let errorOnly = false;
+const logDetailCache = new Map();
 
 let replaceIndex = null;
 
@@ -99,6 +99,14 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+function formatJson(value) {
+  try {
+    return escapeHtml(JSON.stringify(value ?? {}, null, 2));
+  } catch (e) {
+    return escapeHtml(String(value));
+  }
+}
+
 function renderUsageCard(account) {
   const { usage = {} } = account;
   const models = usage.models && usage.models.length > 0 ? usage.models.join(', ') : '暂无数据';
@@ -113,14 +121,19 @@ function renderUsageCard(account) {
   `;
 }
 
-function hasUsageRecord(account) {
-  const usage = account?.usage || {};
-  return (
-    (usage.total ?? 0) > 0 ||
-    (usage.success ?? 0) > 0 ||
-    (usage.failed ?? 0) > 0 ||
-    !!usage.lastUsedAt
-  );
+function updateFilteredAccounts() {
+  filteredAccounts = accountsData.filter(acc => {
+    const matchesStatus =
+      statusFilter === 'all' || (statusFilter === 'enabled' && acc.enable) || (statusFilter === 'disabled' && !acc.enable);
+
+    const failedCount = acc?.usage?.failed || 0;
+    const matchesError = !errorOnly || failedCount > 0;
+
+    return matchesStatus && matchesError;
+  });
+
+  currentPage = 1;
+  renderAccountsList();
 }
 
 function updateFilteredAccounts() {
@@ -210,7 +223,6 @@ async function refreshAccounts() {
     const data = await fetchJson('/auth/accounts');
     accountsData = data.accounts || [];
     updateFilteredAccounts();
-    renderUsageSummary(accountsData);
     loadHourlyUsage();
   } catch (e) {
     listEl.textContent = '加载失败: ' + e.message;
@@ -292,27 +304,6 @@ async function deleteDisabledAccounts() {
   } finally {
     deleteDisabledBtn.disabled = false;
   }
-}
-
-function renderUsageSummary(accounts) {
-  if (!usageEl) return;
-  const activeAccounts = (accounts || []).filter(hasUsageRecord);
-  const summary = activeAccounts
-    .map(acc => {
-      const usage = acc.usage || {};
-      return `
-        <div class="summary-card">
-          <div class="summary-title">${acc.projectId || `账号 #${acc.index + 1}`}</div>
-          <div class="summary-row"><span>总调用</span><strong>${usage.total || 0}</strong></div>
-          <div class="summary-row"><span>成功 / 失败</span><strong>${usage.success || 0} / ${usage.failed || 0}</strong></div>
-          <div class="summary-row"><span>最近使用</span><strong>${
-        usage.lastUsedAt ? new Date(usage.lastUsedAt).toLocaleString() : '暂无'
-      }</strong></div>
-        </div>
-      `;
-    })
-    .join('');
-  usageEl.innerHTML = summary || '暂无使用记录';
 }
 
 function renderSettings(groups) {
@@ -401,16 +392,64 @@ async function loadLogs() {
   }
 }
 
+async function fetchLogDetail(logId) {
+  if (!logId) throw new Error('缺少日志 ID');
+  if (logDetailCache.has(logId)) return logDetailCache.get(logId);
+  const data = await fetchJson(`/admin/logs/${logId}`);
+  const detail = data.log;
+  logDetailCache.set(logId, detail);
+  return detail;
+}
+
+function renderLogDetailContent(detail, container) {
+  if (!container) return;
+  if (!detail) {
+    container.textContent = '未找到日志详情';
+    return;
+  }
+
+  const request = formatJson(detail.detail?.request);
+  const response = formatJson(detail.detail?.response);
+
+  container.innerHTML = `
+    <div class="log-detail-block">
+      <h4>请求</h4>
+      <pre>${request}</pre>
+    </div>
+    <div class="log-detail-block">
+      <h4>响应</h4>
+      <pre>${response}</pre>
+    </div>
+  `;
+}
+
 function bindLogDetailToggles() {
-  document.querySelectorAll('[data-toggle-detail]')?.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const targetId = btn.dataset.toggleDetail;
+  document.querySelectorAll('[data-log-id]')?.forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const targetId = btn.dataset.detailTarget;
       const detailEl = document.getElementById(targetId);
       if (!detailEl) return;
-      const isOpen = !detailEl.classList.contains('open');
-      detailEl.classList.toggle('open', isOpen);
-      detailEl.style.display = isOpen ? 'block' : 'none';
-      btn.textContent = isOpen ? '收起错误原文' : '查看错误原文';
+      const isOpen = detailEl.classList.contains('open');
+      if (isOpen) {
+        detailEl.classList.remove('open');
+        detailEl.style.display = 'none';
+        btn.textContent = '查看请求/响应详情';
+        return;
+      }
+
+      detailEl.style.display = 'block';
+      detailEl.textContent = '加载中...';
+      btn.disabled = true;
+      try {
+        const detail = await fetchLogDetail(btn.dataset.logId);
+        renderLogDetailContent(detail, detailEl);
+        detailEl.classList.add('open');
+        btn.textContent = '收起详情';
+      } catch (e) {
+        detailEl.textContent = '加载详情失败: ' + e.message;
+      } finally {
+        btn.disabled = false;
+      }
     });
   });
 }
@@ -437,20 +476,25 @@ function renderLogs() {
       const cls = log.success ? 'log-success' : 'log-fail';
       const hasError = !log.success;
       const detailId = `log-detail-${start + idx}`;
-      const detailText = hasError ? escapeHtml(log.message || '未返回错误信息') : '';
+      const statusText = log.status ? `HTTP ${log.status}` : log.success ? '成功' : '失败';
+      const durationText = log.durationMs ? `${log.durationMs} ms` : '未知耗时';
+      const pathText = `${log.method || '未知方法'} ${log.path || log.route || '未知路径'}`;
+      const errorHint = hasError && log.message ? `<div class="log-error-hint">失败原因：${escapeHtml(log.message)}</div>` : '';
+      const detailButton =
+        log.hasDetail && log.id
+          ? `<button class="mini-btn log-detail-toggle" data-log-id="${log.id}" data-detail-target="${detailId}">查看请求/响应详情</button>
+             <div class="log-detail" id="${detailId}"></div>`
+          : '';
 
       return `
         <div class="log-item ${cls}">
           <div class="log-content">
             <div class="log-time">${time}</div>
             <div class="log-meta">模型：${log.model || '未知模型'} | 项目：${log.projectId || '未知项目'}</div>
-            ${
-              hasError
-                ? `<div class="log-error-hint">失败原因：点击下方按钮查看原文</div>
-                   <button class="mini-btn log-detail-toggle" data-toggle-detail="${detailId}">查看错误原文</button>
-                   <div class="log-detail" id="${detailId}"><pre>${detailText}</pre></div>`
-                : ''
-            }
+            <div class="log-meta">${pathText}</div>
+            <div class="log-meta">${statusText} | ${durationText}</div>
+            ${errorHint}
+            ${detailButton}
           </div>
           <div class="log-status">${log.success ? '成功' : '失败'}</div>
         </div>
@@ -735,7 +779,6 @@ if (usageRefreshBtn) {
     try {
       usageRefreshBtn.disabled = true;
       usageRefreshBtn.textContent = '刷新中...';
-      renderUsageSummary(accountsData);
       await loadHourlyUsage();
       setStatus('用量已刷新', 'success', usageStatusEl);
     } catch (e) {

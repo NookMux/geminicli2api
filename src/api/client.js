@@ -8,6 +8,7 @@ import { saveBase64Image } from '../utils/imageStorage.js';
 // 请求客户端：优先使用 AntigravityRequester，失败则降级到 axios
 let requester = null;
 let useAxios = false;
+const REQUESTER_FALLBACK_ERROR_KEYWORDS = ['upstream error', 'do request failed', 'process closed'];
 
 if (config.useNativeAxios === true) {
   useAxios = true;
@@ -56,6 +57,27 @@ function buildRequesterConfig(headers, body = null) {
   };
   if (body !== null) reqConfig.body = JSON.stringify(body);
   return reqConfig;
+}
+
+function shouldFallbackToAxios(error) {
+  if (useAxios || !error) return false;
+
+  const message = String(error?.message || '').toLowerCase();
+  return REQUESTER_FALLBACK_ERROR_KEYWORDS.some(keyword => message.includes(keyword));
+}
+
+async function withRequesterFallback(fn) {
+  try {
+    return await fn(useAxios);
+  } catch (error) {
+    if (shouldFallbackToAxios(error)) {
+      console.warn('AntigravityRequester 调用失败，降级使用 axios:', error.message);
+      useAxios = true;
+      return await fn(useAxios);
+    }
+
+    throw error;
+  }
 }
 
 function buildGeminiRequest(model, requestBody = {}, token) {
@@ -320,8 +342,8 @@ export async function generateAssistantResponse(requestBody, token, callback) {
   };
 
   try {
-    await withRetry(async () => {
-      if (useAxios) {
+    await withRequesterFallback(async currentUseAxios => withRetry(async () => {
+      if (currentUseAxios) {
         const axiosConfig = { ...buildAxiosConfig(config.api.url, headers, requestBody), responseType: 'stream' };
         const response = await axios(axiosConfig);
 
@@ -344,7 +366,7 @@ export async function generateAssistantResponse(requestBody, token, callback) {
           .onEnd(() => statusCode !== 200 ? reject({ status: statusCode, message: errorBody }) : resolve())
           .onError(reject);
       });
-    }, token);
+    }, token));
   } catch (error) {
     await handleApiError(error, token);
   }
@@ -359,8 +381,8 @@ export async function getAvailableModels() {
   const headers = buildHeaders(token);
 
   try {
-    const data = await withRetry(async () => {
-      if (useAxios) {
+    const data = await withRequesterFallback(async currentUseAxios => withRetry(async () => {
+      if (currentUseAxios) {
         return (await axios(buildAxiosConfig(config.api.modelsUrl, headers, {}))).data;
       }
 
@@ -378,7 +400,7 @@ export async function getAvailableModels() {
       }
 
       return JSON.parse(bodyText);
-    }, token);
+    }, token));
 
     return {
       object: 'list',
@@ -400,8 +422,8 @@ export async function generateAssistantResponseNoStream(requestBody, token) {
   let data;
 
   try {
-    data = await withRetry(async () => {
-      if (useAxios) {
+    data = await withRequesterFallback(async currentUseAxios => withRetry(async () => {
+      if (currentUseAxios) {
         return (await axios(buildAxiosConfig(config.api.noStreamUrl, headers, requestBody))).data;
       }
 
@@ -419,7 +441,7 @@ export async function generateAssistantResponseNoStream(requestBody, token) {
       }
 
       return JSON.parse(bodyText);
-    }, token);
+    }, token));
   } catch (error) {
     await handleApiError(error, token);
   }
@@ -470,8 +492,8 @@ export async function streamGeminiContent(model, requestBody, token, onChunk) {
   const payload = buildGeminiRequest(model, requestBody, token);
 
   try {
-    await withRetry(async () => {
-      if (useAxios) {
+    await withRequesterFallback(async currentUseAxios => withRetry(async () => {
+      if (currentUseAxios) {
         const axiosConfig = { ...buildAxiosConfig(config.api.url, headers, payload), responseType: 'stream' };
         const response = await axios(axiosConfig);
 
@@ -499,7 +521,7 @@ export async function streamGeminiContent(model, requestBody, token, onChunk) {
           .onEnd(() => (statusCode !== 200 ? reject({ status: statusCode, message: errorBody }) : resolve()))
           .onError(reject);
       });
-    }, token);
+    }, token));
   } catch (error) {
     await handleApiError(error, token);
   }
@@ -510,8 +532,8 @@ export async function generateGeminiContent(model, requestBody, token) {
   const payload = buildGeminiRequest(model, requestBody, token);
 
   try {
-    return await withRetry(async () => {
-      if (useAxios) {
+    return await withRequesterFallback(async currentUseAxios => withRetry(async () => {
+      if (currentUseAxios) {
         return (await axios(buildAxiosConfig(config.api.noStreamUrl, headers, payload))).data;
       }
 
@@ -531,7 +553,7 @@ export async function generateGeminiContent(model, requestBody, token) {
         };
       }
       return JSON.parse(bodyText);
-    }, token);
+    }, token));
   } catch (error) {
     await handleApiError(error, token);
   }

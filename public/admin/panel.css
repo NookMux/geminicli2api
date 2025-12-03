@@ -389,45 +389,6 @@ button:disabled {
   color: var(--muted);
 }
 
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 10px;
-}
-
-.summary-card {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px;
-  background: var(--subtle-bg);
-}
-
-.summary-title {
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-
-.summary-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-  color: var(--text);
-}
-
-.models {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  font-size: 13px;
-}
-
-.model-pill {
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: var(--accent-bg);
-  color: var(--accent-text);
-}
-
 .logs {
   display: flex;
   flex-direction: column;
@@ -582,6 +543,16 @@ button:disabled {
   font-family: ui-monospace, SFMono-Regular, SFMono, Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;
   color: var(--text);
+}
+
+.log-detail-block {
+  margin-bottom: 10px;
+}
+
+.log-detail-block h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .log-status {
