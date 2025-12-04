@@ -77,6 +77,6 @@
 .login-form input[type="password"]:focus {
     border-color: var(--primary-color);
     outline: none;
-    box-shadow: 0 0 0 4px rgba(226, 145, 216, 0.15);
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.18);
     transform: translateY(-2px);
 }

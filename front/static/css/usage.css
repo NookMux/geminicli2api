@@ -35,7 +35,7 @@
 
 .usage-progress-bar {
     height: 8px;
-    background: rgba(226, 145, 216, 0.1);
+    background: rgba(59, 130, 246, 0.12);
     border-radius: 4px;
     overflow: hidden;
 }
@@ -89,9 +89,9 @@
 }
 
 .usage-btn {
-    background: rgba(226, 145, 216, 0.15);
+    background: rgba(59, 130, 246, 0.08);
     color: var(--text-primary);
-    border: 1px solid rgba(226, 145, 216, 0.2);
+    border: 1px solid rgba(59, 130, 246, 0.18);
     border-radius: 12px;
     padding: 8px 16px;
     font-size: 0.8rem;
@@ -104,18 +104,18 @@
 }
 
 .usage-btn:hover {
-    background: rgba(226, 145, 216, 0.25);
+    background: rgba(59, 130, 246, 0.16);
     transform: translateY(-2px);
 }
 
 .usage-btn.reset {
-    background-color: rgba(249, 216, 154, 0.2);
-    color: #b38b28;
-    border-color: rgba(249, 216, 154, 0.3);
+    background-color: rgba(245, 158, 11, 0.14);
+    color: #92400e;
+    border-color: rgba(245, 158, 11, 0.28);
 }
 
 .usage-btn.reset:hover {
-    background-color: rgba(249, 216, 154, 0.3);
+    background-color: rgba(245, 158, 11, 0.24);
 }
 
 /* --- 响应式设计 --- */
