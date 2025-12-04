@@ -355,7 +355,7 @@ curl http://localhost:8045/gemini/v1beta/models/gemini-2.0-flash-exp:streamGener
 | `USE_NATIVE_FETCH` | 使用原生 axios | false |
 | `TIMEOUT` | 请求超时时间（毫秒） | 30000 |
 | `PROXY` | 代理地址 | - |
-| `SYSTEM_INSTRUCTION` | 系统提示词 | - |
+| `SYSTEM_INSTRUCTION` | 自定义系统提示词（留空使用内置系统提示词） | - |
 
 完整配置示例请参考 `.env.example` 文件。
 

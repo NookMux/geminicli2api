@@ -3,7 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <title>Antigravity OAuth 管理</title>
+  <script>
+    try {
+      const saved = localStorage.getItem('ag-panel-theme');
+      if (saved) document.documentElement.setAttribute('data-theme', saved);
+    } catch (e) {}
+  </script>
   <link rel="stylesheet" href="/admin/panel.css" />
+  <script src="/admin/theme.js"></script>
 </head>
 <body>
   <div class="container">
@@ -12,7 +19,10 @@
         <h1>Antigravity OAuth 管理</h1>
         <p>登录后可以完成 Google 授权、刷新或删除凭证，并查看用量和调用日志。</p>
       </div>
-      <button id="logoutBtn" class="refresh-btn">退出登录</button>
+      <div class="header-actions">
+        <button id="themeToggleBtn" class="refresh-btn" type="button">🌙 暗色模式</button>
+        <button id="logoutBtn" class="refresh-btn">退出登录</button>
+      </div>
     </header>
 
     <div class="tabs">
@@ -70,6 +80,10 @@
           <input type="checkbox" id="replaceExisting" />
           <span>覆盖已存在的账号（勾选后将只保留本次导入的账号）</span>
         </label>
+        <label class="checkbox-row">
+          <input type="checkbox" id="filterDisabled" checked />
+          <span>仅导入启用的凭证（跳过 disabled = false 的账号）</span>
+        </label>
         <div class="inline-row">
           <span id="tomlStatus" class="badge" style="display:none;"></span>
         </div>
@@ -84,7 +98,10 @@
           <p>刷新、停用、删除或重新授权已保存的账户。</p>
         </div>
         <div class="card-actions">
-          <button id="deleteDisabledBtn" class="danger-btn">🗑️ 删除停用凭证</button>
+          <div class="action-group">
+            <button id="refreshAllBtn" class="refresh-btn">🔁 批量刷新</button>
+            <button id="deleteDisabledBtn" class="danger-btn">🗑️ 删除停用凭证</button>
+          </div>
           <button id="refreshBtn" class="refresh-btn">刷新列表</button>
         </div>
       </div>

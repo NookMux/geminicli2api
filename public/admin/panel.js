@@ -4,6 +4,7 @@ const statusEl = document.getElementById('status');
 const tomlStatusEl = document.getElementById('tomlStatus');
 const listEl = document.getElementById('accountsList');
 const refreshBtn = document.getElementById('refreshBtn');
+const refreshAllBtn = document.getElementById('refreshAllBtn');
 const logsRefreshBtn = document.getElementById('logsRefreshBtn');
 const hourlyUsageEl = document.getElementById('hourlyUsage');
 const manageStatusEl = document.getElementById('manageStatus');
@@ -17,6 +18,7 @@ const settingsRefreshBtn = document.getElementById('settingsRefreshBtn');
 const importTomlBtn = document.getElementById('importTomlBtn');
 const tomlInput = document.getElementById('tomlInput');
 const replaceExistingCheckbox = document.getElementById('replaceExisting');
+const filterDisabledCheckbox = document.getElementById('filterDisabled');
 const tabButtons = document.querySelectorAll('.tab-btn');
 const tabPanels = document.querySelectorAll('.tab-panel');
 const deleteDisabledBtn = document.getElementById('deleteDisabledBtn');
@@ -29,6 +31,7 @@ const logPrevPageBtn = document.getElementById('logPrevPageBtn');
 const logNextPageBtn = document.getElementById('logNextPageBtn');
 const statusFilterSelect = document.getElementById('statusFilter');
 const errorFilterCheckbox = document.getElementById('errorFilter');
+const themeToggleBtn = document.getElementById('themeToggleBtn');
 
 const HOUR_WINDOW_MINUTES = 60;
 const HOURLY_LIMIT = 20;
@@ -46,6 +49,11 @@ const logDetailCache = new Map();
 
 let replaceIndex = null;
 
+if (window.AgTheme) {
+  window.AgTheme.initTheme();
+  window.AgTheme.bindThemeToggle(themeToggleBtn);
+}
+
 function setStatus(text, type = 'info', target = statusEl) {
   if (!target) return;
   if (!text) {
@@ -56,20 +64,6 @@ function setStatus(text, type = 'info', target = statusEl) {
   target.className = `badge badge-${type}`;
   target.style.display = 'inline-block';
 }
-
-function isNightTime() {
-  const now = new Date();
-  const hour = now.getHours();
-  return hour >= 18 || hour < 6;
-}
-
-function applyAutoTheme() {
-  const theme = isNightTime() ? 'dark' : 'light';
-  document.documentElement.setAttribute('data-theme', theme);
-}
-
-applyAutoTheme();
-setInterval(applyAutoTheme, 10 * 60 * 1000);
 
 function activateTab(target) {
   tabButtons.forEach(btn => {
@@ -107,6 +101,15 @@ function formatJson(value) {
   }
 }
 
+function getAccountDisplayName(acc) {
+  if (!acc) return '未知账号';
+  if (acc.email) return acc.email;
+  if (acc.user_email) return acc.user_email;
+  if (acc.projectId) return acc.projectId;
+  if (typeof acc.index === 'number') return `账号 #${acc.index + 1}`;
+  return '未知账号';
+}
+
 function renderUsageCard(account) {
   const { usage = {} } = account;
   const models = usage.models && usage.models.length > 0 ? usage.models.join(', ') : '暂无数据';
@@ -136,19 +139,25 @@ function updateFilteredAccounts() {
   renderAccountsList();
 }
 
-function updateFilteredAccounts() {
-  filteredAccounts = accountsData.filter(acc => {
-    const matchesStatus =
-      statusFilter === 'all' || (statusFilter === 'enabled' && acc.enable) || (statusFilter === 'disabled' && !acc.enable);
+async function refreshAllAccountsBatch() {
+  if (!accountsData.length) {
+    setStatus('暂无凭证可刷新。', 'info', manageStatusEl);
+    return;
+  }
 
-    const failedCount = acc?.usage?.failed || 0;
-    const matchesError = !errorOnly || failedCount > 0;
+  if (refreshAllBtn) refreshAllBtn.disabled = true;
+  setStatus('正在批量刷新凭证...', 'info', manageStatusEl);
 
-    return matchesStatus && matchesError;
-  });
-
-  currentPage = 1;
-  renderAccountsList();
+  try {
+    const { refreshed = 0, failed = 0 } = await fetchJson('/auth/accounts/refresh-all', { method: 'POST' });
+    const message = `批量刷新完成：成功 ${refreshed} 个，失败 ${failed} 个。`;
+    setStatus(message, failed > 0 ? 'warning' : 'success', manageStatusEl);
+    await refreshAccounts();
+  } catch (e) {
+    setStatus('批量刷新失败: ' + e.message, 'error', manageStatusEl);
+  } finally {
+    if (refreshAllBtn) refreshAllBtn.disabled = false;
+  }
 }
 
 function bindAccountActions() {
@@ -248,23 +257,38 @@ function renderAccountsList() {
       const created = acc.createdAt ? new Date(acc.createdAt).toLocaleString() : '时间未知';
       const statusClass = acc.enable ? 'status-ok' : 'status-off';
       const statusText = acc.enable ? '启用中' : '已停用';
+      const displayName = escapeHtml(getAccountDisplayName(acc));
       return `
         <div class="account-item">
-          <div>
-            <div class="account-title">账号 #${acc.index + 1}${
-        acc.projectId ? ` <span class=\"badge\">${acc.projectId}</span>` : ''
+          <div class="account-header">
+            <div class="account-info">
+              <div class="account-title">${displayName}${
+        acc.projectId ? ` <span class="badge">${acc.projectId}</span>` : ''
       }</div>
-            <div class="account-meta">创建时间：${created}</div>
-            ${renderUsageCard(acc)}
+              <div class="account-meta">创建时间：${created}</div>
+            </div>
+            <div class="account-status">
+              <div class="status-pill ${statusClass}">${statusText}</div>
+            </div>
           </div>
-          <div class="account-actions">
-            <div class="status-pill ${statusClass}">${statusText}</div>
-            <button class="mini-btn" data-action="refresh" data-index="${acc.index}">刷新</button>
-            <button class="mini-btn" data-action="toggle" data-enable="${acc.enable}" data-index="${acc.index}">${
-        acc.enable ? '停用' : '启用'
+
+          <div class="account-content">
+            <div class="account-data">
+              ${renderUsageCard(acc)}
+            </div>
+
+            <div class="account-actions">
+              <div class="action-row primary">
+                <button class="mini-btn" data-action="refresh" data-index="${acc.index}">🔁 刷新</button>
+              </div>
+              <div class="action-row secondary">
+                <button class="mini-btn" data-action="toggle" data-enable="${acc.enable}" data-index="${acc.index}">${
+        acc.enable ? '⏸️ 停用' : '▶️ 启用'
       }</button>
-            <button class="mini-btn" data-action="reauthorize" data-index="${acc.index}">重新授权</button>
-            <button class="mini-btn danger" data-action="delete" data-index="${acc.index}">删除</button>
+                <button class="mini-btn" data-action="reauthorize" data-index="${acc.index}">🔑 重新授权</button>
+                <button class="mini-btn danger" data-action="delete" data-index="${acc.index}">🗑️ 删除</button>
+              </div>
+            </div>
           </div>
         </div>
       `;
@@ -408,23 +432,79 @@ function renderLogDetailContent(detail, container) {
     return;
   }
 
-  const request = formatJson(detail.detail?.request);
-  const response = formatJson(detail.detail?.response);
+  const requestSnapshot = detail.detail?.request;
+  const responseSnapshot = detail.detail?.response;
+  const modelAnswer =
+    responseSnapshot?.modelOutput ||
+    responseSnapshot?.body?.modelOutput ||
+    responseSnapshot?.body?.text ||
+    responseSnapshot?.body ||
+    responseSnapshot;
+
+  container.innerHTML = `
+    <details class="log-detail-section" open>
+      <summary>模型回答</summary>
+      <div class="log-detail-body">
+        <pre>${formatJson(modelAnswer || '暂无模型回答')}</pre>
+      </div>
+    </details>
+
+    <details class="log-detail-section">
+      <summary>用户完整请求体</summary>
+      <div class="log-detail-body">
+        <pre>${formatJson(requestSnapshot?.body || requestSnapshot || '暂无请求')}</pre>
+      </div>
+    </details>
+
+    <details class="log-detail-section">
+      <summary>全部请求/响应</summary>
+      <div class="log-detail-body">
+        <div class="log-detail-block">
+          <h4>请求</h4>
+          <pre>${formatJson(requestSnapshot)}</pre>
+        </div>
+        <div class="log-detail-block">
+          <h4>响应</h4>
+          <pre>${formatJson(responseSnapshot)}</pre>
+        </div>
+      </div>
+    </details>
+  `;
+}
+
+function renderErrorDetailContent(detail, container) {
+  if (!container) return;
+  if (!detail) {
+    container.textContent = '未找到错误详情';
+    return;
+  }
+
+  const requestSnapshot = detail.detail?.request;
+  const responseSnapshot = detail.detail?.response;
+  const errorSummary = { status: detail.status || null, message: detail.message || '未知错误' };
 
   container.innerHTML = `
     <div class="log-detail-block">
-      <h4>请求</h4>
-      <pre>${request}</pre>
+      <h4>错误摘要</h4>
+      <pre>${formatJson(errorSummary)}</pre>
     </div>
-    <div class="log-detail-block">
-      <h4>响应</h4>
-      <pre>${response}</pre>
-    </div>
+    <details class="log-detail-section" open>
+      <summary>响应内容</summary>
+      <div class="log-detail-body">
+        <pre>${formatJson(responseSnapshot?.body || responseSnapshot || '暂无响应')}</pre>
+      </div>
+    </details>
+    <details class="log-detail-section">
+      <summary>请求快照</summary>
+      <div class="log-detail-body">
+        <pre>${formatJson(requestSnapshot || '暂无请求')}</pre>
+      </div>
+    </details>
   `;
 }
 
 function bindLogDetailToggles() {
-  document.querySelectorAll('[data-log-id]')?.forEach(btn => {
+  document.querySelectorAll('.log-detail-toggle')?.forEach(btn => {
     btn.addEventListener('click', async () => {
       const targetId = btn.dataset.detailTarget;
       const detailEl = document.getElementById(targetId);
@@ -447,6 +527,35 @@ function bindLogDetailToggles() {
         btn.textContent = '收起详情';
       } catch (e) {
         detailEl.textContent = '加载详情失败: ' + e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+
+  document.querySelectorAll('.log-error-toggle')?.forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const targetId = btn.dataset.errorTarget;
+      const errorEl = document.getElementById(targetId);
+      if (!errorEl) return;
+      const isOpen = errorEl.classList.contains('open');
+      if (isOpen) {
+        errorEl.classList.remove('open');
+        errorEl.style.display = 'none';
+        btn.textContent = '查看错误';
+        return;
+      }
+
+      errorEl.style.display = 'block';
+      errorEl.textContent = '加载中...';
+      btn.disabled = true;
+      try {
+        const detail = await fetchLogDetail(btn.dataset.logId);
+        renderErrorDetailContent(detail, errorEl);
+        errorEl.classList.add('open');
+        btn.textContent = '收起错误';
+      } catch (e) {
+        errorEl.textContent = '加载错误详情失败: ' + e.message;
       } finally {
         btn.disabled = false;
       }
@@ -476,6 +585,7 @@ function renderLogs() {
       const cls = log.success ? 'log-success' : 'log-fail';
       const hasError = !log.success;
       const detailId = `log-detail-${start + idx}`;
+      const errorDetailId = `log-error-${start + idx}`;
       const statusText = log.status ? `HTTP ${log.status}` : log.success ? '成功' : '失败';
       const durationText = log.durationMs ? `${log.durationMs} ms` : '未知耗时';
       const pathText = `${log.method || '未知方法'} ${log.path || log.route || '未知路径'}`;
@@ -486,6 +596,12 @@ function renderLogs() {
              <div class="log-detail" id="${detailId}"></div>`
           : '';
 
+      const errorButton =
+        hasError && log.id
+          ? `<button class="mini-btn log-error-toggle" data-log-id="${log.id}" data-error-target="${errorDetailId}">查看错误</button>
+             <div class="log-error-detail" id="${errorDetailId}"></div>`
+          : '';
+
       return `
         <div class="log-item ${cls}">
           <div class="log-content">
@@ -494,6 +610,7 @@ function renderLogs() {
             <div class="log-meta">${pathText}</div>
             <div class="log-meta">${statusText} | ${durationText}</div>
             ${errorHint}
+            ${errorButton}
             ${detailButton}
           </div>
           <div class="log-status">${log.success ? '成功' : '失败'}</div>
@@ -541,7 +658,7 @@ async function loadHourlyUsage() {
 
         return {
           projectId,
-          label: acc.projectId || acc.project || acc.label || `账号 #${(acc.index ?? 0) + 1}`,
+          label: getAccountDisplayName(acc),
           count: stats.count || 0,
           success: successCalls,
           failed: failedCalls,
@@ -660,6 +777,7 @@ if (importTomlBtn && tomlInput) {
     }
 
     const replaceExisting = !!replaceExistingCheckbox?.checked;
+    const filterDisabled = filterDisabledCheckbox ? !!filterDisabledCheckbox.checked : true;
 
     try {
       importTomlBtn.disabled = true;
@@ -667,7 +785,7 @@ if (importTomlBtn && tomlInput) {
       const result = await fetchJson('/auth/accounts/import-toml', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ toml: content, replaceExisting })
+        body: JSON.stringify({ toml: content, replaceExisting, filterDisabled })
       });
 
       const summary = `导入成功：有效 ${result.imported ?? 0} 条，跳过 ${result.skipped ?? 0} 条，总计 ${result.total ?? 0} 个账号。`;
@@ -735,6 +853,18 @@ if (errorFilterCheckbox) {
   });
 }
 
+if (themeToggleBtn) {
+  themeToggleBtn.addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme') || 'light';
+    const next = current === 'dark' ? 'light' : 'dark';
+    if (autoThemeTimer) {
+      clearInterval(autoThemeTimer);
+      autoThemeTimer = null;
+    }
+    applyTheme(next);
+  });
+}
+
 if (logoutBtn) {
   logoutBtn.addEventListener('click', async () => {
     try {
@@ -758,6 +888,12 @@ if (refreshBtn) {
     refreshAccounts();
     loadLogs();
     loadHourlyUsage();
+  });
+}
+
+if (refreshAllBtn) {
+  refreshAllBtn.addEventListener('click', () => {
+    refreshAllAccountsBatch();
   });
 }
 

@@ -3,7 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <title>Antigravity API 文档</title>
+  <script>
+    try {
+      const saved = localStorage.getItem('ag-panel-theme');
+      if (saved) document.documentElement.setAttribute('data-theme', saved);
+    } catch (e) {}
+  </script>
   <link rel="stylesheet" href="/admin/panel.css" />
+  <script src="/admin/theme.js"></script>
 </head>
 <body>
   <div class="container">
@@ -12,7 +19,10 @@
         <h1>Antigravity API 文档</h1>
         <p>以下接口均需在请求头中携带 <code>Authorization: Bearer $API_KEY</code>。</p>
       </div>
-      <a class="refresh-btn" href="/admin/" rel="noopener">← 返回控制台</a>
+      <div class="header-actions">
+        <button id="apiThemeToggle" class="refresh-btn" type="button">🌙 切换为暗色</button>
+        <a class="refresh-btn" href="/admin/" rel="noopener">← 返回控制台</a>
+      </div>
     </header>
 
     <section class="card">
@@ -122,5 +132,8 @@ Content-Type: application/json
       </div>
     </section>
   </div>
+  <script>
+    window.AgTheme?.bindThemeToggle?.(document.getElementById('apiThemeToggle'));
+  </script>
 </body>
 </html>

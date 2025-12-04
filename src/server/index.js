@@ -257,8 +257,7 @@ const SETTINGS_DEFINITIONS = [
     key: 'SYSTEM_INSTRUCTION',
     label: '系统提示词',
     category: '生成参数',
-    defaultValue:
-      '你是聊天机器人，名字叫萌萌，如同名字这般，你的性格是软软糯糯萌萌哒的，专门为用户提供聊天和情绪价值，协助进行小说创作或者角色扮演',
+    defaultValue: '',
     valueResolver: () => config.systemInstruction
   },
   {
@@ -485,6 +484,7 @@ function readAccountsSafe() {
     return data.map((acc, index) => ({
       index,
       projectId: acc.projectId || null,
+      email: acc.email || acc.user_email || acc.userEmail || null,
       enable: acc.enable !== false,
       hasRefreshToken: !!acc.refresh_token,
       createdAt: acc.timestamp || null,
@@ -517,14 +517,14 @@ function parseTimestamp(raw) {
   return Date.now();
 }
 
-function normalizeTomlAccount(raw) {
+function normalizeTomlAccount(raw, { filterDisabled = false } = {}) {
   if (!raw || typeof raw !== 'object') return null;
 
   const accessToken = raw.access_token ?? raw.accessToken;
   const refreshToken = raw.refresh_token ?? raw.refreshToken;
 
-  // 只导入在 TOML 中显式标记 disabled = true 的账号，其它全部跳过
-  if (raw.disabled !== true) return null;
+  const isDisabled = raw.disabled === true || raw.enable === false;
+  if (filterDisabled && isDisabled) return null;
 
   if (!accessToken || !refreshToken) return null;
 
@@ -535,8 +535,7 @@ function normalizeTomlAccount(raw) {
       ? Number(raw.expires_in ?? raw.expiresIn)
       : 3600,
     timestamp: parseTimestamp(raw),
-    // 导入后在本系统中默认启用
-    enable: true
+    enable: !isDisabled
   };
 
   const projectId = raw.projectId ?? raw.project_id;
@@ -613,32 +612,40 @@ app.get('/admin/login', (req, res) => {
 <head>
   <meta charset="utf-8" />
   <title>Antigravity 管理登录</title>
-  <style>
-    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:#f5f7fb; margin:0; padding:0; }
-    .container { max-width: 420px; margin:80px auto; background:#ffffff; border-radius:12px; box-shadow:0 8px 24px rgba(15,23,42,0.08); padding:24px 28px; }
-    h1 { font-size:20px; margin:0 0 12px; color:#111827; }
-    label { display:block; margin-top:12px; font-size:13px; color:#374151; }
-    input { width:100%; margin-top:4px; padding:8px 10px; font-size:14px; border-radius:8px; border:1px solid #d1d5db; box-sizing:border-box; }
-    button { margin-top:18px; width:100%; background:#3b82f6; color:#fff; border:none; border-radius:999px; padding:10px 18px; font-size:14px; cursor:pointer; }
-    button:hover { background:#2563eb; }
-    .hint { font-size:12px; color:#6b7280; margin-top:8px; }
-    .error { font-size:13px; color:#b91c1c; margin-top:8px; }
-  </style>
+  <script>
+    try {
+      const saved = localStorage.getItem('ag-panel-theme');
+      if (saved) {
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="/admin/auth.css" />
 </head>
 <body>
-  <div class="container">
-    <h1>管理登录</h1>
-    <form method="POST" action="/admin/login">
-      <label>用户名
-        <input name="username" autocomplete="username" value="admin" />
-      </label>
-      <label>密码
-        <input type="password" name="password" autocomplete="current-password" />
-      </label>
-      <button type="submit">登录</button>
-      <div class="hint">默认用户名为 admin，密码由环境变量 PANEL_PASSWORD 配置。</div>
-    </form>
+  <div class="login-page">
+    <div class="login-card">
+      <h1>管理登录</h1>
+      <p>登录后即可进入控制台进行授权、查看用量和配置。</p>
+      <form class="login-form" method="POST" action="/admin/login">
+        <label>用户名
+          <input name="username" autocomplete="username" value="admin" />
+        </label>
+        <label>密码
+          <input type="password" name="password" autocomplete="current-password" />
+        </label>
+        <div class="login-actions">
+          <button type="submit">登录</button>
+          <button type="button" id="loginThemeToggle" class="refresh-btn login-toggle">🌙 切换为暗色</button>
+        </div>
+        <div class="login-hint">默认用户名为 admin，密码由环境变量 PANEL_PASSWORD 配置。</div>
+      </form>
+    </div>
   </div>
+  <script src="/admin/theme.js"></script>
+  <script>
+    window.AgTheme?.bindThemeToggle?.(document.getElementById('loginThemeToggle'));
+  </script>
 </body>
 </html>`;
 
@@ -793,7 +800,11 @@ app.post('/auth/oauth/parse-url', requirePanelAuthApi, async (req, res) => {
 
 // Import accounts from TOML and merge into accounts.json
 app.post('/auth/accounts/import-toml', requirePanelAuthApi, (req, res) => {
-  const { toml: tomlContent, replaceExisting = false } = req.body || {};
+  const {
+    toml: tomlContent,
+    replaceExisting = false,
+    filterDisabled = true
+  } = req.body || {};
 
   if (!tomlContent || typeof tomlContent !== 'string') {
     return res.status(400).json({ error: 'toml 字段必填且必须为字符串' });
@@ -815,7 +826,7 @@ app.post('/auth/accounts/import-toml', requirePanelAuthApi, (req, res) => {
   let skipped = 0;
 
   for (const raw of accountsFromToml) {
-    const acc = normalizeTomlAccount(raw);
+    const acc = normalizeTomlAccount(raw, { filterDisabled });
     if (acc) {
       normalized.push(acc);
     } else {
@@ -862,6 +873,49 @@ app.post('/auth/accounts/import-toml', requirePanelAuthApi, (req, res) => {
 // Simple JSON list of accounts for front-end
 app.get('/auth/accounts', requirePanelAuthApi, (req, res) => {
   res.json({ accounts: readAccountsSafe() });
+});
+
+// Refresh all accounts
+app.post('/auth/accounts/refresh-all', requirePanelAuthApi, async (req, res) => {
+  try {
+    const accounts = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf-8'));
+    if (!Array.isArray(accounts) || accounts.length === 0) {
+      return res.json({ success: true, refreshed: 0, failed: 0, total: 0, results: [] });
+    }
+
+    const results = [];
+    let refreshed = 0;
+    let failed = 0;
+
+    for (let i = 0; i < accounts.length; i += 1) {
+      const account = accounts[i];
+      if (!account) continue;
+
+      try {
+        await tokenManager.refreshToken(account);
+        accounts[i] = account;
+        refreshed += 1;
+        results.push({ index: i, status: 'ok' });
+      } catch (e) {
+        const statusCode = e?.statusCode;
+        if (statusCode === 403 || statusCode === 400) {
+          account.enable = false;
+        }
+
+        failed += 1;
+        results.push({ index: i, status: 'failed', error: e?.message || '刷新失败' });
+        logger.warn(`账号 ${i + 1} 刷新失败: ${e?.message || e}`);
+      }
+    }
+
+    fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2), 'utf-8');
+    tokenManager.initialize();
+
+    res.json({ success: true, refreshed, failed, total: accounts.length, results });
+  } catch (e) {
+    logger.error('批量刷新凭证失败', e.message);
+    res.status(500).json({ error: e.message || '批量刷新失败' });
+  }
 });
 
 // Manually refresh a single account by index
@@ -928,6 +982,10 @@ app.get('/admin/settings', requirePanelAuthApi, (req, res) => {
   });
 });
 
+app.get('/admin/panel-config', requirePanelAuthApi, (req, res) => {
+  res.json({ apiKey: process.env.API_KEY || null });
+});
+
 app.get('/admin/logs/usage', requirePanelAuthApi, (req, res) => {
   const windowMinutes = 60;
   const limitPerCredential = Number.isFinite(Number(config.credentials.maxUsagePerHour))
@@ -956,9 +1014,17 @@ app.get('/admin/oauth', requirePanelAuthPage, (req, res) => {
   res.sendFile(filePath);
 });
 
-// Static assets for admin panel（同样要求登录后才能访问）
+// Static assets for admin panel
 const adminStatic = express.static(path.join(__dirname, '..', '..', 'public', 'admin'));
+
+// 登录页仍需访问的公共静态资源（如样式、主题脚本），不应被登录保护拦截
+const publicAdminAssets = new Set(['/auth.css', '/panel.css', '/theme.js']);
+
 app.use('/admin', (req, res, next) => {
+  if (req.method === 'GET' && publicAdminAssets.has(req.path)) {
+    return adminStatic(req, res, next);
+  }
+
   // 复用页面级的鉴权逻辑，未登录则重定向到 /admin/login
   requirePanelAuthPage(req, res, err => {
     if (err) return next(err);
