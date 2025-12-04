@@ -62,7 +62,7 @@
 
 .config-info li {
     padding: 0.5rem 0;
-    border-bottom: 1px solid rgba(226, 190, 226, 0.2);
+    border-bottom: 1px solid rgba(99, 135, 221, 0.18);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -92,27 +92,27 @@
 }
 
 .status.info {
-    background: rgba(159, 145, 226, 0.1);
+    background: rgba(165, 180, 252, 0.12);
     border-left-color: var(--secondary-color);
-    color: #6b5b8f;
+    color: #312e81;
 }
 
 .status.success {
-    background: rgba(165, 216, 165, 0.1);
+    background: rgba(34, 197, 94, 0.12);
     border-left-color: var(--success-color);
-    color: #4a8a4a;
+    color: #166534;
 }
 
 .status.error {
-    background: rgba(245, 163, 163, 0.1);
+    background: rgba(239, 68, 68, 0.12);
     border-left-color: var(--error-color);
-    color: #a55555;
+    color: #7f1d1d;
 }
 
 .status.warning {
-    background: rgba(249, 216, 154, 0.1);
+    background: rgba(245, 158, 11, 0.12);
     border-left-color: var(--warning-color);
-    color: #b38b28;
+    color: #92400e;
 }
 
 /* --- 头部装饰 --- */
