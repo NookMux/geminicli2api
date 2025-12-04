@@ -86,7 +86,10 @@ log.txt
 .spec-workflow/
 docker/
 
+# 默认忽略 Markdown，但保留官方文档目录
 *.md
 Docs/
+!Docs/
+!Docs/*.md
 front- 备份/
 tools/
