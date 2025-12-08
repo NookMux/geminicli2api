@@ -261,6 +261,28 @@ button:disabled {
   color: var(--text);
 }
 
+.project-id-section {
+  margin: 12px 0;
+}
+
+.project-id-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.project-id-label > span {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.project-id-label .input {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 13px;
+}
+
 .checkbox-row {
   display: flex;
   align-items: center;
@@ -473,6 +495,118 @@ button:disabled {
 .mini-btn:hover {
   background: var(--neutral-btn-hover);
   transform: translateY(-1px);
+}
+
+.quota-section {
+  grid-column: 1 / -1;
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--subtle-bg);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.quota-loading {
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 20px;
+}
+
+.quota-error {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.quota-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.quota-title {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.quota-updated {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.quota-models {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.quota-model-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--card-bg);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.quota-model-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.quota-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.quota-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  min-width: 2px;
+}
+
+.quota-progress-fill.quota-high {
+  background: linear-gradient(90deg, #10b981, #059669);
+}
+
+.quota-progress-fill.quota-medium {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+
+.quota-progress-fill.quota-low {
+  background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+
+.quota-model-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.quota-percentage {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.quota-reset-time {
+  color: var(--muted);
 }
 
 .mini-btn:active {

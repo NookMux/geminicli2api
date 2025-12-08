@@ -9,6 +9,8 @@ function generateSessionId() {
 }
 
 function generateProjectId() {
+  // 项目 ID 随机生成，仅在用户显式选择“使用随机 projectId”时调用
+  // 默认应优先使用 Google 返回的真实项目 ID，避免误用导致 403
   const adjectives = ['useful', 'bright', 'swift', 'calm', 'bold'];
   const nouns = ['fuze', 'wave', 'spark', 'flow', 'core'];
   const randomAdj = adjectives[Math.floor(Math.random() * adjectives.length)];
@@ -22,8 +24,8 @@ function generateToolCallId() {
 }
 
 export {
-    generateProjectId,
-    generateSessionId,
-    generateRequestId,
-    generateToolCallId
+  generateProjectId,
+  generateSessionId,
+  generateRequestId,
+  generateToolCallId
 }

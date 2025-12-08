@@ -33,6 +33,7 @@
       <button class="tab-btn" data-tab-target="logs">调用日志</button>
       <button class="tab-btn" data-tab-target="settings">系统设置</button>
       <button class="tab-btn" data-tab-target="api-docs">API 文档</button>
+      <button class="tab-btn" data-tab-target="project">项目介绍</button>
     </div>
 
     <section class="card tab-panel active" data-tab="auth">
@@ -52,6 +53,21 @@
           placeholder="将回调后浏览器真实的完整 URL 粘贴到这里"
           class="input"
         />
+        <div class="project-id-section">
+          <label class="project-id-label">
+            <span>自定义项目 ID（可选）</span>
+            <input
+              id="customProjectIdInput"
+              type="text"
+              placeholder="输入自定义项目ID，留空则自动获取"
+              class="input"
+            />
+          </label>
+        </div>
+        <label class="checkbox-row">
+          <input type="checkbox" id="allowRandomProjectId" />
+          <span>无法自动获取 Google 项目 ID 时，使用随机 projectId（可能导致 403 错误）！</span>
+        </label>
         <div class="inline-row">
           <button id="submitCallbackBtn" class="refresh-btn">提交回调 URL 并交换凭证</button>
           <span id="status" class="badge" style="display:none;"></span>
@@ -207,6 +223,21 @@
       </div>
       <div class="card-body">
         <p>新页面将列出所有可用 API，包括凭证清单、限额说明、OpenAI 兼容的聊天接口以及按凭证固定的免限额调用示例。</p>
+      </div>
+    </section>
+
+    <section class="card tab-panel" data-tab="project">
+      <div class="card-header">
+        <div>
+          <div class="eyebrow">关于项目</div>
+          <h2>项目介绍</h2>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="project-content">
+          <p>当前项目是基于<a href="https://github.com/liuw1535">liuw1535</a>大佬的<a href="https://github.com/liuw1535/antigravity2api-nodejs">antigravity2api-nodejs</a>做的修改和迭代</p>
+          <p>二开项目QQ交流群： <a href="https://qm.qq.com/q/J0Ny6uYZCo">937931004</a></p>
+        </div>
       </div>
     </section>
   </div>

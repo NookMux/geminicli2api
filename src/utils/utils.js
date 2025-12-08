@@ -3,6 +3,20 @@ import tokenManager from '../auth/token_manager.js';
 import { generateRequestId } from './idGenerator.js';
 import os from 'os';
 
+// 全局思维签名缓存：用于记录 Gemini 返回的 thoughtSignature，
+// 并在后续带 tool_calls 的请求中复用，避免后端报缺失错误。
+const thoughtSignatureMap = new Map();
+
+function registerThoughtSignature(id, thoughtSignature) {
+  if (!id || !thoughtSignature) return;
+  thoughtSignatureMap.set(id, thoughtSignature);
+}
+
+function getThoughtSignature(id) {
+  if (!id) return undefined;
+  return thoughtSignatureMap.get(id);
+}
+
 function extractImagesFromContent(content) {
   const result = { text: '', images: [] };
 
@@ -53,23 +67,59 @@ function handleUserMessage(extracted, antigravityMessages) {
 function handleAssistantMessage(message, antigravityMessages) {
   const lastMessage = antigravityMessages[antigravityMessages.length - 1];
   const hasToolCalls = message.tool_calls && message.tool_calls.length > 0;
-  const hasContent = message.content && message.content.trim() !== '';
 
-  const antigravityTools = hasToolCalls ? message.tool_calls.map(toolCall => ({
-    functionCall: {
-      id: toolCall.id,
-      name: toolCall.function.name,
-      args: {
-        query: toolCall.function.arguments
-      }
+  // 处理 content 可能是数组的情况
+  let contentText = '';
+  if (message.content) {
+    if (Array.isArray(message.content)) {
+      // 如果是数组，提取所有 text 类型的内容
+      contentText = message.content
+        .filter(item => item.type === 'text')
+        .map(item => item.text || '')
+        .join('');
+    } else if (typeof message.content === 'string') {
+      contentText = message.content;
     }
-  })) : [];
+  }
+  const hasContent = contentText.trim() !== '';
+
+  const antigravityTools = hasToolCalls ? message.tool_calls.map(toolCall => {
+    // 解析参数字符串为对象
+    let args = {};
+    try {
+      if (typeof toolCall.function.arguments === 'string') {
+        args = JSON.parse(toolCall.function.arguments);
+      } else if (typeof toolCall.function.arguments === 'object') {
+        args = toolCall.function.arguments;
+      }
+    } catch (e) {
+      console.warn('Failed to parse tool call arguments:', e);
+    }
+
+    // 优先使用模型在上一轮响应中返回并缓存的 thoughtSignature
+    const thoughtSignature = getThoughtSignature(toolCall.id);
+
+    // 注意：Gemini 的 thoughtSignature 在 part 上，而不是 functionCall 里面
+    const part = {
+      functionCall: {
+        id: toolCall.id,
+        name: toolCall.function.name,
+        args: args
+      }
+    };
+
+    if (thoughtSignature) {
+      part.thoughtSignature = thoughtSignature;
+    }
+
+    return part;
+  }) : [];
 
   if (lastMessage?.role === "model" && hasToolCalls && !hasContent) {
-    lastMessage.parts.push(...antigravityTools)
+    lastMessage.parts.push(...antigravityTools);
   } else {
     const parts = [];
-    if (hasContent) parts.push({ text: message.content });
+    if (hasContent) parts.push({ text: contentText });
     parts.push(...antigravityTools);
 
     antigravityMessages.push({
@@ -94,13 +144,24 @@ function handleToolCall(message, antigravityMessages) {
     }
   }
 
+  // 处理 content 可能是字符串或对象的情况
+  let output = message.content;
+  if (typeof output === 'object' && output !== null) {
+    // 如果是对象，尝试提取文本内容
+    output = output.text || JSON.stringify(output);
+  } else if (Array.isArray(output)) {
+    // 如果是数组，提取第一个文本元素
+    const textItem = output.find(item => item?.type === 'text' || typeof item === 'string');
+    output = textItem?.text || textItem || JSON.stringify(output);
+  }
+
   const lastMessage = antigravityMessages[antigravityMessages.length - 1];
   const functionResponse = {
     functionResponse: {
       id: message.tool_call_id,
       name: functionName,
       response: {
-        output: message.content
+        output: output
       }
     }
   };
@@ -156,33 +217,167 @@ function generateGenerationConfig(parameters, enableThinking, actualModelName) {
 }
 function convertOpenAIToolsToAntigravity(openaiTools) {
   if (!openaiTools || openaiTools.length === 0) return [];
+
   return openaiTools.map((tool) => {
-    delete tool.function.parameters.$schema;
+    // 复制一份参数对象，避免修改原始数据
+    const parameters = tool.function.parameters ? { ...tool.function.parameters } : {};
+
+    // 清理 JSON Schema，移除 Gemini 不支持的字段
+    const cleanedParameters = cleanJsonSchema(parameters);
+
     return {
       functionDeclarations: [
         {
           name: tool.function.name,
           description: tool.function.description,
-          parameters: tool.function.parameters
+          parameters: cleanedParameters
         }
       ]
+    };
+  });
+}
+
+function cleanJsonSchema(schema) {
+  if (!schema || typeof schema !== 'object') {
+    return schema;
+  }
+
+  // 需要移除的验证字段
+  const validationFields = {
+    'minLength': 'minLength',
+    'maxLength': 'maxLength',
+    'minimum': 'minimum',
+    'maximum': 'maximum',
+    'minItems': 'minItems',
+    'maxItems': 'maxItems',
+    'minProperties': 'minProperties',
+    'maxProperties': 'maxProperties',
+    'pattern': 'pattern',
+    'format': 'format',
+    'multipleOf': 'multipleOf'
+  };
+
+  // 需要完全移除的字段
+  const fieldsToRemove = new Set([
+    '$schema',
+    'additionalProperties',
+    'uniqueItems',
+    'exclusiveMinimum',
+    'exclusiveMaximum'
+  ]);
+
+  // 收集验证信息（从所有层级）
+  const collectValidations = (obj, path = '') => {
+    const validations = [];
+
+    for (const [field, value] of Object.entries(validationFields)) {
+      if (field in obj) {
+        validations.push(`${field}: ${value}`);
+        // 从对象中移除验证字段
+        delete obj[field];
+      }
     }
-  })
+
+    // 移除特定字段
+    for (const field of fieldsToRemove) {
+      if (field in obj) {
+        // 对于 additionalProperties，记录但不保留
+        if (field === 'additionalProperties' && obj[field] === false) {
+          validations.push('no additional properties');
+        }
+        delete obj[field];
+      }
+    }
+
+    return validations;
+  };
+
+  // 递归清理嵌套对象
+  const cleanObject = (obj, path = '') => {
+    if (Array.isArray(obj)) {
+      return obj.map(item => typeof item === 'object' ? cleanObject(item, path) : item);
+    } else if (obj && typeof obj === 'object') {
+      // 先收集当前层的验证信息
+      const validations = collectValidations(obj, path);
+
+      const cleaned = {};
+      for (const [key, value] of Object.entries(obj)) {
+        if (fieldsToRemove.has(key)) continue;
+        if (key in validationFields) continue;
+
+        if (key === 'description' && validations.length > 0 && path === '') {
+          // 只在顶层追加验证要求
+          cleaned[key] = `${value || ''} (${validations.join(', ')})`.trim();
+        } else {
+          cleaned[key] = typeof value === 'object' ? cleanObject(value, `${path}.${key}`) : value;
+        }
+      }
+
+      // 处理 required 数组
+      if (cleaned.required && Array.isArray(cleaned.required)) {
+        // 确保 required 不为空数组
+        if (cleaned.required.length === 0) {
+          delete cleaned.required;
+        }
+      }
+
+      return cleaned;
+    }
+    return obj;
+  };
+
+  return cleanObject(schema);
 }
 function generateRequestBody(openaiMessages, modelName, parameters, openaiTools, token) {
 
-  const enableThinking = modelName.endsWith('-thinking') ||
+  const actualModelName = modelName;
+
+  // 检测对话中是否已经存在带有 tool_calls 的 assistant 消息
+  const hasAssistantToolCalls =
+    Array.isArray(openaiMessages) &&
+    openaiMessages.some(
+      (msg) =>
+        msg &&
+        msg.role === 'assistant' &&
+        Array.isArray(msg.tool_calls) &&
+        msg.tool_calls.length > 0
+    );
+
+  // 基础的思维链启用逻辑：按模型名判断
+  const baseEnableThinking =
+    modelName.endsWith('-thinking') ||
     modelName === 'gemini-2.5-pro' ||
     modelName.startsWith('gemini-3-pro-') ||
     modelName === "rev19-uic3-1p" ||
-    modelName === "gpt-oss-120b-medium"
-  const actualModelName = modelName;
+    modelName === "gpt-oss-120b-medium";
+
+  // 为避免 Anthropic thinking + tools 触发
+  // “messages.*.content[0].type 必须是 thinking” 的报错，
+  // 当使用 Claude 系列思维模型且历史中已出现工具调用时，关闭 thinking。
+  const enableThinking =
+    baseEnableThinking &&
+    !(actualModelName.includes('claude') && hasAssistantToolCalls);
+
+  // 先将 OpenAI 风格 messages 转换为 Antigravity/Gemini contents
+  const contents = openaiMessageToAntigravity(openaiMessages);
+
+  // 对 Claude 系列模型：当前不支持 thoughtSignature 字段，需剔除
+  if (actualModelName.includes('claude')) {
+    for (const msg of contents) {
+      if (!msg?.parts) continue;
+      for (const part of msg.parts) {
+        if (part && Object.prototype.hasOwnProperty.call(part, 'thoughtSignature')) {
+          delete part.thoughtSignature;
+        }
+      }
+    }
+  }
 
   return {
     project: token.projectId,
     requestId: generateRequestId(),
     request: {
-      contents: openaiMessageToAntigravity(openaiMessages),
+      contents,
       systemInstruction: {
         role: "user",
         parts: [{ text: config.systemInstruction }]
@@ -220,5 +415,8 @@ function getDefaultIp() {
 export {
   generateRequestId,
   generateRequestBody,
-  getDefaultIp
+  getDefaultIp,
+  cleanJsonSchema,
+  registerThoughtSignature,
+  getThoughtSignature
 }

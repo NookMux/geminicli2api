@@ -66,21 +66,9 @@ class TokenManager {
       this.ensureDataFile();
 
       const data = fs.readFileSync(this.filePath, 'utf8');
-      let tokenArray = JSON.parse(data || '[]');
-      let needSave = false;
-      
-      tokenArray = tokenArray.map(token => {
-        if (!token.projectId) {
-          token.projectId = generateProjectId();
-          needSave = true;
-        }
-        return token;
-      });
-      
-      if (needSave) {
-        fs.writeFileSync(this.filePath, JSON.stringify(tokenArray, null, 2), 'utf8');
-      }
-      
+      const parsed = JSON.parse(data || '[]');
+      const tokenArray = Array.isArray(parsed) ? parsed : [];
+
       this.tokens = tokenArray.filter(token => token.enable !== false).map(token => ({
         ...token,
         sessionId: generateSessionId()
@@ -91,6 +79,27 @@ class TokenManager {
       log.error('初始化token失败:', error.message);
       this.tokens = [];
     }
+  }
+
+  async fetchProjectId(token) {
+    const response = await axios({
+      method: 'POST',
+      url: 'https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:loadCodeAssist',
+      headers: {
+        'Host': 'daily-cloudcode-pa.sandbox.googleapis.com',
+        'User-Agent': 'antigravity/1.11.9 windows/amd64',
+        'Authorization': `Bearer ${token.access_token}`,
+        'Content-Type': 'application/json',
+        'Accept-Encoding': 'gzip'
+      },
+      data: JSON.stringify({ metadata: { ideType: 'ANTIGRAVITY' } }),
+      timeout: config.timeout,
+      proxy: config.proxy ? (() => {
+        const proxyUrl = new URL(config.proxy);
+        return { protocol: proxyUrl.protocol.replace(':', ''), host: proxyUrl.hostname, port: parseInt(proxyUrl.port) };
+      })() : false
+    });
+    return response.data?.cloudaicompanionProject;
   }
 
   isExpired(token) {
@@ -176,6 +185,32 @@ class TokenManager {
       try {
         if (this.isExpired(token)) {
           await this.refreshToken(token);
+        }
+
+        if (!token.projectId) {
+          if (config.skipProjectIdFetch) {
+            token.projectId = generateProjectId();
+            this.saveToFile();
+            log.info(`...${token.access_token.slice(-8)}: 使用随机生成的projectId: ${token.projectId}`);
+          } else {
+            try {
+              const projectId = await this.fetchProjectId(token);
+              if (projectId === undefined) {
+                log.warn(`...${token.access_token.slice(-8)}: 无资格获取projectId，跳过保存`);
+                this.disableToken(token);
+                if (this.tokens.length === 0) return null;
+                attempts += 1;
+                continue;
+              }
+              token.projectId = projectId;
+              this.saveToFile();
+            } catch (error) {
+              log.error(`...${token.access_token.slice(-8)}: 获取projectId失败:`, error.message);
+              this.moveToNextToken();
+              attempts += 1;
+              continue;
+            }
+          }
         }
 
         if (!this.isWithinHourlyLimit(token)) {

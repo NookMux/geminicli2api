@@ -13,10 +13,12 @@ import {
   streamGeminiContent
 } from '../api/client.js';
 import { generateRequestBody } from '../utils/utils.js';
+import { generateProjectId } from '../utils/idGenerator.js';
 import logger from '../utils/logger.js';
 import config from '../config/config.js';
 import tokenManager from '../auth/token_manager.js';
 import { buildAuthUrl, exchangeCodeForToken } from '../auth/oauth_client.js';
+import { resolveProjectIdFromAccessToken, fetchUserEmail } from '../auth/project_id_resolver.js';
 import {
   appendLog,
   getLogDetail,
@@ -24,6 +26,7 @@ import {
   getUsageCountsWithinWindow,
   getUsageSummary
 } from '../utils/log_store.js';
+import quotaManager from '../auth/quota_manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,7 +34,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const ACCOUNTS_FILE = path.join(__dirname, '..', '..', 'data', 'accounts.json');
 const OAUTH_STATE = crypto.randomUUID();
-const PANEL_USER = process.env.PANEL_USER || 'admin';
+const PANEL_USER = process.env.PANEL_USER || null;
 const PANEL_PASSWORD = process.env.PANEL_PASSWORD || null;
 const PANEL_SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 管理面板登录有效期：2 小时
 const SENSITIVE_HEADERS = ['authorization', 'cookie'];
@@ -126,7 +129,7 @@ const SETTINGS_DEFINITIONS = [
     label: '面板登录用户名',
     category: '面板与安全',
     defaultValue: 'admin',
-    valueResolver: () => PANEL_USER
+    valueResolver: () => PANEL_USER || 'admin'
   },
   {
     key: 'PANEL_PASSWORD',
@@ -379,7 +382,14 @@ app.use((req, res, next) => {
   if (!req.path.startsWith('/images') && !req.path.startsWith('/favicon.ico')) {
     const start = Date.now();
     res.on('finish', () => {
-      logger.request(req.method, req.path, res.statusCode, Date.now() - start);
+      const clientIP = req.headers['x-forwarded-for'] ||
+                      req.headers['x-real-ip'] ||
+                      req.connection?.remoteAddress ||
+                      req.socket?.remoteAddress ||
+                      req.ip ||
+                      'unknown';
+      const userAgent = req.headers['user-agent'] || '';
+      logger.request(req.method, req.path, res.statusCode, Date.now() - start, clientIP, userAgent);
     });
   }
   next();
@@ -629,7 +639,7 @@ app.get('/admin/login', (req, res) => {
       <p>登录后即可进入控制台进行授权、查看用量和配置。</p>
       <form class="login-form" method="POST" action="/admin/login">
         <label>用户名
-          <input name="username" autocomplete="username" value="admin" />
+          <input name="username" autocomplete="username" value="${process.env.PANEL_USER || 'admin'}" />
         </label>
         <label>密码
           <input type="password" name="password" autocomplete="current-password" />
@@ -638,7 +648,7 @@ app.get('/admin/login', (req, res) => {
           <button type="submit">登录</button>
           <button type="button" id="loginThemeToggle" class="refresh-btn login-toggle">🌙 切换为暗色</button>
         </div>
-        <div class="login-hint">默认用户名为 admin，密码由环境变量 PANEL_PASSWORD 配置。</div>
+        <div class="login-hint">用户名由环境变量 PANEL_USER 配置，密码由环境变量 PANEL_PASSWORD 配置。</div>
       </form>
     </div>
   </div>
@@ -725,7 +735,7 @@ app.get(['/oauth-callback', '/auth/oauth/callback'], (req, res) => {
 
 // 解析用户粘贴的回调 URL，交换 code 为 token，写入 accounts.json 并刷新 TokenManager
 app.post('/auth/oauth/parse-url', requirePanelAuthApi, async (req, res) => {
-  const { url, replaceIndex } = req.body || {};
+    const { url, replaceIndex, customProjectId, allowRandomProjectId } = req.body || {};
 
   if (!url || typeof url !== 'string') {
     return res.status(400).json({ error: 'url 字段必填且必须为字符串' });
@@ -750,17 +760,74 @@ app.post('/auth/oauth/parse-url', requirePanelAuthApi, async (req, res) => {
     return res.status(400).json({ error: 'state 校验失败，请确认粘贴的是最新的授权回调地址' });
   }
 
-  // redirectUri 必须与构造授权链接时保持一致，这里直接使用粘贴 URL 的 origin + pathname
-  const redirectUri = `${parsed.origin}${parsed.pathname}`;
+  // 直接使用构造OAuth链接时相同的 redirectUri，避免不匹配问题
+  const redirectUri = `http://localhost:${config.server.port}/oauth-callback`;
 
-  try {
-    const tokenData = await exchangeCodeForToken(code, redirectUri);
-    const account = {
-      access_token: tokenData.access_token,
-      refresh_token: tokenData.refresh_token,
-      expires_in: tokenData.expires_in,
-      timestamp: Date.now()
-    };
+    try {
+      const tokenData = await exchangeCodeForToken(code, redirectUri);
+
+      let projectId = null;
+      let userEmail = null;
+      let projectResolveError = null;
+
+      // 优先使用用户自定义的项目ID
+      if (customProjectId && typeof customProjectId === 'string' && customProjectId.trim()) {
+        projectId = customProjectId.trim();
+        logger.info(`使用用户自定义项目ID: ${projectId}`);
+      } else if (tokenData?.access_token) {
+        // 自动获取项目ID的逻辑
+        try {
+          // 获取用户邮箱
+          userEmail = await fetchUserEmail(tokenData.access_token);
+          logger.info(`成功获取用户邮箱: ${userEmail}`);
+
+          // 使用更可靠的Resource Manager方法获取项目ID
+          const result = await resolveProjectIdFromAccessToken(tokenData.access_token);
+          if (result.projectId) {
+            projectId = result.projectId;
+            logger.info(`通过Resource Manager获取到项目ID: ${projectId}`);
+          } else {
+            // 备用方案：使用原有的loadCodeAssist方法
+            const loadedProjectId = await tokenManager.fetchProjectId({
+              access_token: tokenData.access_token
+            });
+            if (loadedProjectId !== undefined && loadedProjectId !== null) {
+              projectId = loadedProjectId;
+              logger.info(`备用方案获取到项目ID: ${projectId}`);
+            }
+          }
+        } catch (err) {
+          projectResolveError = err;
+        }
+      }
+
+      // 如果无法获取项目ID，尝试使用备用方案
+      if (!projectId && !allowRandomProjectId) {
+        const message =
+          projectResolveError?.message ||
+          '无法自动获取 Google 项目 ID，对应接口的访问可能出现 403 错误，请检查权限和 API 组件，或选择使用随机 projectId 再申请！';
+        return res.status(400).json({ error: message, code: 'PROJECT_ID_MISSING' });
+      }
+
+      if (!projectId && allowRandomProjectId) {
+        projectId = generateProjectId();
+        logger.info(`使用随机生成的项目ID: ${projectId}`);
+      }
+
+      const account = {
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+        expires_in: tokenData.expires_in,
+        timestamp: Date.now()
+      };
+
+      if (projectId) {
+        account.projectId = projectId;
+      }
+
+      if (userEmail) {
+        account.email = userEmail;
+      }
 
     let accounts = [];
     try {
@@ -938,6 +1005,71 @@ app.post('/auth/accounts/:index/refresh', requirePanelAuthApi, async (req, res) 
   }
 });
 
+app.post('/auth/accounts/:index/refresh-project-id', requirePanelAuthApi, async (req, res) => {
+  const index = Number.parseInt(req.params.index, 10);
+  if (Number.isNaN(index)) return res.status(400).json({ error: 'invalid account index' });
+
+  try {
+    if (!fs.existsSync(ACCOUNTS_FILE)) {
+      return res.status(404).json({ error: 'accounts.json not found' });
+    }
+
+    const accounts = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf-8'));
+    const target = accounts[index];
+    if (!target) return res.status(404).json({ error: 'account not found' });
+
+    let accessToken = target.access_token;
+
+    if (!accessToken && target.refresh_token) {
+      try {
+        await tokenManager.refreshToken(target);
+        accessToken = target.access_token;
+      } catch (err) {
+        logger.error('failed to refresh token before resolving project id', err.message);
+        return res
+          .status(500)
+          .json({ error: err?.message || 'failed to refresh token for this account' });
+      }
+    }
+
+    if (!accessToken) {
+      return res
+        .status(400)
+        .json({ error: 'no usable access token for this account' });
+    }
+
+    const result = await resolveProjectIdFromAccessToken(accessToken);
+    if (!result.projectId) {
+      const errorMessage =
+        result.error?.message ||
+        'failed to resolve project id from Resource Manager';
+      logger.warn(
+        'refresh project id failed: unable to resolve project id from Resource Manager',
+        errorMessage
+      );
+      return res.status(500).json({ error: errorMessage });
+    }
+
+    target.projectId = result.projectId;
+    accounts[index] = target;
+
+    const dir = path.dirname(ACCOUNTS_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2), 'utf-8');
+
+    if (typeof tokenManager.initialize === 'function') {
+      tokenManager.initialize();
+    }
+
+    return res.json({ success: true, projectId: result.projectId });
+  } catch (e) {
+    logger.error('refresh project id failed', e.message);
+    return res.status(500).json({ error: e.message || 'refresh project id failed' });
+  }
+});
+
 // Delete an account
 app.delete('/auth/accounts/:index', requirePanelAuthApi, (req, res) => {
   const index = Number.parseInt(req.params.index, 10);
@@ -1006,6 +1138,34 @@ app.get('/admin/logs/:id', requirePanelAuthApi, (req, res) => {
   const detail = getLogDetail(req.params.id);
   if (!detail) return res.status(404).json({ error: '日志不存在或已过期' });
   res.json({ log: detail });
+});
+
+// 额度查询接口
+app.get('/admin/tokens/:index/quotas', requirePanelAuthApi, async (req, res) => {
+  try {
+    const index = Number.parseInt(req.params.index, 10);
+    if (Number.isNaN(index)) {
+      return res.status(400).json({ error: '无效的凭证序号' });
+    }
+
+    const accounts = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf-8'));
+    const target = accounts[index];
+    if (!target) {
+      return res.status(404).json({ error: '凭证不存在' });
+    }
+
+    if (!target.refresh_token) {
+      return res.status(400).json({ error: '凭证缺少refresh_token' });
+    }
+
+    // 使用refreshToken作为缓存键
+    const quotas = await quotaManager.getQuotas(target.refresh_token, target);
+
+    res.json({ success: true, data: quotas });
+  } catch (e) {
+    logger.error('获取额度失败:', e.message);
+    res.status(500).json({ error: e.message || '获取额度失败' });
+  }
 });
 
 // Minimal HTML admin panel for OAuth (served as static file)
@@ -1112,12 +1272,35 @@ const createChatCompletionHandler = (resolveToken, options = {}) => async (req, 
         let hasToolCall = false;
         const { usage } = await generateAssistantResponse(requestBody, token, data => {
           streamEventsForLog.push(data);
-          const delta =
-            data.type === 'tool_calls'
-              ? { tool_calls: data.tool_calls }
-              : { content: data.content };
-          if (data.type === 'tool_calls') hasToolCall = true;
-          writeStreamData(res, createStreamChunk(id, created, model, delta));
+
+          let delta = {};
+          if (data.type === 'tool_calls') {
+            // 为兼容 OpenAI 流式规范，这里补充 index 字段
+            delta = {
+              tool_calls: (data.tool_calls || []).map((toolCall, index) => ({
+                index,
+                id: toolCall.id,
+                type: toolCall.type,
+                function: toolCall.function
+              }))
+            };
+          } else if (data.type === 'thinking') {
+            // 思维链内容直接放入 reasoning_content（不包含标签）
+            const cleanContent = data.content.replace(/^<思考>\n?|\n?<\/思考>$/g, '');
+            delta = { reasoning_content: cleanContent };
+          } else if (data.type === 'text') {
+            // 普通文本内容放入 content（需要过滤掉思考标签）
+            const cleanContent = data.content.replace(/<思考>[\s\S]*?<\/思考>/g, '');
+            if (cleanContent) {
+              delta = { content: cleanContent };
+            }
+          }
+
+          // 只有当 delta 有内容时才发送
+          if (Object.keys(delta).length > 0) {
+            if (data.type === 'tool_calls') hasToolCall = true;
+            writeStreamData(res, createStreamChunk(id, created, model, delta));
+          }
         });
         endStream(res, id, created, model, hasToolCall ? 'tool_calls' : 'stop', usage);
         responseBodyForLog = { stream: true, events: streamEventsForLog, usage };
@@ -1194,6 +1377,14 @@ app.get('/v1/models', async (req, res) => {
     res.json(models);
   } catch (error) {
     logger.error('获取模型列表失败:', error.message);
+    const clientIP = req.headers['x-forwarded-for'] ||
+                    req.headers['x-real-ip'] ||
+                    req.connection?.remoteAddress ||
+                    req.socket?.remoteAddress ||
+                    req.ip ||
+                    'unknown';
+    const userAgent = req.headers['user-agent'] || '';
+    logger.error(`/v1/models 错误详情 [${clientIP}] ${userAgent}:`, error.message);
     res.status(500).json({ error: error.message });
   }
 });

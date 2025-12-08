@@ -9,6 +9,8 @@ const logsRefreshBtn = document.getElementById('logsRefreshBtn');
 const hourlyUsageEl = document.getElementById('hourlyUsage');
 const manageStatusEl = document.getElementById('manageStatus');
 const callbackUrlInput = document.getElementById('callbackUrlInput');
+const customProjectIdInput = document.getElementById('customProjectIdInput');
+const allowRandomProjectIdCheckbox = document.getElementById('allowRandomProjectId');
 const submitCallbackBtn = document.getElementById('submitCallbackBtn');
 const logsEl = document.getElementById('logs');
 const usageStatusEl = document.getElementById('usageStatus');
@@ -225,6 +227,112 @@ function bindAccountActions() {
       loginBtn?.click();
     });
   });
+
+  document.querySelectorAll('[data-action="refreshProjectId"]')?.forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const idx = btn.dataset.index;
+      if (idx === undefined) return;
+
+      btn.disabled = true;
+      setStatus(`正在刷新账号 #${Number(idx) + 1} 的项目ID...`, 'info', manageStatusEl);
+
+      try {
+        const res = await fetch('/auth/accounts/' + idx + '/refresh-project-id', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.error) {
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+
+        setStatus(
+          `项目ID 已刷新为：${data.projectId || '未知'}`,
+          'success',
+          manageStatusEl
+        );
+        await refreshAccounts();
+      } catch (e) {
+        setStatus('刷新项目ID失败: ' + e.message, 'error', manageStatusEl);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-action="toggleQuota"]')?.forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const idx = btn.dataset.index;
+      if (idx === undefined) return;
+
+      const quotaSection = document.getElementById(`quota-${idx}`);
+      const isVisible = quotaSection.style.display !== 'none';
+
+      if (isVisible) {
+        quotaSection.style.display = 'none';
+        btn.textContent = '📊 查看额度';
+      } else {
+        quotaSection.style.display = 'block';
+        btn.textContent = '📊 收起额度';
+        await loadQuota(idx);
+      }
+    });
+  });
+}
+
+async function loadQuota(accountIndex) {
+  const quotaSection = document.getElementById(`quota-${accountIndex}`);
+  if (!quotaSection) return;
+
+  try {
+    const data = await fetchJson(`/admin/tokens/${accountIndex}/quotas`);
+    renderQuota(quotaSection, data.data);
+  } catch (e) {
+    quotaSection.innerHTML = `<div class="quota-error">加载失败: ${e.message}</div>`;
+  }
+}
+
+function renderQuota(container, quotaData) {
+  if (!quotaData || !quotaData.models) {
+    container.innerHTML = '<div class="quota-error">暂无额度数据</div>';
+    return;
+  }
+
+  const lastUpdated = quotaData.lastUpdated ?
+    new Date(quotaData.lastUpdated).toLocaleString() : '未知时间';
+
+  let html = `
+    <div class="quota-header">
+      <span class="quota-title">模型额度信息</span>
+      <span class="quota-updated">更新时间: ${lastUpdated}</span>
+    </div>
+    <div class="quota-models">
+  `;
+
+  for (const [modelName, modelInfo] of Object.entries(quotaData.models)) {
+    const remaining = Math.round(modelInfo.remaining * 100);
+    const resetTime = modelInfo.resetTime || '未知时间';
+    const colorClass = remaining > 50 ? 'quota-high' :
+                      remaining > 20 ? 'quota-medium' : 'quota-low';
+
+    html += `
+      <div class="quota-model-item">
+        <div class="quota-model-name">${escapeHtml(modelName)}</div>
+        <div class="quota-progress-bar">
+          <div class="quota-progress-fill ${colorClass}" style="width: ${remaining}%"></div>
+        </div>
+        <div class="quota-model-info">
+          <span class="quota-percentage">${remaining}%</span>
+          <span class="quota-reset-time">重置: ${resetTime}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
 }
 
 async function refreshAccounts() {
@@ -258,13 +366,15 @@ function renderAccountsList() {
       const statusClass = acc.enable ? 'status-ok' : 'status-off';
       const statusText = acc.enable ? '启用中' : '已停用';
       const displayName = escapeHtml(getAccountDisplayName(acc));
+      const projectId = acc.projectId ? escapeHtml(acc.projectId) : null;
       return `
         <div class="account-item">
           <div class="account-header">
             <div class="account-info">
-              <div class="account-title">${displayName}${
-        acc.projectId ? ` <span class="badge">${acc.projectId}</span>` : ''
-      }</div>
+              <div class="account-title">
+                ${displayName}
+                ${projectId ? `<span class="badge">${projectId}</span>` : ''}
+              </div>
               <div class="account-meta">创建时间：${created}</div>
             </div>
             <div class="account-status">
@@ -288,6 +398,13 @@ function renderAccountsList() {
                 <button class="mini-btn" data-action="reauthorize" data-index="${acc.index}">🔑 重新授权</button>
                 <button class="mini-btn danger" data-action="delete" data-index="${acc.index}">🗑️ 删除</button>
               </div>
+              <div class="action-row secondary">
+                <button class="mini-btn" data-action="refreshProjectId" data-index="${acc.index}">🔄 刷新项目ID</button>
+                <button class="mini-btn" data-action="toggleQuota" data-index="${acc.index}">📊 查看额度</button>
+              </div>
+            </div>
+            <div class="quota-section" id="quota-${acc.index}" style="display: none;">
+              <div class="quota-loading">加载中...</div>
             </div>
           </div>
         </div>
@@ -341,7 +458,14 @@ function renderSettings(groups) {
     .map(group => {
       const items = (group.items || [])
         .map(item => {
-          const value = item?.value ?? '未设置';
+          const currentValue = item?.value ?? '未设置';
+          const defaultValue = item?.defaultValue ?? '无默认值';
+
+          // 显示格式：如果设置了环境变量，显示"环境变量值 (默认值: 默认值)"
+          const displayValue = item.isDefault
+            ? (item.defaultValue !== null && item.defaultValue !== undefined ? defaultValue : currentValue)
+            : `${currentValue} ${defaultValue !== '无默认值' ? `(默认值: ${defaultValue})` : ''}`;
+
           const badges = [
             `<span class="chip ${item.isDefault ? '' : 'chip-success'}">${item.isDefault ? '默认值' : '环境变量'}</span>`,
             item.sensitive ? '<span class="chip chip-warning">敏感信息</span>' : ''
@@ -351,9 +475,7 @@ function renderSettings(groups) {
 
           const metaParts = [
             item.isDefault ? '使用默认值' : '来自环境变量',
-            item.defaultValue !== null && item.defaultValue !== undefined
-              ? `默认：${escapeHtml(item.defaultValue)}`
-              : '无默认值',
+            `环境变量名: ${item.key}`,
             item.description ? escapeHtml(item.description) : ''
           ]
             .filter(Boolean)
@@ -365,7 +487,7 @@ function renderSettings(groups) {
                 <div class="setting-key">${escapeHtml(item.label || item.key)}</div>
                 ${badges}
               </div>
-              <div class="setting-value">${escapeHtml(value)}</div>
+              <div class="setting-value">${escapeHtml(displayValue)}</div>
               <div class="setting-meta">${metaParts}</div>
             </div>
           `;
@@ -747,17 +869,27 @@ if (submitCallbackBtn && callbackUrlInput) {
       return;
     }
 
+    const customProjectId = customProjectIdInput ? customProjectIdInput.value.trim() : '';
+
     try {
       submitCallbackBtn.disabled = true;
       setStatus('正在解析回调 URL 并交换 token...', 'info');
       await fetchJson('/auth/oauth/parse-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, replaceIndex })
+        body: JSON.stringify({
+          url,
+          replaceIndex,
+          customProjectId,
+          allowRandomProjectId: !!allowRandomProjectIdCheckbox?.checked
+        })
       });
 
       setStatus('授权成功，账号已添加。', 'success');
       callbackUrlInput.value = '';
+      if (customProjectIdInput) {
+        customProjectIdInput.value = '';
+      }
       replaceIndex = null;
       refreshAccounts();
     } catch (e) {

@@ -27,7 +27,11 @@ class antigravityRequester {
         } else if (platform === 'android') {
             filename = 'antigravity_requester_android_arm64';
         } else if (platform === 'linux') {
-            filename = 'antigravity_requester_linux_amd64';
+            if (arch === 'arm64') {
+                filename = 'antigravity_requester_linux_arm64';
+            } else {
+                filename = 'antigravity_requester_linux_amd64';
+            }
         } else {
             throw new Error(`Unsupported platform: ${platform}`);
         }

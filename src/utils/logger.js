@@ -13,9 +13,11 @@ function logMessage(level, ...args) {
   console.log(`${colors.gray}${timestamp}${colors.reset} ${color}[${level}]${colors.reset}`, ...args);
 }
 
-function logRequest(method, path, status, duration) {
+function logRequest(method, path, status, duration, clientIP, userAgent) {
   const statusColor = status >= 500 ? colors.red : status >= 400 ? colors.yellow : colors.green;
-  console.log(`${colors.cyan}[${method}]${colors.reset} - ${path} ${statusColor}${status}${colors.reset} ${colors.gray}${duration}ms${colors.reset}`);
+  const ipInfo = clientIP ? ` ${colors.cyan}[${clientIP}]${colors.reset}` : '';
+  const uaInfo = userAgent && userAgent.length > 50 ? ` ${colors.gray}${userAgent.substring(0, 50)}...${colors.reset}` : userAgent ? ` ${colors.gray}${userAgent}${colors.reset}` : '';
+  console.log(`${colors.cyan}[${method}]${colors.reset} - ${path} ${statusColor}${status}${colors.reset} ${colors.gray}${duration}ms${colors.reset}${ipInfo}${uaInfo}`);
 }
 
 export const log = {

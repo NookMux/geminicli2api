@@ -13,6 +13,16 @@ RUN npm ci --only=production && npm cache clean --force
 # 复制项目文件
 COPY . .
 
+# 根据架构下载对应的二进制文件
+ARG TARGETPLATFORM
+RUN echo "Building for platform: ${TARGETPLATFORM}" && \
+    if [ "${TARGETPLATFORM}" = "linux/arm64" ]; then \
+        echo "ARM64平台 - 使用Android ARM64二进制文件" && \
+        cp src/bin/antigravity_requester_android_arm64 src/bin/antigravity_requester_linux_arm64 && \
+        chmod +x src/bin/antigravity_requester_linux_arm64; \
+    fi && \
+    chmod +x src/bin/*_amd64 src/bin/*_arm64 2>/dev/null || true
+
 # 创建 data 目录用于存储 accounts.json
 RUN mkdir -p data && \
     chown -R node:node /app
