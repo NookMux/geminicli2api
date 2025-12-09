@@ -22,6 +22,27 @@ if (config.useNativeAxios === true) {
     }
 }
 
+export function refreshApiClientConfig() {
+    if (config.useNativeAxios === true) {
+        requester = null;
+        useAxios = true;
+        return;
+    }
+
+    if (config.useNativeAxios === false) {
+        useAxios = false;
+    }
+
+    if (!requester && !useAxios) {
+        try {
+            requester = new AntigravityRequester();
+        } catch (error) {
+            console.warn('重新初始化 AntigravityRequester 失败，继续使用 axios:', error.message);
+            useAxios = true;
+        }
+    }
+}
+
 // ==================== 辅助函数 ====================
 
 function buildHeaders(token) {
@@ -344,7 +365,7 @@ function parseAndEmitStreamChunk(line, state, callback) {
                     callback({ type: 'text', content: part.text });
                 } else if (part.functionCall) {
                     // 工具调用
-                    state.toolCalls.push(convertToToolCall(part.functionCall));
+                    state.toolCalls.push(convertToToolCallWithSignature(part.functionCall, part.thoughtSignature));
                 }
             }
         }
@@ -493,7 +514,7 @@ export async function generateAssistantResponseNoStream(requestBody, token) {
         } else if (part.text !== undefined) {
             content += part.text;
         } else if (part.functionCall) {
-            toolCalls.push(convertToToolCall(part.functionCall));
+            toolCalls.push(convertToToolCallWithSignature(part.functionCall, part.thoughtSignature));
         } else if (part.inlineData) {
             // 保存图片到本地并获取 URL
             const imageUrl = saveBase64Image(part.inlineData.data, part.inlineData.mimeType);

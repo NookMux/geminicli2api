@@ -9,7 +9,7 @@
     "login": "node scripts/oauth-server.js",
     "refresh": "node scripts/refresh-tokens.js",
     "dev": "node --watch src/server/index.js",
-    "test": "node --test test/log_store.test.js"
+    "test": "node test/claudeAdapter.test.js"
   },
   "keywords": [
     "antigravity",
