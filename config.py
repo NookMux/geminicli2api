@@ -304,13 +304,9 @@ async def get_retry_429_interval() -> float:
 
 
 # Model name lists for different features
-BASE_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-3-pro-preview"]
+BASE_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-3-pro-preview","gemini-3-flash-preview"]
 
-PUBLIC_API_MODELS = [
-    "gemini-2.5-flash-image",
-    "gemini-2.5-flash-image-preview",
-    "gemini-3-pro-image-preview",
-]
+PUBLIC_API_MODELS = []
 
 ALL_SUPPORTED_MODELS = BASE_MODELS + PUBLIC_API_MODELS
 
