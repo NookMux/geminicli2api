@@ -270,26 +270,24 @@ function bindAccountActions() {
       if (idx === undefined) return;
 
       const quotaSection = document.getElementById(`quota-${idx}`);
-      const isVisible = quotaSection.style.display !== 'none';
+      if (!quotaSection) return;
 
-      if (isVisible) {
-        quotaSection.style.display = 'none';
-        btn.textContent = '📊 查看额度';
-      } else {
-        quotaSection.style.display = 'block';
-        btn.textContent = '📊 收起额度';
-        await loadQuota(idx);
-      }
+      quotaSection.style.display = 'block';
+      btn.textContent = '📊 刷新额度';
+      await loadQuota(idx, true);
     });
   });
 }
 
-async function loadQuota(accountIndex) {
+async function loadQuota(accountIndex, showLoading = false) {
   const quotaSection = document.getElementById(`quota-${accountIndex}`);
   if (!quotaSection) return;
 
   try {
-    const data = await fetchJson(`/admin/tokens/${accountIndex}/quotas`);
+    if (showLoading) {
+      quotaSection.innerHTML = '<div class="quota-loading">加载中...</div>';
+    }
+    const data = await fetchJson(`/admin/tokens/${accountIndex}/quotas`, { cache: 'no-store' });
     renderQuota(quotaSection, data.data);
   } catch (e) {
     quotaSection.innerHTML = `<div class="quota-error">加载失败: ${e.message}</div>`;
@@ -373,12 +371,21 @@ function renderQuota(container, quotaData) {
     }
   }
 
+  // 获取折叠状态，默认为展开
+  const isCollapsed = localStorage.getItem('quota-models-collapsed') === 'true';
+
   let html = `
     <div class="quota-header">
       <span class="quota-title">模型额度信息（分组显示）</span>
-      <span class="quota-updated">更新时间: ${lastUpdated}</span>
+      <div class="quota-header-actions">
+        <span class="quota-updated">更新时间: ${lastUpdated}</span>
+        <button class="quota-toggle-btn" data-collapsed="${isCollapsed}" type="button">
+          <span class="quota-toggle-icon">${isCollapsed ? '▶' : '▼'}</span>
+          <span class="quota-toggle-text">${isCollapsed ? '展开模型' : '收起模型'}</span>
+        </button>
+      </div>
     </div>
-    <div class="quota-groups">
+    <div class="quota-groups" data-collapsed="${isCollapsed}">
   `;
 
   // 渲染分组模型
@@ -400,7 +407,7 @@ function renderQuota(container, quotaData) {
           <span class="quota-group-icon">${groupData.icon}</span>
           <div class="quota-group-info">
             <div class="quota-group-name">${escapeHtml(groupName)}</div>
-            <div class="quota-group-models">(${groupData.modelIds.map(id => escapeHtml(id)).join(', ')})</div>
+            <div class="quota-group-models" data-collapsible="true">(${groupData.modelIds.map(id => escapeHtml(id)).join(', ')})</div>
             <div class="quota-group-description">${escapeHtml(groupData.description)}</div>
           </div>
         </div>
@@ -457,6 +464,26 @@ function renderQuota(container, quotaData) {
 
   html += '</div>';
   container.innerHTML = html;
+
+  // 绑定折叠按钮事件
+  const toggleBtn = container.querySelector('.quota-toggle-btn');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', function() {
+      const isCollapsed = this.getAttribute('data-collapsed') === 'true';
+      const newState = !isCollapsed;
+
+      // 更新状态
+      this.setAttribute('data-collapsed', newState);
+      container.querySelector('.quota-groups').setAttribute('data-collapsed', newState);
+
+      // 更新按钮显示
+      this.querySelector('.quota-toggle-icon').textContent = newState ? '▶' : '▼';
+      this.querySelector('.quota-toggle-text').textContent = newState ? '展开模型' : '收起模型';
+
+      // 保存到localStorage
+      localStorage.setItem('quota-models-collapsed', newState);
+    });
+  }
 }
 
 async function refreshAccounts() {

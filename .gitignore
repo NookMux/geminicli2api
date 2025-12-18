@@ -17,6 +17,7 @@ logs/
 Thumbs.db
 
 data/
-test/*.png
-test/*.jpeg
 旧版本/
+test/
+Docs/
+.claude/

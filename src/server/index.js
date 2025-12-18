@@ -7,13 +7,13 @@ import { parseToml } from '../utils/tomlParser.js';
 import {
   generateAssistantResponse,
   generateAssistantResponseNoStream,
+  generateGeminiResponseNoStream,
   getAvailableModels,
   closeRequester,
-  generateGeminiContent,
-  streamGeminiContent,
   refreshApiClientConfig
 } from '../api/client.js';
-import { generateRequestBody } from '../utils/utils.js';
+import { generateRequestBody, generateRequestBodyFromGemini } from '../utils/utils.js';
+import { saveBase64Image } from '../utils/imageStorage.js';
 import { generateProjectId } from '../utils/idGenerator.js';
 import {
   mapClaudeToOpenAI,
@@ -337,13 +337,6 @@ const SETTINGS_DEFINITIONS = [
     valueResolver: cfg => cfg.systemInstruction
   },
   {
-    key: 'CREDENTIAL_MAX_USAGE_PER_HOUR',
-    label: '凭证每小时调用上限',
-    category: '限额与重试',
-    defaultValue: 20,
-    valueResolver: cfg => cfg.credentials.maxUsagePerHour
-  },
-  {
     key: 'RETRY_STATUS_CODES',
     label: '重试状态码',
     category: '限额与重试',
@@ -485,10 +478,10 @@ app.get('/', (req, res) => {
   return res.redirect('/admin/login');
 });
 
-// API key check for /v1/*、/gemini/* 以及 /{credential}/v1/* endpoints（API_KEY 在启动时强制要求配置）
+// API key check for /v1/* 以及 /{credential}/v1/* endpoints（API_KEY 在启动时强制要求配置）
 const isProtectedApiPath = pathname => {
   const normalized = pathname || '';
-  return /^\/(?:[\w-]+\/)?v1\//.test(normalized) || normalized.startsWith('/gemini/');
+  return /^\/(?:[\w-]+\/)?v1\//.test(normalized);
 };
 
 function extractApiKeyFromHeaders(req) {
@@ -506,15 +499,36 @@ function extractApiKeyFromHeaders(req) {
   return candidates.find(v => v) || null;
 }
 
+function validateApiKey(req) {
+  const apiKey = config.security?.apiKey;
+  const providedKey = extractApiKeyFromHeaders(req);
+
+  if (!apiKey) {
+    return { ok: false, status: 503, message: 'API Key 未配置' };
+  }
+
+  if (!providedKey || providedKey !== apiKey) {
+    return { ok: false, status: 401, message: 'Invalid API Key' };
+  }
+
+  return { ok: true };
+}
+
+function requireApiKey(req, res, next) {
+  const result = validateApiKey(req);
+  if (!result.ok) {
+    logger.warn(`API Key 鉴权失败: ${req.method} ${req.originalUrl || req.url}`);
+    return res.status(result.status).json({ error: result.message });
+  }
+  return next();
+}
+
 app.use((req, res, next) => {
   if (isProtectedApiPath(req.path)) {
-    const apiKey = config.security?.apiKey;
-    if (apiKey) {
-      const providedKey = extractApiKeyFromHeaders(req);
-      if (providedKey !== apiKey) {
-        logger.warn(`API Key验证失败: ${req.method} ${req.path}`);
-        return res.status(401).json({ error: 'Invalid API Key' });
-      }
+    const result = validateApiKey(req);
+    if (!result.ok) {
+      logger.warn(`API Key 鉴权失败: ${req.method} ${req.path}`);
+      return res.status(result.status).json({ error: result.message });
     }
   }
   next();
@@ -1317,6 +1331,153 @@ app.get('/admin/logs/:id', requirePanelAuthApi, (req, res) => {
   res.json({ log: detail });
 });
 
+function parseQuotaIndexes(rawIndexes, total) {
+  if (rawIndexes === undefined || rawIndexes === null) return null;
+
+  const normalized = Array.isArray(rawIndexes) ? rawIndexes.join(',') : String(rawIndexes);
+  const candidates = normalized
+    .split(/[,\s]+/)
+    .map(part => parseInt(part, 10))
+    .filter(num => Number.isFinite(num));
+
+  const unique = [];
+  candidates.forEach(num => {
+    const zeroBased = num > 0 ? num - 1 : num;
+    if (zeroBased >= 0 && zeroBased < total && !unique.includes(zeroBased)) {
+      unique.push(zeroBased);
+    }
+  });
+
+  return unique;
+}
+
+function formatQuotaForResponse(quotaResult) {
+  const quota = {};
+  const models = quotaResult?.models || {};
+
+  Object.entries(models).forEach(([modelId, info]) => {
+    const remainingFraction = Number.isFinite(Number(info?.remaining))
+      ? Number(info.remaining)
+      : Number(info?.remainingFraction ?? 0);
+    const modelQuota = { remainingFraction: remainingFraction || 0 };
+    if (info?.resetTime) modelQuota.resetTime = info.resetTime;
+    if (info?.resetTimeRaw) modelQuota.resetTimeRaw = info.resetTimeRaw;
+    quota[modelId] = modelQuota;
+  });
+
+  return {
+    code: '成功为200',
+    msg: '成功就写获取成功',
+    quota
+  };
+}
+
+function mergeQuota(aggregate, quotaMap) {
+  Object.entries(quotaMap || {}).forEach(([modelId, info]) => {
+    if (!aggregate[modelId]) {
+      aggregate[modelId] = { remainingFraction: 0 };
+      if (info.resetTime) aggregate[modelId].resetTime = info.resetTime;
+      if (info.resetTimeRaw) aggregate[modelId].resetTimeRaw = info.resetTimeRaw;
+    }
+    const value = Number.isFinite(Number(info?.remainingFraction))
+      ? Number(info.remainingFraction)
+      : 0;
+    aggregate[modelId].remainingFraction += value;
+  });
+  return aggregate;
+}
+
+// API Key 鉴权的额度查询接口
+app.get('/admin/quota/list', requireApiKey, (req, res) => {
+  try {
+    if (!fs.existsSync(ACCOUNTS_FILE)) {
+      return res.json({ code: '成功为200', msg: '成功就写获取成功', enabled: 0 });
+    }
+
+    const accounts = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf-8'));
+    const enabled = Array.isArray(accounts)
+      ? accounts.filter(acc => acc && acc.enable !== false).length
+      : 0;
+
+    return res.json({ code: '成功为200', msg: '成功就写获取成功', enabled });
+  } catch (e) {
+    logger.error('/admin/quota/list 获取启用凭证数量失败:', e.message);
+    return res
+      .status(500)
+      .json({ error: e.message || '获取启用凭证数量失败' });
+  }
+});
+
+app.get('/admin/quota/all', requireApiKey, async (req, res) => {
+  try {
+    if (!fs.existsSync(ACCOUNTS_FILE)) {
+      return res.status(404).json({ error: 'accounts.json 不存在' });
+    }
+
+    const accounts = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf-8'));
+    if (!Array.isArray(accounts) || accounts.length === 0) {
+      return res.status(404).json({ error: '暂无可用凭证' });
+    }
+
+    const indexes = parseQuotaIndexes(
+      req.query.ids ?? req.query.index ?? req.query.credentials,
+      accounts.length
+    );
+    const targetIndexes =
+      indexes && indexes.length > 0
+        ? indexes
+        : accounts
+          .map((_, idx) => idx)
+          .filter(idx => accounts[idx]?.enable !== false);
+
+    if (targetIndexes.length === 0) {
+      return res.status(404).json({ error: '没有匹配的启用凭证' });
+    }
+
+    const payload = {};
+    const aggregateQuota = {};
+
+    for (const idx of targetIndexes) {
+      const account = accounts[idx];
+      const label = `凭证${idx + 1}`;
+
+      if (!account || account.enable === false) {
+        payload[label] = { code: '403', msg: '凭证未启用', quota: {} };
+        continue;
+      }
+
+      if (!account.refresh_token) {
+        payload[label] = { code: '400', msg: '凭证缺少 refresh_token', quota: {} };
+        continue;
+      }
+
+      try {
+        const quotaResult = await quotaManager.getQuotas(account.refresh_token, account);
+        const formatted = formatQuotaForResponse(quotaResult);
+        payload[label] = formatted;
+        mergeQuota(aggregateQuota, formatted.quota);
+      } catch (e) {
+        payload[label] = {
+          code: '500',
+          msg: e.message || '获取额度失败',
+          quota: {}
+        };
+      }
+    }
+
+    payload.all = {
+      code: '成功为200',
+      msg: '成功就写获取成功',
+      quota: aggregateQuota
+    };
+
+    return res.json(payload);
+  } catch (e) {
+    logger.error('/admin/quota/all 获取额度失败:', e.message);
+    return res.status(500).json({ error: e.message || '获取额度失败' });
+  }
+});
+
 // 额度查询接口
 app.get('/admin/tokens/:index/quotas', requirePanelAuthApi, async (req, res) => {
   try {
@@ -1338,6 +1499,11 @@ app.get('/admin/tokens/:index/quotas', requirePanelAuthApi, async (req, res) => 
     // 使用refreshToken作为缓存键
     const quotas = await quotaManager.getQuotas(target.refresh_token, target);
 
+    // 禁止浏览器缓存额度结果，确保每次查询直连谷歌
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
     res.json({ success: true, data: quotas });
   } catch (e) {
     logger.error('获取额度失败:', e.message);
@@ -1350,6 +1516,34 @@ app.get('/admin/oauth', requirePanelAuthPage, (req, res) => {
   const filePath = path.join(__dirname, '..', '..', 'public', 'admin', 'index.html');
   res.sendFile(filePath);
 });
+
+// 将 Gemini 兼容响应中的 inlineData 落地为 URL，避免下游自行处理 base64
+function attachImageUrlsToGeminiResponse(response) {
+  if (!response?.candidates) return response;
+  try {
+    for (const candidate of response.candidates) {
+      const parts = candidate?.content?.parts;
+      if (!Array.isArray(parts)) continue;
+      for (const part of parts) {
+        const inline = part?.inlineData || part?.inline_data;
+        if (!inline || typeof inline.data !== 'string' || !inline.data.trim()) continue;
+        const mimeType = inline.mimeType || inline.mime_type || 'image/png';
+        const url = saveBase64Image(inline.data, mimeType);
+        if (part.inlineData) {
+          part.inlineData.url = url;
+        }
+        if (part.inline_data) {
+          part.inline_data.url = url;
+        }
+        // 额外放一份 imageUrl 便于客户端直接取用
+        part.imageUrl = url;
+      }
+    }
+  } catch (err) {
+    logger.warn('处理 Gemini 响应图片为 URL 时出错:', err.message);
+  }
+  return response;
+}
 
 // Static assets for admin panel
 const adminStatic = express.static(path.join(__dirname, '..', '..', 'public', 'admin'));
@@ -1401,6 +1595,23 @@ const createChatCompletionHandler = (resolveToken, options = {}) => async (req, 
         }
       }
     });
+    // 同时输出到控制台详细日志
+    if (logger.detail) {
+      logger.detail({
+        method: req.method,
+        path: req.originalUrl,
+        status,
+        durationMs: Date.now() - startedAt,
+        request: requestSnapshot,
+        response: {
+          status,
+          headers: res.getHeaders ? res.getHeaders() : undefined,
+          body: responseBodyForLog,
+          modelOutput: responseSummaryForLog
+        },
+        error: success ? undefined : message
+      });
+    }
   };
   try {
     if (!messages) {
@@ -1419,14 +1630,81 @@ const createChatCompletionHandler = (resolveToken, options = {}) => async (req, 
       return;
     }
 
-    const isImageModel = typeof model === 'string' && model.includes('-image');
-    const requestBody = generateRequestBody(messages, model, params, tools, token);
+    // 兼容模型别名后缀 -1k/-2k/-4k：用于指定分辨率，发送给上游时去掉后缀
+    let upstreamModel = model;
+    let imageSizeFromModel = null;
+    if (typeof model === 'string') {
+      const match = model.match(/^(.*-image)(?:-(1k|2k|4k))$/i);
+      if (match) {
+        upstreamModel = match[1];
+        imageSizeFromModel = match[2].toUpperCase(); // 1K/2K/4K
+      }
+    }
+
+    // 将分辨率写入参数（仅当用户未显式传入时）
+    const paramsWithImageSize = { ...params };
+    const userHasImageSize =
+      params.image_size ||
+      params.imageSize ||
+      params?.generation_config?.image_size ||
+      params?.generation_config?.imageSize ||
+      params?.generation_config?.image_config?.image_size ||
+      params?.generation_config?.image_config?.imageSize ||
+      params?.generationConfig?.image_size ||
+      params?.generationConfig?.imageSize ||
+      params?.generationConfig?.image_config?.image_size ||
+      params?.generationConfig?.image_config?.imageSize;
+    if (imageSizeFromModel && !userHasImageSize) {
+      paramsWithImageSize.image_size = imageSizeFromModel;
+    }
+
+    const isImageModel = typeof upstreamModel === 'string' && upstreamModel.includes('-image');
+    const requestBody = generateRequestBody(messages, upstreamModel, paramsWithImageSize, tools, token);
 
     if (isImageModel) {
-      requestBody.request.generationConfig = {
+      // 为图像模型配置思维链、响应模态，并兼容 imageConfig 等参数，使图片模型能返回图片
+      const userGenerationConfig = paramsWithImageSize.generation_config || paramsWithImageSize.generationConfig || {};
+      const userImageConfig =
+        paramsWithImageSize.image_config ||
+        paramsWithImageSize.imageConfig ||
+        userGenerationConfig.image_config ||
+        userGenerationConfig.imageConfig ||
+        {};
+      const aspectRatio =
+        paramsWithImageSize.aspect_ratio ||
+        paramsWithImageSize.aspectRatio ||
+        userImageConfig.aspect_ratio ||
+        userImageConfig.aspectRatio;
+      const imageSize =
+        paramsWithImageSize.image_size ||
+        paramsWithImageSize.imageSize ||
+        userImageConfig.image_size ||
+        userImageConfig.imageSize;
+      const responseModalities =
+        paramsWithImageSize.response_modalities ||
+        paramsWithImageSize.responseModalities ||
+        userGenerationConfig.response_modalities ||
+        userGenerationConfig.responseModalities;
+
+      const mergedImageConfig = {};
+      if (aspectRatio) mergedImageConfig.aspectRatio = aspectRatio;
+      if (imageSize) mergedImageConfig.imageSize = imageSize;
+
+      const mergedGenerationConfig = {
+        ...requestBody.request.generationConfig,
+        ...userGenerationConfig,
+        responseModalities: responseModalities || ["TEXT", "IMAGE"],
+        thinkingConfig: {
+          includeThoughts: true,
+          thinkingBudget: 1024
+        },
         candidateCount: 1
-        // imageConfig: { aspectRatio: '1:1' }
       };
+      if (Object.keys(mergedImageConfig).length > 0) {
+        mergedGenerationConfig.imageConfig = mergedImageConfig;
+      }
+
+      requestBody.request.generationConfig = mergedGenerationConfig;
       requestBody.requestType = 'image_gen';
       requestBody.request.systemInstruction.parts[0].text +=
         '（当前作为图像生成模型使用，请根据描述生成图片）';
@@ -1440,11 +1718,32 @@ const createChatCompletionHandler = (resolveToken, options = {}) => async (req, 
       setStreamHeaders(res);
 
       if (isImageModel) {
-        const { content, usage } = await generateAssistantResponseNoStream(requestBody, token);
-        writeStreamData(res, createStreamChunk(id, created, model, { content }));
+        // 图像模型使用流式API，实现思维链实时传输
+        const imageUrls = [];
+        const { usage } = await generateAssistantResponse(requestBody, token, data => {
+          streamEventsForLog.push(data);
+
+          if (data.type === 'thinking') {
+            // 思维链内容实时发送
+            writeStreamData(res, createStreamChunk(id, created, model, { reasoning_content: data.content }));
+          } else if (data.type === 'image') {
+            // 收集图片URL，最后统一发送
+            imageUrls.push(data.url);
+          } else if (data.type === 'text') {
+            // 文本内容
+            writeStreamData(res, createStreamChunk(id, created, model, { content: data.content }));
+          }
+        });
+
+        // 发送所有图片
+        if (imageUrls.length > 0) {
+          const markdown = imageUrls.map(url => `![image](${url})`).join('\n\n');
+          writeStreamData(res, createStreamChunk(id, created, model, { content: markdown }));
+        }
+
         endStream(res, id, created, model, 'stop', usage);
-        responseBodyForLog = { stream: true, image: true, usage, content };
-        responseSummaryForLog = { text: content };
+        responseBodyForLog = { stream: true, image: true, usage, events: streamEventsForLog };
+        responseSummaryForLog = summarizeStreamEvents(streamEventsForLog);
       } else {
         let hasToolCall = false;
         const { usage } = await generateAssistantResponse(requestBody, token, data => {
@@ -1594,6 +1893,383 @@ app.get('/v1/lits', (req, res) => {
   });
 });
 
+// Gemini 兼容接口：非流式 GenerateContent，直接接收 Gemini Request 并通过 AntigravityRequester 调用后端
+const handleGeminiGenerateContent = async (req, res) => {
+  const startedAt = Date.now();
+  const requestSnapshot = createRequestSnapshot(req);
+  const model = req.params.model || req.body?.model || 'unknown';
+
+  // 兼容模型别名后缀 -1k/-2k/-4k：用于指定分辨率，发送给上游时去掉后缀
+  let upstreamModel = model;
+  let imageSizeFromModel = null;
+  if (typeof model === 'string') {
+    const match = model.match(/^(.*-image)(?:-(1k|2k|4k))$/i);
+    if (match) {
+      upstreamModel = match[1];
+      imageSizeFromModel = match[2].toUpperCase(); // 1K/2K/4K
+    }
+  }
+
+  let token = null;
+  let responseBodyForLog = null;
+
+  const writeLog = ({ success, status, message }) => {
+    appendLog({
+      timestamp: new Date().toISOString(),
+      model,
+      projectId: token?.projectId || null,
+      success,
+      status,
+      message,
+      durationMs: Date.now() - startedAt,
+      path: req.originalUrl,
+      method: req.method,
+      detail: {
+        request: requestSnapshot,
+        response: {
+          status,
+          headers: res.getHeaders ? res.getHeaders() : undefined,
+          body: responseBodyForLog
+        }
+      }
+    });
+    // 同时输出到控制台详细日志
+    if (logger.detail) {
+      logger.detail({
+        method: req.method,
+        path: req.originalUrl,
+        status,
+        durationMs: Date.now() - startedAt,
+        request: requestSnapshot,
+        response: {
+          status,
+          headers: res.getHeaders ? res.getHeaders() : undefined,
+          body: responseBodyForLog
+        },
+        error: success ? undefined : message
+      });
+    }
+  };
+
+  try {
+    const body = req.body || {};
+    // 若通过模型后缀指定分辨率且请求未显式携带，则补全到 generationConfig.imageConfig.imageSize
+    if (imageSizeFromModel) {
+      const genCfg = body.generationConfig || {};
+      const imgCfg = genCfg.imageConfig || {};
+      const hasImageSize = imgCfg.imageSize || imgCfg.image_size;
+      if (!hasImageSize) {
+        imgCfg.imageSize = imageSizeFromModel;
+        genCfg.imageConfig = imgCfg;
+        body.generationConfig = genCfg;
+      }
+    }
+    if (!Array.isArray(body.contents) || body.contents.length === 0) {
+      const status = 400;
+      const message = 'contents is required for Gemini generateContent';
+      res.status(status).json({ error: message });
+      writeLog({ success: false, status, message });
+      return;
+    }
+
+    token = await tokenManager.getToken();
+    if (!token) {
+      const status = 503;
+      const message = '没有可用的 token，请先通过 OAuth 面板或 npm run login 获取。';
+      res.status(status).json({ error: message });
+      writeLog({ success: false, status, message });
+      return;
+    }
+
+    // 将 Gemini 原生请求包装成 Antigravity 请求体
+    const requestBody = generateRequestBodyFromGemini(body, upstreamModel, token);
+
+    // 当前只支持非流式：即官方 Gemini 的 :generateContent 语义
+    const geminiResponse = await generateGeminiResponseNoStream(requestBody, token);
+    const responseWithUrls = attachImageUrlsToGeminiResponse(geminiResponse);
+    responseBodyForLog = responseWithUrls;
+
+    res.json(responseWithUrls);
+    writeLog({ success: true, status: res.statusCode || 200 });
+  } catch (error) {
+    const status = 500;
+    const message = error?.message || 'Gemini generateContent 调用失败';
+    res.status(status).json({ error: message });
+    writeLog({ success: false, status, message });
+  }
+};
+
+const handleGeminiStreamGenerateContent = async (req, res) => {
+  const startedAt = Date.now();
+  const requestSnapshot = createRequestSnapshot(req);
+  const model = req.params.model || req.body?.model || 'unknown';
+
+  // 兼容模型别名后缀 -1k/-2k/-4k：用于指定分辨率，发送给上游时去掉后缀
+  let upstreamModel = model;
+  let imageSizeFromModel = null;
+  if (typeof model === 'string') {
+    const match = model.match(/^(.*-image)(?:-(1k|2k|4k))$/i);
+    if (match) {
+      upstreamModel = match[1];
+      imageSizeFromModel = match[2].toUpperCase(); // 1K/2K/4K
+    }
+  }
+
+  let token = null;
+  const streamEventsForLog = [];
+  let responseBodyForLog = null;
+
+  const writeLog = ({ success, status, message }) => {
+    appendLog({
+      timestamp: new Date().toISOString(),
+      model,
+      projectId: token?.projectId || null,
+      success,
+      status,
+      message,
+      durationMs: Date.now() - startedAt,
+      path: req.originalUrl,
+      method: req.method,
+      detail: {
+        request: requestSnapshot,
+        response: {
+          status,
+          headers: res.getHeaders ? res.getHeaders() : undefined,
+          body: responseBodyForLog
+        }
+      }
+    });
+    if (logger.detail) {
+      logger.detail({
+        method: req.method,
+        path: req.originalUrl,
+        status,
+        durationMs: Date.now() - startedAt,
+        request: requestSnapshot,
+        response: {
+          status,
+          headers: res.getHeaders ? res.getHeaders() : undefined,
+          body: responseBodyForLog
+        },
+        error: success ? undefined : message
+      });
+    }
+  };
+
+  try {
+    const body = req.body || {};
+    if (!Array.isArray(body.contents) || body.contents.length === 0) {
+      const status = 400;
+      const message = 'contents is required for Gemini streamGenerateContent';
+      res.status(status).json({ error: message });
+      writeLog({ success: false, status, message });
+      return;
+    }
+
+    // 若通过模型后缀指定分辨率且请求未显式携带，则补全到 generationConfig.imageConfig.imageSize
+    if (imageSizeFromModel) {
+      const genCfg = body.generationConfig || {};
+      const imgCfg = genCfg.imageConfig || {};
+      const hasImageSize = imgCfg.imageSize || imgCfg.image_size;
+      if (!hasImageSize) {
+        imgCfg.imageSize = imageSizeFromModel;
+        genCfg.imageConfig = imgCfg;
+        body.generationConfig = genCfg;
+      }
+    }
+
+    token = await tokenManager.getToken();
+    if (!token) {
+      const status = 503;
+      const message = '没有可用的 token，请先通过 OAuth 面板或 npm run login 获取。';
+      res.status(status).json({ error: message });
+      writeLog({ success: false, status, message });
+      return;
+    }
+
+    const requestBody = generateRequestBodyFromGemini(body, upstreamModel, token);
+
+    setStreamHeaders(res);
+    res.flushHeaders();
+
+    const sendSse = payload => {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    const { usage } = await generateAssistantResponse(requestBody, token, data => {
+      streamEventsForLog.push(data);
+      if (data.type === 'thinking') {
+        sendSse({ candidates: [{ content: { parts: [{ text: data.content, thought: true }] } }] });
+      } else if (data.type === 'text') {
+        sendSse({ candidates: [{ content: { parts: [{ text: data.content }] } }] });
+      } else if (data.type === 'image') {
+        sendSse({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: data.mimeType || 'image/png',
+                      url: data.url,
+                      data: data.data
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        });
+      } else if (data.type === 'tool_calls') {
+        // Gemini 流式暂不下发工具调用，忽略
+      }
+    });
+
+    sendSse({ done: true, usage: usage || null });
+    res.end();
+
+    responseBodyForLog = { stream: true, events: streamEventsForLog, usage };
+    writeLog({ success: true, status: 200 });
+  } catch (error) {
+    const status = 500;
+    const message = error?.message || 'Gemini streamGenerateContent 调用失败';
+    if (!res.headersSent) {
+      res.status(status).json({ error: message });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
+      res.end();
+    }
+    writeLog({ success: false, status, message });
+  }
+};
+
+app.post('/v1beta/models/:model\\:generateContent', handleGeminiGenerateContent);
+app.post('/v1beta/models/:model\\:streamGenerateContent', handleGeminiStreamGenerateContent);
+// 兼容 README 中的 /gemini/v1beta 前缀
+app.post('/gemini/v1beta/models/:model\\:generateContent', handleGeminiGenerateContent);
+app.post('/gemini/v1beta/models/:model\\:streamGenerateContent', handleGeminiStreamGenerateContent);
+
+// OpenAI 图像生成兼容接口：/v1/images/generations
+app.post('/v1/images/generations', async (req, res) => {
+  const startedAt = Date.now();
+  const requestSnapshot = createRequestSnapshot(req);
+  const { prompt, model, size, user, response_format } = req.body || {};
+
+  let token = null;
+  let responseBodyForLog = null;
+  const writeLog = ({ success, status, message }) => {
+    appendLog({
+      timestamp: new Date().toISOString(),
+      model: model || 'unknown',
+      projectId: token?.projectId || null,
+      success,
+      status,
+      message,
+      durationMs: Date.now() - startedAt,
+      path: req.originalUrl,
+      method: req.method,
+      detail: {
+        request: requestSnapshot,
+        response: {
+          status,
+          headers: res.getHeaders ? res.getHeaders() : undefined,
+          body: responseBodyForLog
+        }
+      }
+    });
+    if (logger.detail) {
+      logger.detail({
+        method: req.method,
+        path: req.originalUrl,
+        status,
+        durationMs: Date.now() - startedAt,
+        request: requestSnapshot,
+        response: {
+          status,
+          headers: res.getHeaders ? res.getHeaders() : undefined,
+          body: responseBodyForLog
+        },
+        error: success ? undefined : message
+      });
+    }
+  };
+
+  try {
+    if (!prompt || !model) {
+      const status = 400;
+      const message = 'prompt 和 model 均为必填';
+      res.status(status).json({ error: message });
+      writeLog({ success: false, status, message });
+      return;
+    }
+
+    // 将 OpenAI image size 映射到 image_size（1K/2K/4K）
+    const sizeMap = {
+      '256x256': '1K',
+      '512x512': '1K',
+      '1024x1024': '1K',
+      '1536x1536': '2K',
+      '2048x2048': '2K',
+      '4096x4096': '4K'
+    };
+    const imageSize = sizeMap[String(size).toLowerCase()] || null;
+    const params = {};
+    if (imageSize) params.image_size = imageSize;
+
+    token = await tokenManager.getToken();
+    if (!token) {
+      const status = 503;
+      const message = '没有可用的 token，请先通过 OAuth 面板或 npm run login 获取。';
+      res.status(status).json({ error: message });
+      writeLog({ success: false, status, message });
+      return;
+    }
+
+    const messages = [{ role: 'user', content: prompt }];
+    const requestBody = generateRequestBody(messages, model, params, undefined, token);
+    // 图像模型固定 image_gen
+    requestBody.requestType = 'image_gen';
+
+    const { content } = await generateAssistantResponseNoStream(requestBody, token);
+    // 提取 markdown 里的图片 URL 或直接解析 inlineData 生成的 URL
+    const imageUrls = [];
+    const urlRegex = /!\\[image\\]\\(([^)]+)\\)/g;
+    let match;
+    while ((match = urlRegex.exec(content || '')) !== null) {
+      if (match[1]) imageUrls.push(match[1]);
+    }
+
+    if (imageUrls.length === 0) {
+      const status = 502;
+      const message = '上游未返回图片';
+      res.status(status).json({ error: message });
+      writeLog({ success: false, status, message });
+      return;
+    }
+
+    const created = Math.floor(Date.now() / 1000);
+    const data = imageUrls.map(url => {
+      if (response_format === 'b64_json') {
+        // 提示：当前未存储原始 base64，这里返回空字符串占位，避免 400
+        return { b64_json: '' };
+      }
+      return { url };
+    });
+
+    const payload = { created, data };
+    responseBodyForLog = payload;
+    res.json(payload);
+    writeLog({ success: true, status: res.statusCode || 200 });
+  } catch (error) {
+    const status = error?.statusCode || 500;
+    const message = error?.message || '图片生成失败';
+    if (!res.headersSent) {
+      res.status(status).json({ error: message });
+    }
+    writeLog({ success: false, status, message });
+  }
+});
+
 app.post('/v1/chat/completions', createChatCompletionHandler(() => tokenManager.getToken()));
 app.post(
   '/:credential/v1/chat/completions',
@@ -1608,7 +2284,7 @@ app.post('/v1/messages/count_tokens', (req, res) => {
   const requestSnapshot = createRequestSnapshot(req);
   let responseBodyForLog = null;
 
-  const writeLog = ({ success, status, message }) =>
+  const writeLog = ({ success, status, message }) => {
     appendLog({
       timestamp: new Date().toISOString(),
       model: req.body?.model || 'unknown',
@@ -1628,6 +2304,23 @@ app.post('/v1/messages/count_tokens', (req, res) => {
         }
       }
     });
+    // 同时输出到控制台详细日志
+    if (logger.detail) {
+      logger.detail({
+        method: req.method,
+        path: req.originalUrl,
+        status,
+        durationMs: Date.now() - startedAt,
+        request: requestSnapshot,
+        response: {
+          status,
+          headers: res.getHeaders ? res.getHeaders() : undefined,
+          body: responseBodyForLog
+        },
+        error: success ? undefined : message
+      });
+    }
+  };
 
   try {
     const result = countClaudeTokens(req.body || {});
@@ -1649,11 +2342,12 @@ app.post('/v1/messages', async (req, res) => {
   let token = null;
   let openaiReq = null;
   let requestBody = null;
+  let clientModelForLog = null;
 
-  const writeLog = ({ success, status, message }) =>
+  const writeLog = ({ success, status, message }) => {
     appendLog({
       timestamp: new Date().toISOString(),
-      model: openaiReq?.model || req.body?.model || 'unknown',
+      model: clientModelForLog || openaiReq?.model || req.body?.model || 'unknown',
       projectId: token?.projectId || null,
       success,
       status,
@@ -1670,9 +2364,56 @@ app.post('/v1/messages', async (req, res) => {
         }
       }
     });
+    // 同时输出到控制台详细日志
+    if (logger.detail) {
+      logger.detail({
+        method: req.method,
+        path: req.originalUrl,
+        status,
+        durationMs: Date.now() - startedAt,
+        request: requestSnapshot,
+        response: {
+          status,
+          headers: res.getHeaders ? res.getHeaders() : undefined,
+          body: responseBodyForLog
+        },
+        error: success ? undefined : message
+      });
+    }
+  };
 
   try {
     openaiReq = mapClaudeToOpenAI(req.body || {});
+    clientModelForLog = openaiReq.model;
+
+    // 兼容模型别名后缀 -1k/-2k/-4k：用于指定分辨率，发送给上游时去掉后缀
+    let upstreamModel = openaiReq.model;
+    let imageSizeFromModel = null;
+    if (typeof upstreamModel === 'string') {
+      const match = upstreamModel.match(/^(.*-image)(?:-(1k|2k|4k))$/i);
+      if (match) {
+        upstreamModel = match[1];
+        imageSizeFromModel = match[2].toUpperCase(); // 1K/2K/4K
+      }
+    }
+    // 若通过模型后缀指定分辨率且请求未显式携带，则补充 image_size 参数
+    if (imageSizeFromModel) {
+      const hasImageSize =
+        openaiReq.image_size ||
+        openaiReq.imageSize ||
+        openaiReq?.generation_config?.image_size ||
+        openaiReq?.generation_config?.imageSize ||
+        openaiReq?.generation_config?.image_config?.image_size ||
+        openaiReq?.generation_config?.image_config?.imageSize ||
+        openaiReq?.generationConfig?.image_size ||
+        openaiReq?.generationConfig?.imageSize ||
+        openaiReq?.generationConfig?.image_config?.image_size ||
+        openaiReq?.generationConfig?.image_config?.imageSize;
+      if (!hasImageSize) {
+        openaiReq.image_size = imageSizeFromModel;
+      }
+    }
+    openaiReq.model = upstreamModel;
     const tokenStats = (() => {
       try {
         return countClaudeTokens(req.body || {});
@@ -1713,6 +2454,8 @@ app.post('/v1/messages', async (req, res) => {
           emitter.sendThinking(data.content);
         } else if (data.type === 'text') {
           emitter.sendText(data.content);
+        } else if (data.type === 'image') {
+          emitter.sendText(`![image](${data.url})`);
         } else if (data.type === 'tool_calls') {
           await emitter.sendToolCalls(data.tool_calls);
         }
@@ -1754,108 +2497,6 @@ app.post('/v1/messages', async (req, res) => {
       res.status(status).json({ error: error?.message || '鏈嶅姟鍣ㄥけ璐?' });
     }
     writeLog({ success: false, status, message: error?.message });
-  }
-});
-
-app.post(/^\/gemini\/v1beta\/models\/([^/]+):streamGenerateContent$/, async (req, res) => {
-  const model = req.params[0];
-  const startedAt = Date.now();
-  const requestSnapshot = createRequestSnapshot(req);
-  const capturedChunks = [];
-  let token = null;
-
-  const writeLog = ({ success, status, message, body }) =>
-    appendLog({
-      timestamp: new Date().toISOString(),
-      model,
-      projectId: token?.projectId || null,
-      success,
-      status,
-      message,
-      durationMs: Date.now() - startedAt,
-      path: req.originalUrl,
-      method: req.method,
-      detail: {
-        request: requestSnapshot,
-        response: {
-          status,
-          headers: res.getHeaders ? res.getHeaders() : undefined,
-          body: body ?? { stream: true, chunks: capturedChunks }
-        }
-      }
-    });
-
-  try {
-    token = await tokenManager.getToken();
-    if (!token) {
-      throw new Error('没有可用的 token，请先通过 OAuth 面板或 npm run login 获取。');
-    }
-
-    setStreamHeaders(res);
-    await streamGeminiContent(model, req.body || {}, token, chunk => {
-      capturedChunks.push(chunk);
-      res.write(chunk);
-    });
-    res.end();
-
-    writeLog({ success: true, status: res.statusCode || 200 });
-  } catch (error) {
-    logger.error('Gemini 流式生成失败:', error.message);
-    const errorStatus = error.statusCode || (res.statusCode >= 400 ? res.statusCode : 500);
-    writeLog({ success: false, status: errorStatus, message: error.message });
-    if (!res.headersSent) {
-      res.status(500).json({ error: error.message });
-    } else {
-      res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
-      res.end();
-    }
-  }
-});
-
-app.post(/^\/gemini\/v1beta\/models\/([^/]+):generateContent$/, async (req, res) => {
-  const model = req.params[0];
-  const startedAt = Date.now();
-  const requestSnapshot = createRequestSnapshot(req);
-  let responseBodyForLog = null;
-  let token = null;
-
-  const writeLog = ({ success, status, message }) =>
-    appendLog({
-      timestamp: new Date().toISOString(),
-      model,
-      projectId: token?.projectId || null,
-      success,
-      status,
-      message,
-      durationMs: Date.now() - startedAt,
-      path: req.originalUrl,
-      method: req.method,
-      detail: {
-        request: requestSnapshot,
-        response: {
-          status,
-          headers: res.getHeaders ? res.getHeaders() : undefined,
-          body: responseBodyForLog
-        }
-      }
-    });
-
-  try {
-    token = await tokenManager.getToken();
-    if (!token) {
-      throw new Error('没有可用的 token，请先通过 OAuth 面板或 npm run login 获取。');
-    }
-
-    const data = await generateGeminiContent(model, req.body || {}, token);
-    res.json(data);
-    responseBodyForLog = data;
-
-    writeLog({ success: true, status: res.statusCode || 200 });
-  } catch (error) {
-    logger.error('Gemini 文本生成失败:', error.message);
-    const errorStatus = error.statusCode || (res.statusCode >= 400 ? res.statusCode : 500);
-    writeLog({ success: false, status: errorStatus, message: error.message });
-    res.status(500).json({ error: error.message });
   }
 });
 

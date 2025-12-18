@@ -1,8 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import config from '../config/config.js';
+import config, { reloadConfigFromEnv } from '../config/config.js';
 import { getDefaultIp } from './utils.js';
+import log from './logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -59,7 +60,13 @@ export function saveBase64Image(base64Data, mimeType) {
   // 清理旧图片
   cleanOldImages(config.maxImages);
   
+  // 调试日志：检查 config.imageBaseUrl 的值
+  log.info(`[DEBUG imageStorage] config.imageBaseUrl = "${config.imageBaseUrl}"`);
+  log.info(`[DEBUG imageStorage] config 对象地址标识 = ${config._debugId || '未设置'}`);
+  
   // 返回访问 URL
   const baseUrl = config.imageBaseUrl || `http://${getDefaultIp()}:${config.server.port}`;
+  log.info(`[DEBUG imageStorage] 最终使用的 baseUrl = "${baseUrl}"`);
+  
   return `${baseUrl}/images/${filename}`;
 }

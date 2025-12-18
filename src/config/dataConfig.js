@@ -5,7 +5,7 @@ import log from '../utils/logger.js';
 const DATA_DIR = './data';
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 
-// 默认配置结构
+// 默认配置结构（用于兜底，当 config.json 和 .env 都没有时使用）
 const DEFAULT_DATA_CONFIG = {
   // 服务器配置
   PORT: 8045,
@@ -29,7 +29,7 @@ const DEFAULT_DATA_CONFIG = {
 
   // 其他配置
   USE_NATIVE_AXIOS: false,
-  TIMEOUT: 180000,
+  TIMEOUT: 1800000,
   MAX_IMAGES: 10,
   IMAGE_BASE_URL: '',
   CREDENTIAL_MAX_USAGE_PER_HOUR: 20,
@@ -39,12 +39,19 @@ const DEFAULT_DATA_CONFIG = {
   PROXY: ''
 };
 
-// 环境变量优先级配置（这些只能在 Docker 环境变量中设置）
+// 环境变量优先级配置（这些只能在 Docker 环境变量中设置，不走 config.json）
 const DOCKER_ONLY_KEYS = [
   'PANEL_USER',
   'PANEL_PASSWORD',
   'API_KEY'
 ];
+
+/**
+ * 判断值是否为"有效值"（非空、非 undefined、非 null）
+ */
+function isValidValue(value) {
+  return value !== undefined && value !== null && value !== '';
+}
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -53,35 +60,39 @@ function ensureDataDir() {
   }
 }
 
-function ensureConfigFile() {
-  if (!fs.existsSync(CONFIG_FILE)) {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(DEFAULT_DATA_CONFIG, null, 2), 'utf8');
-    log.info('✓ 已创建默认 data/config.json 文件');
+/**
+ * 读取 config.json 的原始内容（不合并默认值）
+ */
+function loadRawDataConfig() {
+  try {
+    ensureDataDir();
+    if (!fs.existsSync(CONFIG_FILE)) {
+      // 首次启动，创建空的 config.json
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify({}, null, 2), 'utf8');
+      log.info('✓ 已创建空的 data/config.json 文件');
+      return {};
+    }
+    const content = fs.readFileSync(CONFIG_FILE, 'utf8');
+    return JSON.parse(content);
+  } catch (error) {
+    log.error('读取 data/config.json 失败:', error.message);
+    return {};
   }
 }
 
+/**
+ * 读取 config.json 并合并默认值（向后兼容）
+ */
 function loadDataConfig() {
-  try {
-    if (!fs.existsSync(CONFIG_FILE)) {
-      ensureDataDir();
-      ensureConfigFile();
-      return DEFAULT_DATA_CONFIG;
-    }
-
-    const content = fs.readFileSync(CONFIG_FILE, 'utf8');
-    const config = JSON.parse(content);
-    log.info('✓ 已加载 data/config.json 配置');
-    return { ...DEFAULT_DATA_CONFIG, ...config };
-  } catch (error) {
-    log.error('读取 data/config.json 失败:', error.message);
-    return DEFAULT_DATA_CONFIG;
-  }
+  const rawConfig = loadRawDataConfig();
+  return { ...DEFAULT_DATA_CONFIG, ...rawConfig };
 }
 
 function saveDataConfig(config) {
   try {
     ensureDataDir();
-    const mergedConfig = { ...loadDataConfig(), ...config };
+    const currentConfig = loadRawDataConfig();
+    const mergedConfig = { ...currentConfig, ...config };
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(mergedConfig, null, 2), 'utf8');
     log.info('✓ 已将配置保存到 data/config.json');
     return mergedConfig;
@@ -91,20 +102,64 @@ function saveDataConfig(config) {
   }
 }
 
-// 生效配置：
-// - 普通项：始终以 /data/config.json 为准（支持热更新）
-// - DOCKER_ONLY_KEYS：仅从 Docker 环境变量读取，不写入 /data/config.json
+/**
+ * 生效配置加载逻辑：
+ *
+ * 对于 DOCKER_ONLY_KEYS（PANEL_USER, PANEL_PASSWORD, API_KEY）：
+ *   - 仅从环境变量读取，不走 config.json
+ *
+ * 对于其他普通配置项：
+ *   1. config.json 有有效值 → 直接用 config
+ *   2. config.json 没有，.env 环境变量有 → 同步写入 config.json，用 config
+ *   3. 都没有 → 用默认值
+ *
+ * 这样 .env 就是"初始化种子"，只在 config.json 没有对应值时生效一次
+ */
 function getEffectiveConfig() {
-  const dataConfig = loadDataConfig();
-  const effectiveConfig = { ...dataConfig };
+  const rawConfig = loadRawDataConfig();
+  const effectiveConfig = {};
+  const syncToConfig = {};
 
+  // 处理普通配置项
+  Object.keys(DEFAULT_DATA_CONFIG).forEach(key => {
+    if (DOCKER_ONLY_KEYS.includes(key)) {
+      return; // 跳过，后面单独处理
+    }
+
+    const configValue = rawConfig[key];
+    const envValue = process.env[key];
+    const defaultValue = DEFAULT_DATA_CONFIG[key];
+
+    if (isValidValue(configValue)) {
+      // config.json 有有效值，直接用
+      effectiveConfig[key] = configValue;
+    } else if (isValidValue(envValue)) {
+      // config.json 没有，env 有，同步到 config 并使用
+      effectiveConfig[key] = envValue;
+      syncToConfig[key] = envValue;
+    } else {
+      // 都没有，用默认值
+      effectiveConfig[key] = defaultValue;
+    }
+  });
+
+  // 如果有需要从 env 同步到 config.json 的项，执行同步
+  if (Object.keys(syncToConfig).length > 0) {
+    try {
+      const updatedConfig = { ...rawConfig, ...syncToConfig };
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify(updatedConfig, null, 2), 'utf8');
+      log.info(`✓ 已从 .env 同步配置到 config.json: ${Object.keys(syncToConfig).join(', ')}`);
+    } catch (error) {
+      log.error('同步配置到 config.json 失败:', error.message);
+    }
+  }
+
+  // 处理 DOCKER_ONLY_KEYS（只从环境变量读取）
   DOCKER_ONLY_KEYS.forEach(key => {
     if (process.env[key] !== undefined) {
       effectiveConfig[key] = process.env[key];
-    } else {
-      // 未设置则从生效配置中移除，启动阶段会强制校验
-      delete effectiveConfig[key];
     }
+    // 不设置默认值，启动阶段会强制校验这些必填项
   });
 
   return effectiveConfig;

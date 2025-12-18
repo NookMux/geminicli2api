@@ -33,7 +33,7 @@ API_KEY=sk-text
 
 # 其他配置
 USE_NATIVE_AXIOS=false
-TIMEOUT=180000
+TIMEOUT=1800000
 # PROXY=http://127.0.0.1:7897
 MAX_IMAGES=10 # 最大保存的图片数量，超过就会删除时间最早的
 # IMAGE_BASE_URL=http://your-domain.com  # 可选：自定义图片访问基础 URL，默认使用宿主机 IP 或本地回环
@@ -79,6 +79,9 @@ function ensureEnvFile() {
 function loadConfigFromEnv() {
   // getEffectiveDataConfig 已经把 DOCKER_ONLY_KEYS 从环境变量注入进来了
   const flat = getEffectiveDataConfig();
+  
+  // 调试日志：检查 flat 中的 IMAGE_BASE_URL 值
+  log.info(`[DEBUG config] flat.IMAGE_BASE_URL = "${flat.IMAGE_BASE_URL}"`);
 
   const config = {
     server: {
@@ -128,7 +131,7 @@ function loadConfigFromEnv() {
         parseInt(flat.RETRY_MAX_ATTEMPTS ?? 3, 10) || 3
     },
     useNativeAxios: String(flat.USE_NATIVE_AXIOS).toLowerCase() !== 'false',
-    timeout: parseInt(flat.TIMEOUT ?? 30000, 10) || 30000,
+    timeout: parseInt(flat.TIMEOUT ?? 1800000, 10) || 1800000,
     proxy: flat.PROXY || null,
     systemInstruction: flat.SYSTEM_INSTRUCTION || '',
     resourceManagerApiUrl:
@@ -230,9 +233,14 @@ ensureEnvFile();
 dotenv.config();
 
 let config = loadConfigFromEnv();
+// 为调试添加标识
+config._debugId = `config-${Date.now()}`;
+log.info(`[DEBUG config] 初始化 config 对象, _debugId = ${config._debugId}, imageBaseUrl = "${config.imageBaseUrl}"`);
 
 export function reloadConfigFromEnv() {
   config = loadConfigFromEnv();
+  config._debugId = `config-${Date.now()}`;
+  log.info(`[DEBUG config] 重新加载后 config 对象, _debugId = ${config._debugId}, imageBaseUrl = "${config.imageBaseUrl}"`);
   log.info('✓ 配置已重新加载');
   return config;
 }

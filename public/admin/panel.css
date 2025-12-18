@@ -531,6 +531,50 @@ button:disabled {
   border-bottom: 1px solid var(--border);
 }
 
+.quota-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.quota-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--button-bg);
+  color: var(--button-text);
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.quota-toggle-btn:hover {
+  background: var(--button-hover);
+  transform: translateY(-1px);
+}
+
+.quota-toggle-icon {
+  font-size: 10px;
+  transition: transform 0.2s ease;
+}
+
+.quota-groups[data-collapsed="true"] [data-collapsible="true"] {
+  display: none;
+}
+
+.quota-groups[data-collapsed="true"] .quota-other-models {
+  display: none;
+}
+
+.quota-groups[data-collapsed="true"] .quota-group-stats .quota-model-count {
+  display: none;
+}
+
 .quota-title {
   font-weight: 600;
   color: var(--text);
