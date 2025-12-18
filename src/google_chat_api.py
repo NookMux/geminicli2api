@@ -1133,3 +1133,175 @@ def build_gemini_payload_from_native(native_request: dict, model_from_path: str)
         "model": get_base_model_name(model_from_path),
         "request": request_data
     }
+
+
+async def test_credential_file(filename: str, model_name: str) -> dict:
+    """
+    使用指定模型对单个凭证做一次健康检查调用。
+
+    说明：
+    - 只针对给定的 filename 发送一次最小请求；
+    - 成功时会更新 usage_stats 和 credential_state（last_success / error_codes）；
+    - 失败时只记录 error_codes，不做自动轮转，避免影响正常路由逻辑。
+    """
+    from src.storage_adapter import get_storage_adapter
+    from src.credential_manager import get_credential_manager
+
+    result = {
+        "filename": filename,
+        "ok": False,
+        "status_code": None,
+        "message": "",
+    }
+
+    try:
+        storage_adapter = await get_storage_adapter()
+        credential_data = await storage_adapter.get_credential(filename)
+        if not credential_data:
+            result["status_code"] = 404
+            result["message"] = "凭证文件不存在或内容为空"
+            return result
+
+        # 构造最小化的测试请求负载
+        test_payload = {
+            "model": model_name,
+            "request": {
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [{"text": "health check"}],
+                    }
+                ]
+            },
+        }
+
+        base_model_name = get_base_model_name(model_name or "")
+        use_public_api = base_model_name in PUBLIC_API_MODELS
+        target_url = f"{await get_code_assist_endpoint()}/v1internal:generateContent"
+
+        # 复用内部的请求头和 payload 构造逻辑
+        headers, final_payload, target_url = await _prepare_request_headers_and_payload(
+            test_payload,
+            credential_data,
+            use_public_api,
+            target_url,
+        )
+
+        final_post_data = json.dumps(final_payload)
+
+        # 发送一次简单的非流式请求
+        async with http_client.get_client(timeout=20.0) as client:
+            resp = await client.post(target_url, data=final_post_data, headers=headers)
+
+        status = resp.status_code
+        result["status_code"] = status
+
+        cred_mgr = await get_credential_manager()
+
+        if 200 <= status < 300:
+            # 记录成功调用
+            if cred_mgr:
+                await cred_mgr.record_api_call_result(filename, True)
+            try:
+                await record_successful_call(filename, model_name)
+            except Exception as e:
+                log.debug(f"Failed to record usage statistics for health check: {e}")
+
+            result["ok"] = True
+            result["message"] = "健康检查成功，凭证可用"
+        else:
+            # 非 2xx 认为检查失败，只记录错误，不做轮转
+            body_preview = ""
+            try:
+                body_preview = resp.text[:200]
+            except Exception:
+                body_preview = ""
+
+            if cred_mgr:
+                await cred_mgr.record_api_call_result(filename, False, status)
+
+            result["ok"] = False
+            if body_preview:
+                result["message"] = f"健康检查失败，状态码 {status}，响应片段: {body_preview}"
+            else:
+                result["message"] = f"健康检查失败，状态码 {status}"
+
+        return result
+
+    except Exception as e:
+        log.error(f"Health check for credential {filename} failed: {e}")
+        result["status_code"] = result["status_code"] or 500
+        result["message"] = f"健康检查异常: {e}"
+        return result
+
+
+async def test_all_credentials(model_name: str, progress_operation: str | None = None, tracker=None) -> dict:
+    """
+    对当前所有凭证做一次批量健康检查。
+
+    返回：
+        {
+            "total": 总数,
+            "success_count": 成功数量,
+            "failed_count": 失败数量,
+            "results": [ 单个 test_credential_file 的结果 ... ]
+        }
+    """
+    from src.storage_adapter import get_storage_adapter
+
+    try:
+        storage_adapter = await get_storage_adapter()
+        files = await storage_adapter.list_credentials()
+    except Exception as e:
+        log.error(f"Health check: failed to list credentials: {e}")
+        if tracker and progress_operation:
+            await tracker.fail(progress_operation, f"无法列出凭证: {e}")
+        return {
+            "total": 0,
+            "success_count": 0,
+            "failed_count": 0,
+            "results": [],
+        }
+
+    if not files:
+        if tracker and progress_operation:
+            await tracker.finish(progress_operation, "没有找到凭证可进行健康检查")
+        return {
+            "total": 0,
+            "success_count": 0,
+            "failed_count": 0,
+            "results": [],
+        }
+
+    results = []
+    success_count = 0
+
+    if tracker and progress_operation:
+        await tracker.start(progress_operation, total=len(files), message="正在执行健康检查...")
+
+    for filename in files:
+        res = await test_credential_file(filename, model_name)
+        results.append(res)
+        if res.get("ok"):
+            success_count += 1
+        if tracker and progress_operation:
+            await tracker.advance(
+                progress_operation,
+                message=f"正在检查凭证: {filename}",
+            )
+
+    if tracker and progress_operation:
+        await tracker.finish(
+            progress_operation,
+            message=f"健康检查完成：成功 {success_count}/{len(results)}，失败 {len(results) - success_count}",
+        )
+
+    total = len(results)
+    failed_count = total - success_count
+
+    return {
+        "total": total,
+        "success_count": success_count,
+        "failed_count": failed_count,
+        "results": results,
+    }

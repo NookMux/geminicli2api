@@ -7,6 +7,14 @@ let authInProgress = false;
 let authToken = '';
 let credsData = {};
 
+const PROGRESS_KEYS = {
+    refreshAllEmails: 'refresh_all_emails',
+    healthCheckAll: 'test_all_credentials'
+};
+
+let progressWatchList = new Set();
+let progressTimer = null;
+
 // 分页和筛选相关变量
 let filteredCredsData = {};
 let currentPage = 1;
@@ -46,6 +54,103 @@ function getAuthHeaders() {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${authToken}`
     };
+}
+
+function startProgressPolling(operations) {
+    operations.forEach(op => progressWatchList.add(op));
+    renderProgressStatus();
+    if (!progressTimer) {
+        progressTimer = setInterval(pollProgressStatus, 2000);
+    }
+    pollProgressStatus();
+}
+
+function stopProgressPolling() {
+    if (progressTimer) {
+        clearInterval(progressTimer);
+        progressTimer = null;
+    }
+    progressWatchList.clear();
+}
+
+async function pollProgressStatus() {
+    if (!progressWatchList.size) {
+        stopProgressPolling();
+        return;
+    }
+
+    try {
+        const response = await fetch('/progress', {
+            method: 'GET',
+            headers: getAuthHeaders()
+        });
+        const data = await response.json();
+        renderProgressStatus(data);
+
+        const allDone = Array.from(progressWatchList).every(key => {
+            const status = data?.[key]?.status;
+            return status === 'completed' || status === 'error';
+        });
+
+        if (allDone) {
+            stopProgressPolling();
+        }
+    } catch (error) {
+        console.error('轮询进度失败', error);
+    }
+}
+
+function renderProgressStatus(progressData = {}) {
+    const container = document.getElementById('progressContainer');
+    if (!container) return;
+
+    const keys = Object.keys(PROGRESS_KEYS).map(k => PROGRESS_KEYS[k]);
+    const items = keys
+        .map(key => ({ key, data: progressData[key] }))
+        .filter(item => item.data && item.data.status && item.data.status !== 'idle');
+
+    if (!items.length) {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+        return;
+    }
+
+    const statusLabel = {
+        running: '进行中',
+        completed: '已完成',
+        error: '失败',
+        idle: '待开始'
+    };
+
+    const titleMap = {
+        [PROGRESS_KEYS.refreshAllEmails]: '刷新所有邮箱',
+        [PROGRESS_KEYS.healthCheckAll]: '健康检查全部凭证'
+    };
+
+    container.classList.remove('hidden');
+    container.innerHTML = items.map(({ key, data }) => {
+        const total = data.total || 0;
+        const processed = data.processed || 0;
+        const percent = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
+        const status = data.status || 'idle';
+        const message = data.message || '';
+
+        return `
+            <div class="progress-item">
+                <div class="progress-header">
+                    <span class="progress-title">${titleMap[key] || key}</span>
+                    <span class="progress-status status-${status}">${statusLabel[status] || status}</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill status-${status}" style="width: ${percent}%"></div>
+                </div>
+                <div class="progress-meta">
+                    <span>${processed}/${total || '?'} (${percent}%)</span>
+                    <span class="progress-message">${message}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 // ===========================
@@ -519,6 +624,19 @@ function createCredCard(fullPath, credInfo) {
                 <div class="cred-actions">${actionButtons}</div>
             `;
 
+    // 为凭证卡片追加“健康检查”按钮
+    const actionsContainer = div.querySelector('.cred-actions');
+    if (actionsContainer) {
+        const healthBtn = document.createElement('button');
+        healthBtn.className = 'cred-btn health';
+        healthBtn.textContent = '健康检查';
+        healthBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            testCredential(filename);
+        });
+        actionsContainer.appendChild(healthBtn);
+    }
+
     const actionButtonElements = div.querySelectorAll('[data-filename][data-action]');
     actionButtonElements.forEach(button => {
         button.addEventListener('click', function (e) {
@@ -686,6 +804,66 @@ async function batchAction(action) {
 // 邮箱相关
 // ===========================
 
+// 凭证健康检查
+async function testCredential(filename) {
+    try {
+        showStatus(`正在对凭证 ${filename} 进行健康检查...`, 'info');
+
+        const response = await fetch('/creds/test', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ filename })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.result) {
+            const result = data.result;
+            const ok = !!result.ok;
+            const statusCode = result.status_code ?? '未知';
+            const message = result.message || (ok ? '健康检查成功，凭证可用' : '健康检查失败，凭证可能已失效');
+
+            showStatus(`凭证 ${filename}: ${message}（状态码 ${statusCode}）`, ok ? 'success' : 'error');
+            await refreshCredsStatus();
+        } else {
+            showStatus(`健康检查失败: ${data.detail || data.error || '未知错误'}`, 'error');
+        }
+    } catch (error) {
+        showStatus(`健康检查失败: ${error.message}`, 'error');
+    }
+}
+
+async function testAllCredentials() {
+    if (!confirm('确认要对当前所有凭证执行一次健康检查吗？这可能需要一定时间。')) {
+        return;
+    }
+
+    try {
+        showStatus('正在对所有凭证进行健康检查...', 'info');
+        startProgressPolling([PROGRESS_KEYS.healthCheckAll]);
+
+        const response = await fetch('/creds/test', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({})
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            const total = data.total ?? 0;
+            const successCount = data.success_count ?? 0;
+            const failedCount = data.failed_count ?? 0;
+            showStatus(`健康检查完成：成功 ${successCount}/${total}，失败 ${failedCount}`, failedCount === 0 ? 'success' : 'error');
+            await refreshCredsStatus();
+        } else {
+            showStatus(`健康检查失败: ${data.detail || data.error || '未知错误'}`, 'error');
+        }
+    } catch (error) {
+        showStatus(`健康检查失败: ${error.message}`, 'error');
+    }
+}
+
 async function fetchUserEmail(filename) {
     try {
         showStatus('正在获取用户邮箱...', 'info');
@@ -715,6 +893,7 @@ async function refreshAllEmails() {
         }
 
         showStatus('正在刷新所有用户邮箱...', 'info');
+        startProgressPolling([PROGRESS_KEYS.refreshAllEmails]);
 
         const response = await fetch('/creds/refresh-all-emails', {
             method: 'POST',
@@ -1020,76 +1199,158 @@ window.onload = function () {
 // JSON导入TOML功能
 // ===========================
 
-function tomlEscapeString(str) {
-    return String(str)
-        .replace(/\\/g, "\\\\")
-        .replace(/"/g, '\\"')
-        .replace(/\r/g, "\\r")
-        .replace(/\n/g, "\\n");
-}
+// 性能优化的 TOML 转换器
+class TomlConverter {
+    constructor() {
+        this.targetFields = ["project_id", "client_id", "client_secret", "token", "refresh_token", "access_token"];
+        this.cache = new Map(); // 缓存处理结果
+    }
 
-function toTomlValue(value) {
-    if (value === null || value === undefined) {
+    tomlEscapeString(str) {
+        if (typeof str !== 'string') return '';
+        // 使用更高效的字符串替换方式
+        return str.replace(/["\\\r\n]/g, (match) => {
+            switch (match) {
+                case '\\': return '\\\\';
+                case '"': return '\\"';
+                case '\r': return '\\r';
+                case '\n': return '\\n';
+                default: return match;
+            }
+        });
+    }
+
+    toTomlValue(value) {
+        if (value === null || value === undefined) return null;
+
+        const t = typeof value;
+        if (t === "string") {
+            return '"' + this.tomlEscapeString(value) + '"';
+        }
+        if (t === "number") {
+            return String(value);
+        }
+        if (t === "boolean") {
+            return value ? "true" : "false";
+        }
+        if (Array.isArray(value)) {
+            const arr = value
+                .map(v => this.toTomlValue(v))
+                .filter(v => v !== null);
+            return "[" + arr.join(", ") + "]";
+        }
         return null;
     }
-    const t = typeof value;
-    if (t === "string") {
-        return '"' + tomlEscapeString(value) + '"';
-    }
-    if (t === "number") {
-        return String(value);
-    }
-    if (t === "boolean") {
-        return value ? "true" : "false";
-    }
-    if (Array.isArray(value)) {
-        const arr = value
-            .map(function (v) { return toTomlValue(v); })
-            .filter(function (v) { return v !== null; });
-        return "[" + arr.join(", ") + "]";
-    }
-    // 对象类型（嵌套）在这里忽略，避免生成不符合预期的 TOML
-    return null;
-}
 
-function processEntry(filename, entry, lines) {
-    if (!entry || typeof entry !== "object") {
-        return;
+    processEntry(filename, entry) {
+        if (!entry || typeof entry !== "object") return null;
+
+        // 从 content 中提取目标字段
+        const content = entry.content && typeof entry.content === "object" ? entry.content : {};
+        const combined = {};
+
+        this.targetFields.forEach(field => {
+            if (content[field] !== undefined && content[field] !== null) {
+                combined[field] = content[field];
+            }
+        });
+
+        // 如果没有任何目标字段，就跳过这个条目
+        if (Object.keys(combined).length === 0) return null;
+
+        const lines = ['', `["${String(filename)}"]`];
+
+        Object.keys(combined).forEach(key => {
+            const val = combined[key];
+            const tomlVal = this.toTomlValue(val);
+            if (tomlVal !== null) {
+                lines.push(`${key} = ${tomlVal}`);
+            }
+        });
+
+        return lines;
     }
 
-    // 只提取指定的关键字段
-    var targetFields = ["project_id", "client_id", "client_secret", "token", "refresh_token", "access_token"];
-    var combined = {};
-
-    // 从 content 中提取目标字段
-    var content = entry.content && typeof entry.content === "object" ? entry.content : {};
-    targetFields.forEach(function (field) {
-        if (content[field] !== undefined && content[field] !== null) {
-            combined[field] = content[field];
+    async convertAsync(data) {
+        // 检查缓存
+        const cacheKey = JSON.stringify(data);
+        if (this.cache.has(cacheKey)) {
+            return this.cache.get(cacheKey);
         }
-    });
 
-    // 如果没有任何目标字段，就跳过这个条目
-    if (Object.keys(combined).length === 0) {
-        return;
+        return new Promise((resolve) => {
+            // 使用 setTimeout 将任务放到下一个事件循环，避免阻塞 UI
+            setTimeout(() => {
+                try {
+                    const lines = this.processData(data);
+                    const toml = lines.join("\n").replace(/^\n+/, "");
+                    this.cache.set(cacheKey, toml);
+                    resolve(toml);
+                } catch (error) {
+                    resolve({ error: error.message });
+                }
+            }, 0);
+        });
     }
 
-    lines.push('');
-    lines.push('["' + String(filename) + '"]');
+    processData(data) {
+        const lines = [];
 
-    Object.keys(combined).forEach(function (key) {
-        var val = combined[key];
-        var tomlVal = toTomlValue(val);
-        if (tomlVal === null) return;
-        lines.push(key + " = " + tomlVal);
-    });
+        if (!data || typeof data !== "object") {
+            throw new Error("不支持的 JSON 结构：顶层应为对象或数组");
+        }
+
+        // 首先检查是否有 creds 字段
+        if (data.creds && typeof data.creds === "object") {
+            Object.keys(data.creds).forEach(key => {
+                const entry = data.creds[key];
+                if (!entry || typeof entry !== "object") return;
+
+                // 只处理启用了的凭证（status.disabled === true）且类型为cli的凭证
+                if (
+                    entry.status &&
+                    typeof entry.status === "object" &&
+                    entry.credential_type === "cli" &&
+                    entry.status.disabled !== true
+                ) {
+                    const filename = entry.filename || key;
+                    const entryLines = this.processEntry(filename, entry);
+                    if (entryLines) lines.push(...entryLines);
+                }
+            });
+        } else {
+            // 处理原始的数组或直接对象结构
+            if (Array.isArray(data)) {
+                data.forEach((entry, idx) => {
+                    if (!entry || typeof entry !== "object") return;
+                    const filename = entry.filename || entry.name || `credential_${idx + 1}`;
+                    const entryLines = this.processEntry(filename, entry);
+                    if (entryLines) lines.push(...entryLines);
+                });
+            } else {
+                Object.keys(data).forEach(key => {
+                    const entry = data[key];
+                    if (!entry || typeof entry !== "object") return;
+                    const filename = entry.filename || key;
+                    const entryLines = this.processEntry(filename, entry);
+                    if (entryLines) lines.push(...entryLines);
+                });
+            }
+        }
+
+        return lines;
+    }
 }
 
-function convertJsonToToml() {
+// 创建全局转换器实例
+const tomlConverter = new TomlConverter();
+
+async function convertJsonToToml() {
     const input = document.getElementById('jsonInput').value.trim();
     const output = document.getElementById('tomlOutput');
     const statusEl = document.getElementById('importStatus');
     const importBtn = document.getElementById('importBtn');
+    const convertBtn = document.getElementById('convertBtn');
 
     statusEl.textContent = "";
     statusEl.className = "";
@@ -1100,51 +1361,36 @@ function convertJsonToToml() {
         return;
     }
 
-    try {
-        var data = JSON.parse(input);
-        var lines = [];
+    // 显示加载状态
+    convertBtn.disabled = true;
+    convertBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 转换中...';
+    statusEl.textContent = "正在转换中，请稍候...";
+    statusEl.className = "info";
 
-        // 处理新的结构 {"creds": {...}}
-        if (data && typeof data === "object") {
-            // 首先检查是否有 creds 字段
-            if (data.creds && typeof data.creds === "object") {
-                Object.keys(data.creds).forEach(function (key) {
-                    var entry = data.creds[key];
-                    if (!entry || typeof entry !== "object") return;
-                    var filename = entry.filename || key;
-                    processEntry(filename, entry, lines);
-                });
-            } else {
-                // 处理原始的数组或直接对象结构
-                if (Array.isArray(data)) {
-                    data.forEach(function (entry, idx) {
-                        if (!entry || typeof entry !== "object") return;
-                        var filename = entry.filename || entry.name || ("credential_" + (idx + 1));
-                        processEntry(filename, entry, lines);
-                    });
-                } else {
-                    Object.keys(data).forEach(function (key) {
-                        var entry = data[key];
-                        if (!entry || typeof entry !== "object") return;
-                        var filename = entry.filename || key;
-                        processEntry(filename, entry, lines);
-                    });
-                }
-            }
-        } else {
-            throw new Error("不支持的 JSON 结构：顶层应为对象或数组");
+    try {
+        const data = JSON.parse(input);
+
+        // 使用异步转换，避免阻塞 UI
+        const result = await tomlConverter.convertAsync(data);
+
+        if (result.error) {
+            throw new Error(result.error);
         }
 
-        var toml = lines.join("\n").replace(/^\n+/, "");
-        output.value = toml;
+        output.value = result;
         importBtn.disabled = false;
         statusEl.textContent = "转换成功。请检查TOML内容，然后点击'导入到系统'。";
         statusEl.className = "success";
+
     } catch (e) {
         output.value = "";
         importBtn.disabled = true;
         statusEl.textContent = "转换失败：" + e.message;
         statusEl.className = "error";
+    } finally {
+        // 恢复按钮状态
+        convertBtn.disabled = false;
+        convertBtn.innerHTML = '<i class="fas fa-exchange-alt"></i> 转换为 TOML';
     }
 }
 
@@ -1246,3 +1492,17 @@ async function importTomlToSystem() {
         showStatus(`导入网络错误: ${error.message}`, 'error');
     }
 }
+// 初始化批量“健康检查全部凭证”按钮
+document.addEventListener('DOMContentLoaded', () => {
+    const batchActions = document.querySelector('.batch-actions');
+    if (batchActions && !document.getElementById('batchHealthBtn')) {
+        const btn = document.createElement('button');
+        btn.id = 'batchHealthBtn';
+        btn.className = 'batch-btn batch-health';
+        btn.innerHTML = '<i class="fas fa-heartbeat"></i> 健康检查全部凭证';
+        btn.addEventListener('click', () => {
+            testAllCredentials();
+        });
+        batchActions.appendChild(btn);
+    }
+});

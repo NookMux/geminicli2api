@@ -4,6 +4,7 @@ Centralizes all configuration to avoid duplication across modules.
 """
 
 import os
+import json
 from typing import Any, Optional
 
 # Client Configuration
@@ -79,6 +80,11 @@ def should_include_thoughts(model_name):
         return True
 
 
+# Default settings for credential health check
+DEFAULT_CREDENTIAL_TEST_MODEL = "gemini-2.5-flash"
+DEFAULT_CREDENTIAL_TEST_INTERVAL_SECONDS = 600
+
+
 # Dynamic Configuration System - Optimized for memory efficiency
 async def get_config_value(
     key: str, default: Any = None, env_var: Optional[str] = None
@@ -110,6 +116,70 @@ async def get_proxy_config():
     """Get proxy configuration."""
     proxy_url = await get_config_value("proxy", env_var="PROXY")
     return proxy_url if proxy_url else None
+
+
+async def get_credential_test_config() -> dict:
+    """
+    获取凭证健康检查配置。
+
+    优先级：
+    1. 环境变量 CREDENTIAL_TEST_CONFIG（JSON 字符串，例如：
+       {"model": "gemini-2.5-flash", "enabled": true, "interval_seconds": 600}
+    2. 若未设置或解析失败，则使用内置默认值。
+
+    返回字段：
+        model: 用于测试的模型名称
+        auto_check_enabled: 是否开启定时检查
+        interval_seconds: 定时检查间隔（秒）
+    """
+    cfg = {
+        "model": DEFAULT_CREDENTIAL_TEST_MODEL,
+        "auto_check_enabled": False,
+        "interval_seconds": DEFAULT_CREDENTIAL_TEST_INTERVAL_SECONDS,
+    }
+
+    raw = os.getenv("CREDENTIAL_TEST_CONFIG")
+    if not raw:
+        return cfg
+
+    try:
+        data = json.loads(raw)
+        if isinstance(data, dict):
+            # 测试模型
+            model = data.get("model") or data.get("test_model")
+            if isinstance(model, str) and model.strip():
+                cfg["model"] = model.strip()
+
+            # 是否开启定时检查
+            enabled = (
+                data.get("auto_check_enabled")
+                if "auto_check_enabled" in data
+                else data.get("enabled")
+            )
+            if isinstance(enabled, bool):
+                cfg["auto_check_enabled"] = enabled
+            elif isinstance(enabled, str):
+                cfg["auto_check_enabled"] = enabled.lower() in ("1", "true", "yes", "on")
+
+            # 检查间隔
+            interval = (
+                data.get("interval_seconds")
+                if "interval_seconds" in data
+                else data.get("interval")
+            )
+            if interval is not None:
+                try:
+                    iv = int(interval)
+                    if iv > 0:
+                        cfg["interval_seconds"] = iv
+                except (TypeError, ValueError):
+                    # 间隔配置非法时回退到默认值
+                    pass
+    except Exception:
+        # 环境变量内容解析失败时，直接使用默认配置，避免影响主流程
+        return cfg
+
+    return cfg
 
 
 async def get_calls_per_rotation() -> int:
@@ -234,13 +304,9 @@ async def get_retry_429_interval() -> float:
 
 
 # Model name lists for different features
-BASE_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-3-pro-preview"]
+BASE_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-3-pro-preview","gemini-3-flash-preview"]
 
-PUBLIC_API_MODELS = [
-    "gemini-2.5-flash-image",
-    "gemini-2.5-flash-image-preview",
-    "gemini-3-pro-image-preview",
-]
+PUBLIC_API_MODELS = []
 
 ALL_SUPPORTED_MODELS = BASE_MODELS + PUBLIC_API_MODELS
 
